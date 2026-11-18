@@ -107,7 +107,9 @@ void __attribute__((thiscall)) WorldUpdateHook(void* self, float dt) {
     g_tickDt = StepFrameTicks(f, dt);
     for (int i = 0; i < 2; ++i) g_ramp[i] = f.steps < 0 ? g_gameRamp[i] : g_gameRamp[i] * (double)StepFrameRamp(f, dt);
     ((WorldUpdateFn)(uintptr_t)kWorldUpdateFn)(self, dt);
-    g_frame.steps = -1;  // a car message sent outside of a world update is the game's own
+    // A car message sent outside of a world update is the game's own: no plan, and the sound ramps take the game's steps.
+    g_frame.steps = -1;
+    for (int i = 0; i < 2; ++i) g_ramp[i] = g_gameRamp[i];
 }
 
 // Replaces the call of the car's control (thiscall: ECX = the car, no stack argument). It runs before the physics step and works
@@ -233,8 +235,8 @@ bool InstallHighFpsPhysics() {
     if (PointOperand(kSiteCarRamps[1], &g_ramp[0])) ++ramps;
     if (PointOperand(kSiteCarRamps[2], &g_ramp[1])) ++ramps;
     Log("physics steps: frames shorter than one step of 1/60 s share whole steps (HighFpsPhysics=%d): world update, car control and "
-        "car movement hooked, %d of 8 car tick counters, %d of 3 car sound ramps",
-        g_cfg.highFpsPhysics, ticks, ramps);
+        "car movement hooked, %d of %d car tick counters, %d of 3 car sound ramps",
+        g_cfg.highFpsPhysics, ticks, (int)(sizeof(kSiteCarTicks) / sizeof(kSiteCarTicks[0])), ramps);
     return true;
 }
 

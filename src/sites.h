@@ -403,9 +403,11 @@ constexpr uint32_t kCarPositionOffset = 0x58, kCarMovementOffset = 0x127C;
 // Tick counters of the car outside its control function: `fld dword [014AFFE0h] / call _ftol2 (0074ED60)`, i.e. (int)dt, which is
 // 0 in every short frame, so they stand still above 120 frames/s. The fld (6 bytes) becomes a call of a stub that loads the steps
 // of the frame's plan, or the frame delta itself when the frame has no plan (BuildCarTicksStub). The 11 bytes are the fld and the
-// call; _ftol2 begins with a compare of its own (`cmp dword [014B26F8h],0`), so it takes nothing from the flags.
+// call; _ftol2 begins with a compare of its own (`cmp dword [014B26F8h],0`), so it takes nothing from the flags. These ten and the
+// four inside the control functions (00556638, 005571A1, 005571D8, 00551380, which see the delta CarDriveHook sets) are every
+// `fld [frameDelta] / call _ftol2` pair in the car code 00541000..00560000.
 constexpr uint32_t kFtolFn = 0x74ED60;
-constexpr SiteDef kSiteCarTicks[8] = {
+constexpr SiteDef kSiteCarTicks[10] = {
     {"car ticks: car+1314h down (FUN_00558820)", 0x558F11, 11, {0xD9, 0x05, 0xE0, 0xFF, 0x4A, 0x01, 0xE8, 0x44, 0x5E, 0x1F, 0x00}},
     {"car ticks: car+1314h up (FUN_00558820)", 0x559067, 11, {0xD9, 0x05, 0xE0, 0xFF, 0x4A, 0x01, 0xE8, 0xEE, 0x5C, 0x1F, 0x00}},
     {"car ticks: car+12F4h, limit 300 (FUN_00558820)", 0x559078, 11, {0xD9, 0x05, 0xE0, 0xFF, 0x4A, 0x01, 0xE8, 0xDD, 0x5C, 0x1F, 0x00}},
@@ -414,6 +416,8 @@ constexpr SiteDef kSiteCarTicks[8] = {
     {"car ticks: car+1230h, limit 30 (FUN_005577D0)", 0x557FCD, 11, {0xD9, 0x05, 0xE0, 0xFF, 0x4A, 0x01, 0xE8, 0x88, 0x6D, 0x1F, 0x00}},
     {"car ticks: car+718h (FUN_00551570)", 0x552B28, 11, {0xD9, 0x05, 0xE0, 0xFF, 0x4A, 0x01, 0xE8, 0x2D, 0xC2, 0x1F, 0x00}},
     {"car ticks: car+11D0h (FUN_0055B230)", 0x55B400, 11, {0xD9, 0x05, 0xE0, 0xFF, 0x4A, 0x01, 0xE8, 0x55, 0x39, 0x1F, 0x00}},
+    {"car ticks: car+1318h (FUN_0055B230)", 0x55C61D, 11, {0xD9, 0x05, 0xE0, 0xFF, 0x4A, 0x01, 0xE8, 0x38, 0x27, 0x1F, 0x00}},
+    {"car ticks: car+718h (FUN_0055B230)", 0x55C88F, 11, {0xD9, 0x05, 0xE0, 0xFF, 0x4A, 0x01, 0xE8, 0xC6, 0x24, 0x1F, 0x00}},
 };
 // Sound ramps of the car in FUN_0054BFC0, moved by a constant per frame with no frame delta: the tyre squeal (brake sound) goes to
 // its target by 0.05 (`fld qword [00770310h]` at 0054C877: the one load serves the compare and the add or subtract), the engine
@@ -531,7 +535,8 @@ constexpr const SiteDef* kAllSites[] = {
     &kSiteReflectionBias, &kSiteSceneInitCall, &kSitePostInitCall,
     &kSiteStorageH1, &kSiteStorageW1, &kSiteStorageH2, &kSiteStorageW2,
     &kSiteWorldUpdateCalls[0], &kSiteWorldUpdateCalls[1], &kSiteCarDriveCall, &kSiteCarAfterStepCall, &kSiteCarTicks[0], &kSiteCarTicks[1], &kSiteCarTicks[2],
-    &kSiteCarTicks[3], &kSiteCarTicks[4], &kSiteCarTicks[5], &kSiteCarTicks[6], &kSiteCarTicks[7], &kSiteCarRamps[0], &kSiteCarRamps[1], &kSiteCarRamps[2],
+    &kSiteCarTicks[3], &kSiteCarTicks[4], &kSiteCarTicks[5], &kSiteCarTicks[6], &kSiteCarTicks[7], &kSiteCarTicks[8], &kSiteCarTicks[9],
+    &kSiteCarRamps[0], &kSiteCarRamps[1], &kSiteCarRamps[2],
     &kSiteRampConstants[0], &kSiteRampConstants[1], &kSiteWarmUpFlagRead,
     &kOutPresentParams, &kOutDepthH, &kOutDepthW, &kOutFrameBegin1, &kOutFrameBegin2, &kOutPopViewport,
     &kOutHudDepthBind, &kOutViewport1, &kOutViewport2, &kOutViewport3, &kOutReset1, &kOutReset2, &kOutMap1,
