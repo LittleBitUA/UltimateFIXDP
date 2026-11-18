@@ -111,7 +111,8 @@ class Machine:
         return base
 
     # ---- imports of the DLL: each slot points at a `ret N` in the hook page; the hook does the work ----
-    STD = {'VirtualAlloc': 4, 'VirtualProtect': 4, 'FlushInstructionCache': 3, 'GetCurrentProcess': 0, 'Sleep': 1}
+    STD = {'VirtualAlloc': 4, 'VirtualProtect': 4, 'FlushInstructionCache': 3, 'GetCurrentProcess': 0, 'Sleep': 1,
+           'GlobalMemoryStatusEx': 1}
     CDECL = {'wsprintfA'}
 
     def fill_imports(self):
@@ -159,6 +160,7 @@ class Machine:
         elif fn == 'FlushInstructionCache': eax = 1
         elif fn == 'GetCurrentProcess': eax = 0xFFFFFFFF
         elif fn == 'Sleep': self.stats['sleep'] += 1
+        elif fn == 'GlobalMemoryStatusEx': eax = 1  # the give-up log line only prints a number out of the structure
         elif fn == 'wsprintfA': uc.mem_write(self.arg(0), b'x\0'); eax = 1
         else:
             print('UNEXPECTED IMPORT', fn); self.stopped = True; uc.emu_stop(); return

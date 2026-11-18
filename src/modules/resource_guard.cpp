@@ -78,9 +78,17 @@ int Failed(RetryState& state, u32 key, const char* what, const char* name, u32 p
     if (step == kGiveUpKnown) return 0;  // said once already
     if (g_logged < kMaxLogLines) {
         ++g_logged;
+        // The unpack function also fails when zlib gets no memory for its own state, and the reader cannot tell that from a
+        // bad file. The free address space is logged so that the two can be told apart afterwards.
+        MEMORYSTATUSEX mem;
+        mem.dwLength = sizeof(mem);
+        char memory[64];
+        if (GlobalMemoryStatusEx(&mem)) wsprintfA(memory, "%u MB of its address space are free", (u32)(mem.ullAvailVirtual >> 20));
+        else lstrcpyA(memory, "its free address space is not known");
         Log("resource guard: %s did not unpack in %u attempts%s. It is reported to the game as missing (the game alone would retry "
-            "forever). The file is damaged or cannot be read: verify the game files, or reinstall the mod that replaced it%s",
-            what, kMaxAttempts, why, g_logged == kMaxLogLines ? " (further messages are not logged)" : "");
+            "forever). The file is damaged or cannot be read (verify the game files, or reinstall the mod that replaced it), or the "
+            "game ran out of memory: %s%s",
+            what, kMaxAttempts, why, memory, g_logged == kMaxLogLines ? " (further messages are not logged)" : "");
     }
     if (!g_failurePending) {
         CopyGameText(g_failureName, sizeof(g_failureName), name);
@@ -143,9 +151,16 @@ bool InstallRetry(const SiteDef& jump, const SiteDef& missing, u32 retryVa, int(
         return false;
     }
     u8* stub = AllocStub(32);
-    if (!stub) return false;
+    if (!stub) {
+        Log("resource guard: no room left for the stub of the %s reader, its retry limit is off", reader);
+        return false;
+    }
     BuildRetryGuard(stub, (u32)(uintptr_t)stub, (u32)(uintptr_t)worker, retryVa, missing.va);
-    return PatchJump(jump.va, jump.bytes, jump.len, stub);
+    if (!PatchJump(jump.va, jump.bytes, jump.len, stub)) {
+        Log("resource guard: the jump at %08X of the %s reader could not be rewritten, its retry limit is off", jump.va, reader);
+        return false;
+    }
+    return true;
 }
 
 bool InstallRoom() {
@@ -158,12 +173,20 @@ bool InstallRoom() {
         }
     u8* first = AllocStub(32);
     u8* refill = AllocStub(32);
-    if (!first || !refill) return false;
+    if (!first || !refill) {
+        Log("resource guard: no room left for the stubs of the unpack code, the buffer limit is off");
+        return false;
+    }
     BuildInflateRoomStub(first, (u32)(uintptr_t)first, (u32)(uintptr_t)InflateRoomFirstWorker, kInflateRoomFirstReturn);
     BuildInflateRoomStub(refill, (u32)(uintptr_t)refill, (u32)(uintptr_t)InflateRoomRefillWorker, kInflateRoomRefillReturn);
     // The refill first: with only the first one in place a small buffer would still be handed 20000h more once it is full.
-    return PatchJump(kSiteInflateRoomRefill.va, kSiteInflateRoomRefill.bytes, kSiteInflateRoomRefill.len, refill) &&
-           PatchJump(kSiteInflateRoomFirst.va, kSiteInflateRoomFirst.bytes, kSiteInflateRoomFirst.len, first);
+    // Either of the two alone only ever gives less room than the game does, so a half-done install is harmless.
+    if (!PatchJump(kSiteInflateRoomRefill.va, kSiteInflateRoomRefill.bytes, kSiteInflateRoomRefill.len, refill) ||
+        !PatchJump(kSiteInflateRoomFirst.va, kSiteInflateRoomFirst.bytes, kSiteInflateRoomFirst.len, first)) {
+        Log("resource guard: the unpack code could not be rewritten, the buffer limit is off or only partly on");
+        return false;
+    }
+    return true;
 }
 
 }  // namespace
