@@ -64,7 +64,7 @@ constexpr u32 kNavLoadedVa = 0x01437A24, kNavCountVa = 0x01437A28;
 // FUN_00405360) and the 2D renderer FUN_005B1120 draws its quads with (ECX of FUN_006E3360, 005B1470).
 constexpr u32 kResourceMgrVa = 0x00BD9E3C, kEventPtrVa = 0x00BD9E58, kQuadRendererVa = 0x00BD7680;
 constexpr u32 kGoalPictureId = 0x32;       // UPDATA/BG/00/00/GOAL.XPC in the resource table
-constexpr u32 kGameFlagsOff = 0x8C5EC;      // CGame: bit 10000000h = the HUD is off, bit 2 = the mode with the bigger beacons
+constexpr u32 kGameFlagsOff = 0x8C5EC;      // CGame: mask 10000000h = the HUD is off, mask 2 = the mode with the bigger beacons
 constexpr u32 kTargetVtable = 0x0077D854;   // CObjectTarget, written by its constructor at 005F438E
 // A point this close to the left or right edge of the screen counts as off the screen: the label sits on the edge there.
 constexpr float kEdgeMargin = 60.f;
@@ -109,7 +109,10 @@ volatile bool g_inWorker = false;
 bool g_beaconInstalled = false;
 bool g_accessorOk = false;             // the map point accessor is the one of 1.01b (the game's or our stub in front of it)
 volatile int g_objNode = -1;           // the node of the objective the waypoint was put on (the objective key), -1 = a free waypoint
-volatile bool g_ownBeacon = false;     // the game shows its own red beacon over that objective (TrackOwnBeacon)
+// What the game itself shows over that objective now (TrackOwnBeacon): its red arrows with the yards, or arrows of another
+// kind, which have no number.
+enum OwnIcon { kOwnNone, kOwnYards, kOwnArrows };
+volatile int g_ownIcon = kOwnNone;
 volatile unsigned g_beaconPass = 0;    // the frame of the last WaypointBeaconDraw
 volatile bool g_beaconPassSeen = false;
 
@@ -216,26 +219,29 @@ bool BeaconReady(u32* texture) {
     return *texture != 0;
 }
 
-// True when arrows stand over the place on the screen in this frame, so the text label is left out: the game's own beacon of the
-// objective the waypoint was put on, or the mod's. WaypointBeaconDraw makes the same tests in the same frame; it must have run
-// in this frame or the one before, so the label comes back by itself if the game ever stops sending the pass. With the beacon
-// switched off the label is always drawn.
+// True when arrows with the yards stand over the place on the screen in this frame, so the text label is left out: the game's own
+// red beacon of the objective the waypoint was put on, or the mod's. Over the game's arrows of another kind (they have no
+// number) the label stays and the mod draws no arrows. WaypointBeaconDraw makes the same tests in the same frame; it must have
+// run in this frame or the one before, so the label comes back by itself if the game ever stops sending the pass. With the
+// beacon switched off the label is always drawn.
 bool BeaconStands() {
     if (!g_cfg.waypointBeacon || !BeaconInView()) return false;
-    if (g_ownBeacon) return true;
+    if (g_ownIcon != kOwnNone) return g_ownIcon == kOwnYards;
     u32 texture;
     return g_beaconPassSeen && g_frame - g_beaconPass <= 1 && BeaconReady(&texture);
 }
 
-// The waypoint was put on one of the game's objectives. A route objective (map point type 8 or 9) is a CObjectTarget that shows
-// its own red arrows with the yards (icon type 0 at object+460h, alpha at +480h, texture at +45Ch) while its "show" byte +3Bh
-// is set: then the mod draws nothing over the place, or there would be two beacons in one spot. The byte is written only by
-// the object's update (FUN_005B1CB0), which also moves the icon's bobbing (+484h) every frame through FUN_005B0DD0: a bobbing
-// that stands still means the object is not being updated and the byte may be stale. Once per frame, from the Present hook.
+// The waypoint was put on one of the game's objectives: a CObjectTarget, which draws an icon of its own (type at object+460h,
+// alpha at +480h, texture at +45Ch) with the same FUN_005B1120 while its "show" byte +3Bh is set. A route objective (map point
+// type 8 or 9) has icon type 0, the red arrows with the yards (005B1663): the mod draws nothing over the place then. The other
+// objectives have arrows without a number (type 1, orange, fading in within 15000 units, 005B16AD): the mod's arrows would
+// stand in the same spot, so it keeps to its text label there. The byte is written only by the object's update (FUN_005B1CB0),
+// which also moves the icon's bobbing (+484h) every frame through FUN_005B0DD0: a bobbing that stands still means the object
+// is not being updated and the byte may be stale. Once per frame, from the Present hook.
 void TrackOwnBeacon() {
     static u32 lastBob = 0;
     static int lastNode = -1, still = 100;
-    bool shown = false;
+    int own = kOwnNone;
     const int node = g_objNode;
     if (node != lastNode) {
         lastNode = node;
@@ -245,8 +251,7 @@ void TrackOwnBeacon() {
     // the manager holds A000h object pointers of the stage in play, indexed by the node: only in the area the objective is in
     if (g_active && node >= 0 && node < 0xA000 && g && *(volatile int*)(uintptr_t)(g + kAreaOff) == g_area) {
         u32 obj = U(kSpotManagerVa + (u32)node * 4);
-        if (Ptr(obj) && U(obj) == kTargetVtable && *(volatile u8*)(uintptr_t)(obj + 0x3B) && U(obj + 0x460) == 0 && U(obj + 0x45C) &&
-            F(obj, 0x480) > 0.f) {
+        if (Ptr(obj) && U(obj) == kTargetVtable && *(volatile u8*)(uintptr_t)(obj + 0x3B) && U(obj + 0x45C) && F(obj, 0x480) > 0.f) {
             u32 bob = U(obj + 0x484);
             if (bob != lastBob) {
                 lastBob = bob;
@@ -254,10 +259,10 @@ void TrackOwnBeacon() {
             } else if (still < 100) {
                 ++still;
             }
-            shown = still < 4;
+            if (still < 4) own = U(obj + 0x460) == 0 ? kOwnYards : kOwnArrows;
         }
     }
-    g_ownBeacon = shown;
+    g_ownIcon = own;
 }
 
 // True when the game is drawing into the back buffer right now (not into one of its textures, such as a map tile or a reflection).
@@ -360,7 +365,7 @@ int CollectObjectives(Objective* out, int max) {
         const u32 entry = list[i];
         const u32 node = entry & 0xFFFFu;
         const int type = (signed char)(entry >> 16);
-        if (node == 0xFFFFu || node > nodes) continue;  // the waypoint's own entry (also type 10), or no node of this stage
+        if (node == 0xFFFFu || node >= nodes) continue;  // the waypoint's own entry (also type 10), or no node of this stage
         if (type != 8 && type != 9 && type != 10) continue;
         float p[4] = {0.f, 0.f, 0.f, 0.f};
         const int got = ((SpotPosFn)(uintptr_t)kSiteSpotAccessor.va)((void*)(uintptr_t)kSpotManagerVa, p, i) & 0xFF;
@@ -699,11 +704,11 @@ extern "C" void __cdecl WaypointBeaconDraw() {
     g_beaconPassSeen = true;
     if (again || g_inWorker || !g_active || !g_showWorld || !g_cfg.waypoint) return;
     if (!GameIdle()) return;  // the test FUN_005EE3F0 makes before the game's own icons (005EE3F3..005EE40D)
-    if (g_ownBeacon || !BeaconInView()) return;
+    if (g_ownIcon != kOwnNone || !BeaconInView()) return;  // the game's own arrows stand there
     u32 texture;
     const u32 g = GameManager();
     if (!g || !BeaconReady(&texture)) return;
-    // the size FUN_005B19A0 gives an objective's icon: 128 while bit 2 of CGame+8C5ECh is set (FUN_004508D0), else 102
+    // the size FUN_005B19A0 gives an objective's icon: 128 while FUN_004508D0 says so (mask 2 of CGame+8C5ECh), else 102
     const float size = (U(g + kGameFlagsOff) & 2u) ? 128.f : 102.f;
     const u32 player = PlayerObjectNow();
     const float* colour = player && YardsTo(F(player, 0x58), F(player, 0x5C), F(player, 0x60)) < 15 ? kGreen : kBeaconRed;
