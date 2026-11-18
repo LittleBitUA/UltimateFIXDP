@@ -1,6 +1,6 @@
-// Game files from mods, by name: UltimateFix\mods\<mod>\files\ holds files laid out as the game's resource paths, for example
-// files\UPDATA\MESSAGE\FONTWIDE.XPC. Whatever the game loads from its archives (DPSERIAL.001..003) or from the language folders
-// is then read from the mod instead. A file that lies right in files\ is found by its name alone when that name is unique among
+// Game files from mods, by name: whatever lies in UltimateFix\mods\<mod>\ (besides mod.ini, text\ and textures\; files\ counts as
+// the mod folder itself) is a game file, by its name or laid out as the game's paths, for example UPDATA\MESSAGE\FONTWIDE.XPC. Whatever the game loads from its archives (DPSERIAL.001..003) or from the language folders
+// is then read from the mod instead. A file that lies right in the mod folder is found by its name alone when that name is unique among
 // the game's files (FONTWIDE.XPC, MES_ALL.MES); a name used in several folders needs the full path.
 //
 // A .dds or .png next to where an .XPC would be (FONTWIDE.DDS for FONTWIDE.XPC) replaces the texture inside that XPC, so a
@@ -191,7 +191,16 @@ void Walk(const wchar_t* dir, char* key, int keyLen, int depth) {
             Unknown(full, "game file names are Latin letters only");
             continue;
         }
-        if (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+        const bool folder = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        if (depth == 0 && (folder ? (Compare(key + keyLen, "TEXT") == 0 || Compare(key + keyLen, "TEXTURES") == 0) : Compare(key + keyLen, "MOD.INI") == 0))
+            continue;  // the mod's description and the folders of the text and texture overlays
+        if (folder && depth == 0 && Compare(key + keyLen, "FILES") == 0) {  // files\ is the same as the mod folder itself
+            lstrcatW(full, L"\\");
+            key[keyLen] = 0;
+            Walk(full, key, keyLen, depth + 1);
+            continue;
+        }
+        if (folder) {
             if (depth >= kMaxDepth) continue;
             lstrcatW(full, L"\\");
             key[n] = '/';

@@ -49,7 +49,7 @@ void Contents(const ModInfo& m, int index, wchar_t* out) {
     if (m.textures) wsprintfW(tex, T(L"текстури: %d", L"textures: %d"), m.textures);
     if (m.files) wsprintfW(files, T(L"файли гри: %d", L"game files: %d"), m.files);
     if (!text[0] && !tex[0] && !files[0]) {
-        lstrcpyW(out, T(L"немає ні text\\, ні textures\\, ні files\\ (нічого не підміняє)", L"no text\\, textures\\ or files\\ (replaces nothing)"));
+        lstrcpyW(out, T(L"порожній: покладіть сюди файли гри (fontwide.xpc, mes_all.mes) і перезапустіть гру", L"empty: put game files here (fontwide.xpc, mes_all.mes) and restart the game"));
         return;
     }
     wsprintfW(out, L"%s%s%s%s%s", text, text[0] && tex[0] ? L" · " : L"", tex, (text[0] || tex[0]) && files[0] ? L" · " : L"", files);
@@ -130,7 +130,7 @@ void ModsPage(float left, float top, float right, float bottom) {
         Fitted(T(L"  text\\       mes_all.json і glyphmap.json із SWERY Localization Tool (переклад)", L"  text\\       mes_all.json and glyphmap.json from the SWERY Localization Tool (a translation)"),
                left, y + 24, kSoft, 15, right - left);
         Fitted(T(L"  textures\\   заміни текстур <хеш>.dds або .png", L"  textures\\   texture replacements <hash>.dds or .png"), left, y + 46, kSoft, 15, right - left);
-        Fitted(T(L"  files\\      файли гри за іменем: FONTWIDE.XPC або FONTWIDE.DDS, або повний шлях UPDATA\\...", L"  files\\      game files by name: FONTWIDE.XPC or FONTWIDE.DDS, or the full path UPDATA\\..."),
+        Fitted(T(L"  будь-що     файли гри просто в теці мода: fontwide.xpc, mes_all.mes, FONTWIDE.DDS, або шлях UPDATA\\...", L"  anything    game files right in the mod folder: fontwide.xpc, mes_all.mes, FONTWIDE.DDS, or a path UPDATA\\..."),
                left, y + 68, kSoft, 15, right - left);
         Fitted(T(L"  mod.ini     Name=, Author=, Version=, Description= (необов'язково, UTF-8)", L"  mod.ini     Name=, Author=, Version=, Description= (optional, UTF-8)"),
                left, y + 90, kSoft, 15, right - left);
