@@ -48,6 +48,7 @@ struct Item {
 const Tr kGlyphTr[4] = {{L"Вимк.", L"Off"}, {L"Авто", L"Auto"}, {L"Xbox", L"Xbox"}, {L"PlayStation", L"PlayStation"}};
 const Tr kMapOrientTr[3] = {{L"Обертається", L"Rotates"}, {L"Північ угорі", L"North up"}, {L"Південь угорі", L"South up"}};
 const Tr kDifficultyTr[3] = {{L"Легка", L"Easy"}, {L"Звичайна", L"Normal"}, {L"Важка", L"Hard"}};
+const Tr kSurroundTr[3] = {{L"Вимк.", L"Off"}, {L"Авто", L"Auto"}, {L"Авто, боки навпаки", L"Auto, sides swapped"}};
 const Tr kPhysStepsTr[4] = {{L"Як у грі (до 4)", L"As the game (up to 4)"}, {L"1 крок", L"1 step"}, {L"2 кроки", L"2 steps"}, {L"3 кроки", L"3 steps"}};
 const Tr kPacingTr[4] = {{L"Вимк.", L"Off"}, {L"Ліміт 60 к/с", L"Limit 60 fps"}, {L"30 к/с (як Xbox)", L"30 fps (like Xbox)"}, {L"60 к/с, цілі кроки", L"60 fps, whole steps"}};
 const Tr kTriggerTestTr[7] = {{L"Вимк.", L"Off"}, {L"Клік пістолета", L"Pistol click"}, {L"Важкий клік", L"Heavy click"},
@@ -283,6 +284,10 @@ Item g_pageGameplay[] = {
      {L"Вмикає недосяжний у PC-коді шлях вологих відбиттів: калюжі й мокрий асфальт відбивають світло. Ідея й адреса з ZachFix; перевірено в грі. Змінюється одразу.", L"Turns on the wet reflection path that the PC code never reaches: puddles and wet asphalt reflect light. The idea and the address come from ZachFix; checked in the game. Changes at once."}, {L"Вигляд і бій", L"Look and combat"}},
     {{L"Допуск у межах кута прицілу (лише при збоях)", L"Aim angle tolerance (only for glitches)"}, &g_cfg.aimTolerance, kBool, 0, 1, 1, true, L"Gameplay", L"AimTolerance", nullptr, nullptr,
      {L"Порівняння меж кута камери з допуском. Потрібне лише коли приціл «залипає» біля межі.", L"Compares the camera angle limits with a tolerance. Only needed when the aim sticks at the limit."}, NOTR},
+    {{L"Об'ємний звук 5.1 / 7.1", L"Surround sound 5.1 / 7.1"}, &g_cfg.surround, kInt, 0, 2, 1, false, L"Audio", L"Surround", ApplySurround, kSurroundTr,
+     {L"Діє лише тоді, коли звуковий пристрій у Windows має більше двох каналів (5.1, 7.1, просторовий звук для навушників); на стерео нічого не змінюється. Гра щокадру задає кожному звуку гучність у вигляді, придатному лише для стерео. Пристрій із більшою кількістю каналів, найімовірніше, такого не приймає, і звук лишається там і з тією гучністю, з якими почався (гравці описували звук гальм, що не стихає). «Авто» робить як на Xbox 360: звук у світі чутно з того боку, де його джерело, решта звуків іде на передні й тилові колонки. Якщо ліве й праве переплутані, оберіть «Авто, боки навпаки». У грі ще не перевірено; що знайдено й зроблено, пише UltimateFix\\ufx.log (рядки «audio:»). Змінюється одразу.",
+      L"Acts only when the Windows sound device has more than two channels (5.1, 7.1, spatial sound for headphones); on stereo nothing is changed. Every frame the game gives each sound a volume made for stereo only, which a wider device should not take: the sound then keeps the place and the volume it started with (players described a brake sound that never stops). 'Auto' does what the Xbox 360 did: a sound in the world is heard from the side its source is on, other sounds go to the front and rear speakers. If left and right are mixed up, choose 'Auto, sides swapped'. Not yet checked in the game; UltimateFix\\ufx.log says what was found and done (lines starting with 'audio:'). Changes at once."},
+     {L"Звук", L"Sound"}},
     RESET_ITEM
 };
 Item g_pageMapItems[] = {

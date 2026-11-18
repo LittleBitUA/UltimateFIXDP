@@ -540,6 +540,39 @@ constexpr SiteDef kSiteLanguageCall = {"language setup call", 0x6B25FD, 5, {0xE8
 constexpr uint32_t kLanguageSetupFn = 0x6B1D80;
 constexpr uint32_t kLanguageSlotVa = 0xBE58E4;
 
+// ---- Sound: XACT3 cues and the game's X3DAudio statics ---------------------------------------------------------
+// FUN_0072CB00 (thiscall, ret 8) updates one playing cue every tick. Its frame: [ebp-8] = the sound record with the
+// IXACT3Cue at +14h (checked for null right before both sites), [ebp+0Ch] = the voice parameters. Both branches end in
+// cue->SetMatrixCoefficients(2, 2, matrix) (vtable +10h, stdcall), whatever the number of channels of the mix is:
+//   3D voice: lea eax,[ebp-18h] / push eax / push 2 / push 2 / mov ecx,[ebp-8] / mov edx,[ecx+14h] / mov eax,[ebp-8] /
+//             mov ecx,[eax+14h] / mov edx,[edx] / push ecx / mov eax,[edx+10h] / call eax        (next: 0072CCEA push "pitch")
+//   2D voice: the same with the matrix at [ebp-54h] and the registers swapped around             (next: 0072CD73 epilogue)
+// 28 bytes each; no jump lands inside either run.
+constexpr uint32_t kCueMatrixLen = 28;
+constexpr SiteDef kSiteCueMatrix3d = {"cue matrix 2x2 (3D voice)", 0x72CCCE, 16,
+    {0x8D, 0x45, 0xE8, 0x50, 0x6A, 0x02, 0x6A, 0x02, 0x8B, 0x4D, 0xF8, 0x8B, 0x51, 0x14, 0x8B, 0x45}};
+constexpr uint8_t kCueMatrix3dTail[12] = {0xF8, 0x8B, 0x48, 0x14, 0x8B, 0x12, 0x51, 0x8B, 0x42, 0x10, 0xFF, 0xD0};
+constexpr SiteDef kSiteCueMatrix2d = {"cue matrix 2x2 (2D voice)", 0x72CD57, 16,
+    {0x8D, 0x4D, 0xAC, 0x51, 0x6A, 0x02, 0x6A, 0x02, 0x8B, 0x55, 0xF8, 0x8B, 0x42, 0x14, 0x8B, 0x4D}};
+constexpr uint8_t kCueMatrix2dTail[12] = {0xF8, 0x8B, 0x51, 0x14, 0x8B, 0x00, 0x52, 0x8B, 0x48, 0x10, 0xFF, 0xD1};
+constexpr int8_t kCueMatrix3dDisp = -0x18;  // where each branch builds its 2x2 matrix, relative to ebp
+constexpr int8_t kCueMatrix2dDisp = -0x54;
+// The X3DAudio statics, set up once by the CSdCore constructor FUN_0072BA00. The three sites below are only compared, never
+// patched: they are the proof of the addresses and of the size of the matrix buffer.
+//   0072BE7F: push 40h / push 0 / push 014B03B8h (memset)       the matrix buffer is 40h bytes = 16 floats (2 sources x 8)
+//   0072BEC4: mov [014B02F0h], 014B03B8h / mov [014B02F8h], ... the DSP settings point at it (+0), source channels at +8
+//   0072CC05: push 014B02F0h                                    the per-tick update calculates into the same DSP settings
+// The static CSdCore object starts at 014B0400 (0076D9B3: mov ecx, 014B0400h / call FUN_0072BA00), 8 bytes after the
+// buffer: a matrix of more than 18 floats written there would run over its vtable pointer.
+constexpr SiteDef kSiteX3dMatrixClear = {"X3DAudio matrix buffer clear", 0x72BE7F, 9,
+    {0x6A, 0x40, 0x6A, 0x00, 0x68, 0xB8, 0x03, 0x4B, 0x01}};
+constexpr SiteDef kSiteX3dDspSetup = {"X3DAudio DSP settings setup", 0x72BEC4, 16,
+    {0xC7, 0x05, 0xF0, 0x02, 0x4B, 0x01, 0xB8, 0x03, 0x4B, 0x01, 0xC7, 0x05, 0xF8, 0x02, 0x4B, 0x01}};
+constexpr SiteDef kSiteCueUpdateDsp = {"cue update: DSP settings pushed", 0x72CC05, 5, {0x68, 0xF0, 0x02, 0x4B, 0x01}};
+constexpr uint32_t kX3dDspVa = 0x014B02F0;     // X3DAUDIO_DSP_SETTINGS, 30h bytes
+constexpr uint32_t kX3dMatrixVa = 0x014B03B8;  // its pMatrixCoefficients
+constexpr uint32_t kX3dMatrixFloats = 16;
+
 // ___security_init_cookie lives here and must keep seeing the raw counter.
 constexpr uint32_t kCookieFnBegin = 0x75C4DE;
 constexpr uint32_t kCookieFnEnd = 0x75C560;
@@ -561,7 +594,8 @@ constexpr ImportDef kImports[] = {
     {"USER32.dll", "ShowCursor", 0x76E238},
     {"d3d9.dll", "Direct3DCreate9", 0x76E264},
     {"d3dx9_43.dll", "D3DXCreateTextureFromFileInMemoryEx", 0x76E2BC},
-    {"X3DAudio1_7.dll", "X3DAudioCalculate", 0},  // slot not recorded
+    {"X3DAudio1_7.dll", "X3DAudioCalculate", 0x76E258},   // not hooked: the two slots the game reaches our own exports through
+    {"X3DAudio1_7.dll", "X3DAudioInitialize", 0x76E25C},
 };
 
 // Bytes the DLL checks beyond the 16 a SiteDef holds: tests/verify_sites.cpp compares them with DP.exe too.
@@ -588,12 +622,15 @@ constexpr const SiteDef* kAllSites[] = {
     &kOutMap2, &kOutMap3, &kOutMap4, &kFarPlane[0], &kFarPlane[1], &kFarPlane[2], &kFarPlane[3], &kFarPlane[4],
     &kFarPlane[5], &kSiteLanguageCall, &kSiteDifficultyNewGame, &kSiteDifficultyLoadClear,
     &kSiteDifficultyDialog1, &kSiteDifficultyDialog2, &kSiteFrameClockCall, &kSiteWheelRead, &kSiteGlyphIndexCall, &kSiteEffectStepA, &kSiteEffectStepB, &kSitePhysicsStepCall, &kSiteMapDrawCall, &kSiteTextDrawEntry, &kSiteSpriteDrawEntry, &kSiteSpotAccessor, &kSiteSpotRebuild[0], &kSiteSpotRebuild[1], &kSiteSpotRebuild[2], &kAltPhaseCalls[0], &kAltPhaseCalls[1], &kAltPhaseCalls[2], &kSiteResidencyEntry, &kSiteSetTargetEntry, &kSiteResourceOfSlot, &kSiteStateEntry, &kSiteSuitChange, &kSiteStrafeTail, &kSiteFullscreenArg[0], &kSiteFullscreenArg[1], &kSiteByteText, &kGaussCalls[0], &kGaussCalls[1], &kGaussCalls[2], &kGaussCalls[3], &kGaussCalls[4], &kGaussCalls[5], &kSiteCompositeDraw, &kSiteCameraCall, &kSiteExposure85, &kSiteExposure75, &kMapZoomFloor, &kMapZoomClampCall, &kMapZoomInit, &kMapPanX, &kMapPanZ, &kMapTileLookup, &kMapTileLimit, &kMapDeleteResource, &kMapReleaseResource, &kMapFindResource, &kMapHeading[0], &kMapHeading[1], &kMapHeading[2], &kMapHeading[3], &kMapHeading[4], &kMapHeading[5], &kMapHeading[6], &kMapArrow, &kSiteNavLookup, &kSiteNavNullCheck, &kSiteTrig1, &kSiteTrig2, &kSiteTrig3, &kSiteActivation, &kSiteLodFactor, &kSiteHighDetail1, &kSiteHighDetail2, &kSiteHighDetail3, &kSiteVisibility1, &kSiteVisibility2, &kSiteInputCommit, &kSiteInputPoll, &kSiteStickEval, &kSiteAimStick[0], &kSiteAimStick[1], &kSiteAimStick[2], &kSiteAimStick[3], &kSiteWetGate, &kSiteAimH, &kSiteAimV, &kSiteFullscreenArg[2], &kSiteVisibilityTestEntry,
+    &kSiteCueMatrix3d, &kSiteCueMatrix2d, &kSiteX3dMatrixClear, &kSiteX3dDspSetup, &kSiteCueUpdateDsp,
 };
 
 constexpr TailDef kAllTails[] = {
     {"aim limit (horizontal), all 30 bytes", kSiteAimH.va, (uint8_t)sizeof(kAimHFull), kAimHFull},
     {"map tile lookup bytes 16..19", kMapTileLookup.va + 16, (uint8_t)sizeof(kMapTileLookupTail), kMapTileLookupTail},
     {"effect step B bytes 16..23", kSiteEffectStepB.va + 16, (uint8_t)sizeof(kEffectStepBTail), kEffectStepBTail},
+    {"cue matrix (3D voice) bytes 16..27", kSiteCueMatrix3d.va + 16, (uint8_t)sizeof(kCueMatrix3dTail), kCueMatrix3dTail},
+    {"cue matrix (2D voice) bytes 16..27", kSiteCueMatrix2d.va + 16, (uint8_t)sizeof(kCueMatrix2dTail), kCueMatrix2dTail},
 };
 
 }  // namespace ufx

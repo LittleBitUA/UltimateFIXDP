@@ -145,6 +145,7 @@ struct Config {
     int highFpsPhysics;      // frames shorter than one step of 1/60 s (above 120 frames/s) share whole physics steps instead of taking one each
     int pauseInMenu;         // the game's time stands still while the F10 menu is open
     int framePacing;         // 0 off, 1 = frame limit 60 only (game keeps real time), 2 = 30 frames/s in whole steps (console), 3 = 60 in whole steps
+    int surround;            // 5.1 / 7.1 as on the console: 0 off, 1 = automatic (only when the mix has more than 2 channels), 2 = the same without the left/right mirror
 };
 
 struct Paths {
@@ -222,6 +223,8 @@ void StopVibration();
 void TriggerCapture(const void* joyInfoEx, bool menuOpen);
 bool InstallCrashHandler();
 bool InstallCrashGuards();
+bool InstallAudioGuard();  // proxy.cpp: the X3DAudio guard, and the game's calls go through it from then on
+void ApplySurround();      // follows [Audio] Surround (also called from the menu)
 bool InstallMapFix();
 void ApplyMapFix();
 bool InstallTextureOverride();

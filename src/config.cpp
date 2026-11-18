@@ -211,6 +211,18 @@ static const char kDefaultIni[] =
     "FreezeGame=1\r\n"
     "Fov=0\r\n"
     "\r\n"
+    "[Audio]\r\n"
+    "; Surround sound as on the Xbox 360. It acts only when the Windows output device has more than two channels (5.1, 7.1, a\r\n"
+    "; spatial sound format for headphones); on stereo nothing is changed. Every tick the game gives each playing sound a\r\n"
+    "; volume matrix made for stereo only, which a wider device should not take: a sound then keeps the place and the volume it\r\n"
+    "; started with (players report a brake sound that never stops; by the code volume fades are affected too).\r\n"
+    "; 1 = automatic: a sound in the world gets the full X3DAudio matrix every tick (it follows its source, left and right as\r\n"
+    "; the picture shows them), other sounds the console's stereo pan with the rear speakers at 0.8, a six-channel sound one\r\n"
+    "; channel per speaker. 2 = the same with left and right the other way round (try it if the sides are wrong). 0 = off.\r\n"
+    "; Not yet checked in the game; the lines starting with audio: in UltimateFix\\ufx.log say what was detected and done.\r\n"
+    "; Changes at once.\r\n"
+    "Surround=1\r\n"
+    "\r\n"
     "[Map]\r\n"
     "; The map in the pause menu: all 64 tiles of the town at once, zoom out down to MinZoom, orientation fixed.\r\n"
     "; Ideas of MapFix by Behelit09 (MIT). Restart needed for Enabled; the rest changes at once from F10.\r\n"
@@ -503,6 +515,8 @@ void LoadConfig(const wchar_t* ini) {
     if (g_cfg.physicsSteps < 0 || g_cfg.physicsSteps > 3) g_cfg.physicsSteps = 0;
     g_cfg.highFpsPhysics = (int)GetPrivateProfileIntW(L"Time", L"HighFpsPhysics", 1, ini);
     g_cfg.pauseInMenu = (int)GetPrivateProfileIntW(L"Time", L"PauseInMenu", 0, ini);
+    g_cfg.surround = (int)GetPrivateProfileIntW(L"Audio", L"Surround", 1, ini);
+    if (g_cfg.surround < 0 || g_cfg.surround > 2) g_cfg.surround = 1;
     g_cfg.framePacing = (int)GetPrivateProfileIntW(L"Time", L"FramePacing", 1, ini);
     if (g_cfg.framePacing < 0 || g_cfg.framePacing > 3) g_cfg.framePacing = 0;
     // Older versions wrote FramePacing=0 into the file as a default. Without the frame limit the game runs its physics per frame:

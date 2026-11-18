@@ -247,6 +247,21 @@ int main(int argc, char** argv) {
         Check(s.len == 11 && Rel32To(s.bytes, s.va, 6, kFtolFn), s.name, "followed by call _ftol2");
     }
 
+    // The cue matrix sites: the bytes written over each 28-byte run of the game, built at the address of the run itself.
+    uint8_t cm[kCueMatrixLen];
+    const uint32_t cmHelper = 0xC0001000;
+    size_t ncm = BuildCueMatrixCall(cm, kSiteCueMatrix3d.va, cmHelper, kCueMatrix3dDisp, kCueMatrixLen);
+    printf("cue matrix call %zu bytes\n", ncm);
+    Check(ncm == kCueMatrixLen, "cue matrix (3D)", "fills the 28 bytes of the run");
+    Check(cm[0] == 0x8D && cm[1] == 0x45 && cm[2] == 0xE8, "cue matrix (3D)", "lea eax,[ebp-18h]");
+    Check(Rel32To(cm, kSiteCueMatrix3d.va, 13, cmHelper), "cue matrix (3D)", "call helper");
+    Check(Rel8To(cm, 18, kCueMatrixLen), "cue matrix (3D)", "jmp to the end of the run");
+    ncm = BuildCueMatrixCall(cm, kSiteCueMatrix2d.va, cmHelper, kCueMatrix2dDisp, kCueMatrixLen);
+    Check(ncm == kCueMatrixLen, "cue matrix (2D)", "fills the 28 bytes of the run");
+    Check(cm[0] == 0x8D && cm[1] == 0x45 && cm[2] == 0xAC, "cue matrix (2D)", "lea eax,[ebp-54h]");
+    Check(Rel32To(cm, kSiteCueMatrix2d.va, 13, cmHelper), "cue matrix (2D)", "call helper");
+    Check(Rel8To(cm, 18, kCueMatrixLen), "cue matrix (2D)", "jmp to the end of the run");
+
     printf("%s\n", g_failures ? "STUB CHECKS FAILED" : "all stub checks passed");
     return g_failures ? 1 : 0;
 }

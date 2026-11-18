@@ -465,4 +465,31 @@ inline size_t BuildCarTicksStub(uint8_t* out, uint32_t stepsVa, uint32_t ticksVa
     return (size_t)(p - out);
 }
 
+// Written over one of the two 28-byte `cue->SetMatrixCoefficients(2, 2, matrix)` runs of FUN_0072CB00 (sites.h): the same
+// place calls a helper of ours instead, void __stdcall helper(cue, params, matrix2x2).
+//     lea  eax,[ebp+matrixDisp]   ; the 2x2 matrix this branch has just built in its frame
+//     push eax
+//     push dword [ebp+0Ch]        ; the voice parameters (second stack argument of FUN_0072CB00)
+//     mov  eax,[ebp-8]            ; the sound record
+//     push dword [eax+14h]        ; its IXACT3Cue
+//     call helper                 ; pops its 12 bytes, as the COM call popped its 16
+//     jmp  short end / int3 ...   ; end = the instruction after the original run
+// The original run leaves eax, ecx, edx and the flags to the COM call and nothing after it reads them (0072CCEA goes on
+// with push / mov, 0072CD73 is the epilogue); ebx, esi, edi and ebp are kept by the callee in both, and the x87 stack is
+// empty at both sites. The frame on ebp is used the way the replaced instructions used it.
+inline size_t BuildCueMatrixCall(uint8_t* out, uint32_t siteVa, uint32_t helperVa, int8_t matrixDisp, size_t len) {
+    uint8_t* p = out;
+    *p++ = 0x8D; *p++ = 0x45; *p++ = (uint8_t)matrixDisp;   // lea eax, [ebp+disp]
+    *p++ = 0x50;                                             // push eax
+    *p++ = 0xFF; *p++ = 0x75; *p++ = 0x0C;                   // push dword [ebp+0Ch]
+    *p++ = 0x8B; *p++ = 0x45; *p++ = 0xF8;                   // mov eax, [ebp-8]
+    *p++ = 0xFF; *p++ = 0x70; *p++ = 0x14;                   // push dword [eax+14h]
+    *p++ = 0xE8;
+    StubPut32(p, helperVa - (siteVa + (uint32_t)(p - out) + 4));  // call helper
+    size_t afterJmp = (size_t)(p - out) + 2;
+    *p++ = 0xEB; *p++ = (uint8_t)(len - afterJmp);           // jmp short end
+    while ((size_t)(p - out) < len) *p++ = 0xCC;             // int3
+    return (size_t)(p - out);
+}
+
 }  // namespace ufx
