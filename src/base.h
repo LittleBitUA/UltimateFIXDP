@@ -69,6 +69,7 @@ struct Config {
     int renderScale;         // internal resolution of the scene in percent of the output (1280x720 without one; 100 = off)
     int ambientOcclusion;    // strength of the ambient occlusion in percent (0 = off)
     int aoRadius;            // radius in pixels at 720p
+    int aoMode;              // 0 = the plain pass (12 taps, no blur), 1 = horizon-based with a depth-aware blur
     int antialias;           // edge smoothing of the final picture in percent (0 = off)
     int antialiasMode;       // how the edges are smoothed: 0 the FXAA-like pass, 1 SMAA 1x (falls back to 0 when it cannot run)
     int smaaQuality;         // SMAA: 0 low, 1 medium, 2 high (how far along an edge its end is looked for)

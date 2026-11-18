@@ -657,8 +657,13 @@ void FrameStatsPanel(void* dev, double totalMs, double gameMs, double physicsMs,
 
 // Before a Reset: the copy is a default-pool texture, and the reused state block holds references to the game's
 // textures, so both must go (they are made again on the next frame).
+namespace {
+void ReleaseAoTargets();  // the horizon-based occlusion's two targets (below)
+}  // namespace
+
 void ReleasePostResources() {
     ReleaseCopy();
+    ReleaseAoTargets();
     ReleaseSmaaTargets();
     ReleaseStateBlockCache();
 }
@@ -839,7 +844,192 @@ const char kAoSource[] =
 
 const char* const kProfilesAo[] = {"ps_2_b", "ps_2_a", "ps_3_0", nullptr};
 
+// Horizon-based occlusion (AoMode 1): 8 directions turned per pixel, 4 steps each. For every direction the highest horizon above
+// the surface's tangent plane counts (its sine), faded with the distance, so a corner or the ground under a car darkens and an
+// open wall does not. The result goes into a texture of its own and is blurred with depth-aware weights in two passes before it
+// darkens the scene, so the turned directions do not show as a pattern. c1.z: the width of one pixel at depth 1 (the camera's
+// vertical view of about 45 degrees: 2 tan(22.5) / height).
+void* g_hbaoShader = nullptr;
+void* g_aoBlurShader = nullptr;
+bool g_hbaoFailed = false;
+void* g_aoTex[2] = {nullptr, nullptr};
+void* g_aoSurf[2] = {nullptr, nullptr};
+UINT g_aoTexW = 0, g_aoTexH = 0;
+const char kHbaoSource[] =
+    "sampler s0 : register(s0);\n"
+    "float4 c0 : register(c0);\n"  // xy = texel size, z = strength 0..1, w = radius in pixels
+    "float4 c1 : register(c1);\n"  // xy = size in pixels, z = width of a pixel at depth 1
+    "float Dep(float2 uv) {\n"
+    "  float3 c = tex2Dlod(s0, float4(uv, 0, 0)).rgb;\n"
+    "  return floor(c.r * 256.0 + 0.5) * 256.0 + floor(c.g * 256.0 + 0.5) + c.b;\n"
+    "}\n"
+    "float4 main(float2 uv : TEXCOORD0) : COLOR {\n"
+    "  float dc = max(Dep(uv), 1.0);\n"
+    "  if (dc > 30000.0) return float4(1, 1, 1, 1);\n"
+    "  float k = max(c0.w * 0.25, 2.0);\n"
+    "  float dr = Dep(uv + float2(c0.x * k, 0.0)); float dl = Dep(uv - float2(c0.x * k, 0.0));\n"
+    "  float dd = Dep(uv + float2(0.0, c0.y * k)); float du = Dep(uv - float2(0.0, c0.y * k));\n"
+    "  float2 g;\n"
+    "  g.x = (abs(dr - dc) < abs(dc - dl) ? (dr - dc) : (dc - dl)) / k;\n"
+    "  g.y = (abs(dd - dc) < abs(dc - du) ? (dd - dc) : (dc - du)) / k;\n"
+    "  float2 p = uv * c1.xy;\n"
+    "  float n = frac(52.9829189 * frac(dot(p, float2(0.06711056, 0.00583715))));\n"
+    "  float a0 = n * 6.2831853;\n"
+    "  float jit = frac(n * 7.0);\n"
+    "  float worldR = c0.w * dc * c1.z;\n"
+    "  float occ = 0.0;\n"
+    "  for (int i = 0; i < 8; ++i) {\n"
+    "    float ang = a0 + i * 0.78539816;\n"
+    "    float2 dir = float2(cos(ang), sin(ang));\n"
+    "    float best = 0.0;\n"
+    "    for (int j = 1; j <= 4; ++j) {\n"
+    "      float t = (j - jit) * 0.25 * c0.w;\n"
+    "      float2 o = dir * t;\n"
+    "      float ds = Dep(uv + o * c0.xy);\n"
+    "      float dz = dc + dot(g, o) - ds - 1.0;\n"   // above the tangent plane; 1 unit for the packing's steps
+    "      float lat = t * dc * c1.z;\n"
+    "      float len2 = dz * dz + lat * lat;\n"
+    "      float s = dz / sqrt(len2 + 1e-4);\n"
+    "      float fall = saturate(1.0 - len2 / (worldR * worldR + 1e-4));\n"
+    "      best = max(best, saturate((s - 0.1) / 0.9) * fall);\n"
+    "    }\n"
+    "    occ += best;\n"
+    "  }\n"
+    "  float ao = saturate(1.0 - c0.z * occ * 0.2);\n"
+    "  return float4(ao, ao, ao, 1.0);\n"
+    "}\n";
+// 9 taps along c2.xy (one texel step), weighted by distance and by how close the depth is to the centre's.
+const char kAoBlurSource[] =
+    "sampler s0 : register(s0);\n"  // occlusion
+    "sampler s1 : register(s1);\n"  // depth
+    "float4 c0 : register(c0);\n"
+    "float4 c2 : register(c2);\n"
+    "float Dep(float2 uv) {\n"
+    "  float3 c = tex2Dlod(s1, float4(uv, 0, 0)).rgb;\n"
+    "  return floor(c.r * 256.0 + 0.5) * 256.0 + floor(c.g * 256.0 + 0.5) + c.b;\n"
+    "}\n"
+    "float4 main(float2 uv : TEXCOORD0) : COLOR {\n"
+    "  float dc = max(Dep(uv), 1.0);\n"
+    "  float sum = 0.0, wsum = 0.0;\n"
+    "  for (int k = -4; k <= 4; ++k) {\n"
+    "    float2 q = uv + c2.xy * (k * 1.5);\n"
+    "    float a = tex2Dlod(s0, float4(q, 0, 0)).r;\n"
+    "    float d = Dep(q);\n"
+    "    float w = exp(-k * k * 0.125) * saturate(1.0 - abs(d - dc) / (dc * 0.03 + 2.0));\n"
+    "    sum += a * w; wsum += w;\n"
+    "  }\n"
+    "  float ao = sum / max(wsum, 1e-4);\n"
+    "  return float4(ao, ao, ao, 1.0);\n"
+    "}\n";
+const char* const kProfilesHbao[] = {"ps_3_0", nullptr};
+
+void ReleaseAoTargets() {
+    for (int i = 0; i < 2; ++i) {
+        if (g_aoSurf[i]) Method<ReleaseFn>(g_aoSurf[i], kRelease)(g_aoSurf[i]);
+        if (g_aoTex[i]) Method<ReleaseFn>(g_aoTex[i], kRelease)(g_aoTex[i]);
+        g_aoSurf[i] = g_aoTex[i] = nullptr;
+    }
+    g_aoTexW = g_aoTexH = 0;
+}
+
+bool AoTargets(void* dev, UINT w, UINT h) {
+    if (g_aoTex[0] && g_aoTex[1] && g_aoTexW == w && g_aoTexH == h) return true;
+    ReleaseAoTargets();
+    for (int i = 0; i < 2; ++i) {
+        if (FAILED(Method<CreateTexFn>(dev, kCreateTexture)(dev, w, h, 1, 1 /*RENDERTARGET*/, 21 /*A8R8G8B8*/, 0 /*DEFAULT*/, &g_aoTex[i], nullptr)) ||
+            !g_aoTex[i] || FAILED(Method<GetLevelFn>(g_aoTex[i], 18)(g_aoTex[i], 0, &g_aoSurf[i])) || !g_aoSurf[i]) {
+            ReleaseAoTargets();
+            return false;
+        }
+    }
+    g_aoTexW = w;
+    g_aoTexH = h;
+    return true;
+}
+
 }  // namespace
+
+// The horizon-based pass with its blur (AoMode 1). False = it cannot run (shader, targets): the plain pass takes over.
+bool HbaoPass(void* dev, void* hdr, void* depth, UINT w, UINT h, int strengthPercent, int radiusPixels) {
+    typedef HRESULT(WINAPI * GetSurfFn)(void*, UINT, void**);
+    typedef HRESULT(WINAPI * GetDsFn)(void*, void**);
+    typedef HRESULT(WINAPI * SetDsFn)(void*, void*);
+    typedef HRESULT(WINAPI * SetRtFn2)(void*, DWORD, void*);
+    typedef HRESULT(WINAPI * SetViewportFn2)(void*, const Viewport*);
+    if ((!g_hbaoShader && !BuildShader(dev, kHbaoSource, sizeof(kHbaoSource) - 1, &g_hbaoShader, kProfilesHbao, "ssao (horizon)")) ||
+        (!g_aoBlurShader && !BuildShader(dev, kAoBlurSource, sizeof(kAoBlurSource) - 1, &g_aoBlurShader, kProfilesHbao, "ssao (blur)"))) {
+        g_hbaoFailed = true;
+        Log("ssao: the horizon-based shaders could not be built, the plain pass is used");
+        return false;
+    }
+    if (!AoTargets(dev, w, h)) {
+        g_hbaoFailed = true;
+        Log("ssao: two %ux%u textures for the horizon-based pass could not be made, the plain pass is used", w, h);
+        return false;
+    }
+    void* hdrSurf = nullptr;
+    if (FAILED(Method<GetSurfFn>(hdr, 18)(hdr, 0, &hdrSurf)) || !hdrSurf) return false;
+    void* oldDs = nullptr;
+    Method<GetDsFn>(dev, 40)(dev, &oldDs);
+    if (!BeginOverlay(dev, false)) {
+        if (oldDs) Method<ReleaseFn>(oldDs, kRelease)(oldDs);
+        Method<ReleaseFn>(hdrSurf, kRelease)(hdrSurf);
+        return false;
+    }
+    const float radius = (float)radiusPixels * (float)h / 720.0f;
+    const float c0[4] = {1.0f / (float)w, 1.0f / (float)h, (float)(strengthPercent > 100 ? 100 : strengthPercent) / 100.0f, radius};
+    const float c1[4] = {(float)w, (float)h, 0.8284271f / (float)h, 0.f};
+    Viewport vp = {0, 0, w, h, 0.f, 1.f};
+    Method<SetDsFn>(dev, 39)(dev, nullptr);
+    for (u32 stage = 0; stage < 2; ++stage) {
+        Method<Dword3Fn>(dev, kSetSamplerState)(dev, stage, SAMP_MINFILTER, 1);  // POINT: exact depth and occlusion values
+        Method<Dword3Fn>(dev, kSetSamplerState)(dev, stage, SAMP_MAGFILTER, 1);
+        Method<Dword3Fn>(dev, kSetSamplerState)(dev, stage, 1 /*ADDRESSU*/, 3 /*CLAMP*/);
+        Method<Dword3Fn>(dev, kSetSamplerState)(dev, stage, 2 /*ADDRESSV*/, 3);
+    }
+    SetRS(RS_COLORWRITEENABLE, 7);
+    if (g_cfg.perfOverlay || g_cfg.frameStats) { EnsureFreq(dev); TimerBegin(dev, g_timerAo); }
+    // 1: the occlusion into texture 0
+    SetRS(RS_ALPHABLENDENABLE, 0);
+    Method<SetRtFn2>(dev, kSetRenderTarget)(dev, 0, g_aoSurf[0]);
+    Method<SetViewportFn2>(dev, kSetViewport)(dev, &vp);
+    Method<SetPsFn>(dev, kSetPixelShader)(dev, g_hbaoShader);
+    Method<SetTexFn2>(dev, kSetTexture)(dev, 0, depth);
+    Method<SetPsConstFn>(dev, 109)(dev, 0, c0, 1);
+    Method<SetPsConstFn>(dev, 109)(dev, 1, c1, 1);
+    Quad(0.f, 0.f, (float)w, (float)h, 0xFFFFFFFF, 0.f, 0.f, 1.f, 1.f);
+    // 2: blurred across into texture 1
+    const float across[4] = {1.0f / (float)w, 0.f, 0.f, 0.f}, down[4] = {0.f, 1.0f / (float)h, 0.f, 0.f};
+    Method<SetRtFn2>(dev, kSetRenderTarget)(dev, 0, g_aoSurf[1]);
+    Method<SetViewportFn2>(dev, kSetViewport)(dev, &vp);
+    Method<SetPsFn>(dev, kSetPixelShader)(dev, g_aoBlurShader);
+    Method<SetTexFn2>(dev, kSetTexture)(dev, 0, g_aoTex[0]);
+    Method<SetTexFn2>(dev, kSetTexture)(dev, 1, depth);
+    Method<SetPsConstFn>(dev, 109)(dev, 2, across, 1);
+    Quad(0.f, 0.f, (float)w, (float)h, 0xFFFFFFFF, 0.f, 0.f, 1.f, 1.f);
+    // 3: blurred down, multiplied into the scene
+    Method<SetRtFn2>(dev, kSetRenderTarget)(dev, 0, hdrSurf);
+    Method<SetViewportFn2>(dev, kSetViewport)(dev, &vp);
+    Method<SetTexFn2>(dev, kSetTexture)(dev, 0, g_aoTex[1]);
+    Method<SetPsConstFn>(dev, 109)(dev, 2, down, 1);
+    SetRS(RS_ALPHABLENDENABLE, 1);
+    SetRS(RS_SRCBLEND, 9);   // DESTCOLOR: result = scene * occlusion
+    SetRS(RS_DESTBLEND, 1);  // ZERO
+    Quad(0.f, 0.f, (float)w, (float)h, 0xFFFFFFFF, 0.f, 0.f, 1.f, 1.f);
+    if (g_cfg.perfOverlay || g_cfg.frameStats) TimerEnd(dev, g_timerAo);
+    Method<SetTexFn2>(dev, kSetTexture)(dev, 0, nullptr);
+    Method<SetTexFn2>(dev, kSetTexture)(dev, 1, nullptr);
+    OverlayEnd();  // puts the render target and the whole state back
+    Method<SetDsFn>(dev, 39)(dev, oldDs);
+    if (oldDs) Method<ReleaseFn>(oldDs, kRelease)(oldDs);
+    Method<ReleaseFn>(hdrSurf, kRelease)(hdrSurf);
+    static bool logged = false;
+    if (!logged) {
+        logged = true;
+        Log("ssao: horizon-based pass with a depth-aware blur running on a %ux%u scene (strength %d%%, radius %d px)", w, h, strengthPercent, radiusPixels);
+    }
+    return true;
+}
 
 void AmbientOcclusionPass(void* dev, int strengthPercent, int radiusPixels) {
     if (strengthPercent <= 0 || g_aoFailed) return;
@@ -875,6 +1065,11 @@ void AmbientOcclusionPass(void* dev, int strengthPercent, int radiusPixels) {
         releaseAll();
         return;
     }
+    if (g_cfg.aoMode == 1 && !g_hbaoFailed && HbaoPass(dev, hdr, depth, hd[6], hd[7], strengthPercent, radiusPixels)) {
+        releaseAll();
+        return;
+    }
+    if (radiusPixels > 20) radiusPixels = 20;  // the plain pass: 12 taps and no blur show their pattern on a wider ring
     if (!g_aoShader && !BuildShader(dev, kAoSource, sizeof(kAoSource) - 1, &g_aoShader, kProfilesAo)) {
         g_aoFailed = true;
         Log("ssao: the shader could not be built (d3dx9_43), the pass is off");

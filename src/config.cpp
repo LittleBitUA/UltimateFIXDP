@@ -133,6 +133,9 @@ static const char kDefaultIni[] =
     "; Strength in percent 0..100 (0 = off), radius in pixels at 720p. Changes at once.\r\n"
     "AmbientOcclusion=0\r\n"
     "AoRadius=10\r\n"
+    "; 1 = horizon-based occlusion (8 directions, a depth-aware blur: soft, no stripes; radius up to 40), 0 = the plain pass\r\n"
+    "; (12 taps, no blur, radius up to 20). Changes at once.\r\n"
+    "AoMode=1\r\n"
     "; Edge smoothing of the final picture, percent 0..100. 0 = off. Changes at once.\r\n"
     "Antialias=0\r\n"
     "; How the edges are smoothed while Antialias is above 0. 0 (or FXAA) = the fast FXAA-like pass. 1 (or SMAA) = SMAA 1x,\r\n"
@@ -666,7 +669,9 @@ void LoadConfig(const wchar_t* ini) {
     if (g_cfg.ambientOcclusion > 100) g_cfg.ambientOcclusion = 100;
     g_cfg.aoRadius = (int)GetPrivateProfileIntW(L"Graphics", L"AoRadius", 10, ini);
     if (g_cfg.aoRadius < 2) g_cfg.aoRadius = 2;
-    if (g_cfg.aoRadius > 20) g_cfg.aoRadius = 20;  // 12 taps and no blur: a wider ring shows the tap pattern as stripes
+    if (g_cfg.aoRadius > 40) g_cfg.aoRadius = 40;  // the plain pass stops at 20 by itself (overlay.cpp)
+    g_cfg.aoMode = (int)GetPrivateProfileIntW(L"Graphics", L"AoMode", 1, ini);
+    if (g_cfg.aoMode < 0 || g_cfg.aoMode > 1) g_cfg.aoMode = 1;
     g_cfg.antialias = (int)GetPrivateProfileIntW(L"Graphics", L"Antialias", 0, ini);
     if (g_cfg.antialias < 0) g_cfg.antialias = 0;
     if (g_cfg.antialias > 100) g_cfg.antialias = 100;

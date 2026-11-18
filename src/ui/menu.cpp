@@ -53,6 +53,7 @@ const Tr kMapOrientTr[3] = {{L"Обертається", L"Rotates"}, {L"Півн
 const Tr kDifficultyTr[3] = {{L"Легка", L"Easy"}, {L"Звичайна", L"Normal"}, {L"Важка", L"Hard"}};
 const Tr kSurroundTr[3] = {{L"Вимк.", L"Off"}, {L"Авто", L"Auto"}, {L"Авто, боки навпаки", L"Auto, sides swapped"}};
 const Tr kPhysStepsTr[4] = {{L"Як у грі (до 4)", L"As the game (up to 4)"}, {L"1 крок", L"1 step"}, {L"2 кроки", L"2 steps"}, {L"3 кроки", L"3 steps"}};
+const Tr kAoModeTr[2] = {{L"Простий (12 точок)", L"Plain (12 taps)"}, {L"По горизонту, м'який", L"Horizon-based, soft"}};
 const Tr kPacingTr[4] = {{L"Вимк.", L"Off"}, {L"Ліміт 60 к/с", L"Limit 60 fps"}, {L"30 к/с (як Xbox)", L"30 fps (like Xbox)"}, {L"60 к/с, цілі кроки", L"60 fps, whole steps"}};
 const Tr kTriggerTestTr[7] = {{L"Вимк.", L"Off"}, {L"Клік пістолета", L"Pistol click"}, {L"Важкий клік", L"Heavy click"},
                               {L"Автомат: вібрація", L"Machine gun: vibration"}, {L"Опір", L"Resistance"}, {L"Повільна вібрація", L"Slow rumble"},
@@ -219,8 +220,11 @@ Item g_pageGraphics[] = {
     {{L"Затінення в кутках (SSAO), %", L"Ambient occlusion (SSAO), %"}, &g_cfg.ambientOcclusion, kInt, 0, 100, 10, false, L"Graphics", L"AmbientOcclusion", nullptr, nullptr,
      {L"Притемнює щілини й місця, де предмети стикаються. Рахується з буфера глибини гри. Змінюється одразу. Починайте з 40–60.", L"Darkens creases and contact areas. Computed from the game's depth buffer. Changes at once. Start with 40–60."},
      {L"Чіткість і вигляд", L"Sharpness and look"}},
-    {{L"Радіус затінення, пікселів", L"Occlusion radius, pixels"}, &g_cfg.aoRadius, kInt, 2, 20, 2, false, L"Graphics", L"AoRadius", nullptr, nullptr,
-     {L"Наскільки далеко від кута шукається перекриття (при 720p; на більших роздільностях росте пропорційно).", L"How far from a corner occlusion is searched (at 720p; scales up with the resolution)."}, NOTR},
+    {{L"Радіус затінення, пікселів", L"Occlusion radius, pixels"}, &g_cfg.aoRadius, kInt, 2, 40, 2, false, L"Graphics", L"AoRadius", nullptr, nullptr,
+     {L"Наскільки далеко від кута шукається перекриття (при 720p; на більших роздільностях росте пропорційно). Для простого способу більше за 20 не діє.", L"How far from a corner occlusion is searched (at 720p; scales up with the resolution). The plain way stops at 20."}, NOTR},
+    {{L"Спосіб затінення", L"Occlusion method"}, &g_cfg.aoMode, kInt, 0, 1, 1, false, L"Graphics", L"AoMode", nullptr, kAoModeTr,
+     {L"По горизонту (типово): 8 напрямків і розмиття з урахуванням глибини, м'які тіні в кутах і під предметами, без смуг навіть на великому радіусі; трохи важчий. Простий: старий спосіб, 12 точок без розмиття. Змінюється одразу.",
+      L"Horizon-based (default): 8 directions and a depth-aware blur, soft shade in corners and under objects, no stripes even at a large radius; a little heavier. Plain: the old way, 12 taps without a blur. Changes at once."}, NOTR},
     {{L"Згладжування країв, %", L"Edge smoothing, %"}, &g_cfg.antialias, kInt, 0, 100, 10, false, L"Graphics", L"Antialias", nullptr, nullptr,
      {L"Прибирає «драбинки» на краях. Гра не має власного згладжування. Змінюється одразу. Спосіб обирається рядком нижче: з FXAA поєднуйте з різкістю 20–30, бо воно трохи розмиває; зі SMAA ставте 100.", L"Removes jagged edges. The game has no antialiasing of its own. Changes at once. The method is chosen in the row below: with FXAA combine it with sharpening 20–30, since it blurs slightly; with SMAA set 100."},
      {L"Чіткість і вигляд", L"Sharpness and look"}},
