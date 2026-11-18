@@ -202,6 +202,8 @@ const char* RefusalText(MesError e) {
         case kMesNoSuchId: return "the loaded MES_ALL.MES has the record numbers 0..%u";
         case kMesNoRecord: return "this number has no record in the loaded MES_ALL.MES (only existing records are replaced)";
         case kMesNotHandled: return "the record in the loaded file has a code this version does not handle, it is left alone";
+        case kMesTemplateShape: return "the game fills this record in: it needs exactly one ** with something after it, as the loaded text has it";
+        case kMesEmptyText: return "the text is empty where the loaded record has text: the game is not safe with an empty record (a single space gives a blank one)";
         case kMesTemplateSlots: return "the game puts an item name wherever this record has two words 10 in a row (\"**\", or a line 10 wide that starts with *): "
                                        "it must have %u such place(s), as the loaded one";
         default: return "the game copies this record into a fixed buffer, it may not be longer than the loaded one (%u words)";

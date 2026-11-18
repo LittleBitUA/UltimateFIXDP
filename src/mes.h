@@ -382,6 +382,8 @@ enum MesError {
     kMesNotHandled,    // the record in the file is not one MesReadOriginal understands
     kMesTemplateGrew,  // value = the words the record may have
     kMesTemplateSlots, // value = how many "**" places the loaded template record has
+    kMesTemplateShape, // a template record without exactly one "**" that has a word between it and the end
+    kMesEmptyText,     // no text at all where the loaded record has some
 };
 
 struct MesErrorInfo {
@@ -1075,6 +1077,20 @@ inline uint32_t MesTemplateSlots(const uint8_t* rec, uint32_t words) {
     return slots;
 }
 
+// At a "**" the function writes the item name and an FFF2, drops the word behind the pair and from then on copies the
+// word two places ahead of the one it tests for the end (0045A8A4..0045A924). So the FFFF reaches the buffer only when
+// the record has exactly one such pair and at least one word between the pair and its FFFF (both stock records: "**" +
+// FFF2 in 3B70h, "**." in 3B73h). Without the FFFF in the buffer the drawer reads on past its end.
+inline bool MesTemplateShape(const uint8_t* rec, uint32_t words) {
+    uint32_t pairs = 0, at = 0;
+    for (uint32_t i = 0; i + 1 < words; ++i)
+        if (MesRd16(rec + i * 2) == 0x0A && MesRd16(rec + i * 2 + 2) == 0x0A) {
+            ++pairs;
+            at = i;
+        }
+    return pairs == 1 && at + 3 < words;
+}
+
 // The record `id` of the file when it is one a text can replace: understood token by token, and ending where the game's
 // plain walk over FFFF words ends it. kMesOk, or why not (info->value as the error says).
 inline MesError MesOriginalOf(const MesFile& f, const uint32_t* spanEnd, uint32_t id, MesOriginal* orig, MesErrorInfo* info) {
@@ -1108,6 +1124,11 @@ inline MesError MesEncodeFor(const MesFile& f, const uint32_t* spanEnd, uint32_t
         info->value = MesTemplateSlots(orig.rec, orig.words);
         return kMesTemplateSlots;
     }
+    if (isTemplate && !MesTemplateShape(out, *words)) return kMesTemplateShape;
+    // An empty text gives a record whose first text word (+0Ah) is the FFFF. FUN_0045A870 copies an item name from that
+    // word on and tests for the FFFF only after each copy (0045A8C6..0045A8DF): past such a record it would run on through
+    // the records behind it, into its buffer of 513 words. So one is made only where the loaded file has it already.
+    if (MesRd16(out + 10) == kMesEnd && MesRd16(orig.rec + 10) != kMesEnd) return kMesEmptyText;
     if (*words == orig.words) {  // scratch: kMesMaxWords words
         MesNormalise(orig.rec, orig.words, scratch);
         *same = true;

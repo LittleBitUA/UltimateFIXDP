@@ -573,14 +573,15 @@ static void TestEncodeFor() {
     add(0x3B70, tmpl);
     add(5, {1, 7, 0x8000, 9, 77, 0x21, 0x127, 0xFFFE, 0, 0xFFFF});  // a wrong line count and width, and a cell without a character
     add(4, Enc("Last", talk).w);
+    add(6, Enc("", talk).w);  // an empty record in the loaded file
     MesFile f;
     CHECK(MesOpen(file.data(), (uint32_t)file.size(), &f));
     std::vector<uint32_t> order(count), spanEnd(count);
     const uint32_t n = MesPhysicalOrder(f, order.data());
-    CHECK(n == 6);
+    CHECK(n == 7);
     uint8_t icons[32] = {};
     MesIndex(f, order.data(), n, spanEnd.data(), icons);
-    CHECK(icons[1] == 2 && icons[0] == 0 && spanEnd[4] == file.size() && spanEnd[0] == MesOffset(f, 1));
+    CHECK(icons[1] == 2 && icons[0] == 0 && spanEnd[6] == file.size() && spanEnd[0] == MesOffset(f, 1));
 
     std::vector<uint8_t> out(kMesMaxWords * 2), scratch(kMesMaxWords * 2);
     uint32_t words = 0;
@@ -615,6 +616,60 @@ static void TestEncodeFor() {
     CHECK(enc(0x3B70, "*123456789{NEXT_SEGMENT}**{NEXT_FRAME id=0}x") == kMesTemplateSlots);  // width word 10, then '*'
     CHECK(enc(0x3B70, "*12345678{NEXT_SEGMENT}**{NEXT_FRAME id=0}x") == kMesOk);
     CHECK(enc(4, "*123456789") == kMesOk);  // any other record may
+    // one "**" is not enough: with nothing between it and the end the game's copy never reaches the FFFF
+    CHECK(enc(0x3B70, "Moved:{NEXT_SEGMENT}**") == kMesTemplateShape);
+    CHECK(enc(0x3B70, "Gone:{NEXT_FRAME id=0}**.") == kMesOk);  // the form of the stock record 3B73h
+    // an empty text is refused unless the loaded record is empty itself
+    CHECK(enc(4, "") == kMesEmptyText && enc(0, "") == kMesEmptyText);
+    CHECK(enc(4, " ") == kMesOk && enc(4, "{NEXT_SEGMENT}") == kMesOk);
+    CHECK(enc(6, "") == kMesOk && same && enc(6, "Text") == kMesOk);
+}
+
+// FUN_0045A870 as the game runs it (0045A8A4..0045A924): the words it writes to its buffer from the template `t` and the
+// record `name` of the item. What lies behind the template in the file is `behind`.
+static std::vector<uint16_t> GameTemplate(const std::vector<uint16_t>& t, const std::vector<uint16_t>& name, uint16_t behind = 0x1234) {
+    std::vector<uint16_t> buf;
+    auto at = [&](size_t i) { return i < t.size() ? t[i] : behind; };
+    auto put = [&](size_t i, uint16_t w) {
+        if (buf.size() <= i) buf.resize(i + 1, 0);
+        buf[i] = w;
+    };
+    size_t i = 0, copied = 0, ahead = 0;
+    do {
+        while (at(i) == 0x0A && at(i + 1) == 0x0A) {
+            do {
+                put(copied + i, name[5 + copied]);
+                ++copied;
+            } while (name[5 + copied] != 0xFFFF);
+            put(copied + i, 0xFFF2);
+            ++i;
+            ahead += 2;
+        }
+        put(copied + i, at(ahead + i));
+        ++i;
+    } while (at(i) != 0xFFFF && i < 2000);
+    return buf;
+}
+
+static void TestTemplateShape() {
+    const MesOriginal box = Orig(0x38, 0, 0);
+    const std::vector<uint16_t> name = Enc("[Wrench]", Orig(0xB, 0, 0)).w;
+    auto shape = [&](const char* text) {
+        const std::vector<uint16_t> w = Enc(text, box).w;
+        const std::vector<uint8_t> b = Bytes(w);
+        const bool ok = MesTemplateShape(b.data(), (uint32_t)w.size());
+        // what the rule promises for a text with at most one "**" (more are refused by their number): the game's buffer
+        // gets its FFFF exactly when the shape is accepted
+        bool hasEnd = false;
+        for (uint16_t x : GameTemplate(w, name)) hasEnd |= x == 0xFFFF;
+        CHECK(hasEnd == ok);
+        return ok;
+    };
+    CHECK(shape("Since you cannot carry more,{NEXT_SEGMENT}**{NEXT_FRAME id=0}has been moved."));  // the stock 3B70h
+    CHECK(shape("Deleted:{NEXT_FRAME id=0}**."));                                                  // the stock 3B73h
+    CHECK(shape("**{NEXT_SEGMENT}"));
+    CHECK(!shape("Moved to the toolbox."));
+    CHECK(!shape("Moved:{NEXT_SEGMENT}**"));
 }
 
 static std::vector<uint8_t> ReadAll(const char* path) {
@@ -833,6 +888,7 @@ int main(int argc, char** argv) {
     TestJudge();
     TestMerge();
     TestEncodeFor();
+    TestTemplateShape();
     if (argc > 1 && argv[1][0]) TestRealFile(argv[1]);
     printf("%s (%d checks)\n", g_failed ? "MES TEST FAILED" : "MES TEST PASSED", g_checked);
     return g_failed ? 1 : 0;

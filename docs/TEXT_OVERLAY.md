@@ -141,6 +141,11 @@ batch: message 0x0456: more than 768 glyph quads in one draw, the rest is not dr
   and must keep their one `**`: the game copies them, with the item's name in place of `**`, into a fixed buffer of 513 words
   without a limit. For the same reason keep item names short: the mod cannot tell which records are item names, so it does not
   limit them (the game's own are a few words; a name of several hundred characters would overflow that buffer).
+- The same two records with the `**` as the very last thing of the text: the game swallows whatever stands right behind
+  the `**` (a `{NEXT_FRAME}`, a full stop) and loses the end of the text when nothing stands there. Keep the `**` and what
+  follows it as the loaded text has them.
+- An empty `Text` for a record that has text in the loaded file: the game is not safe with an empty record when it uses
+  it as an item name. Write a single space for a blank one.
 - An icon number the loaded file never uses; a colour above 255; a size outside 8..128.
 - A refused record stays as the game loaded it. Nothing is ever written to the game's files.
 
@@ -267,6 +272,10 @@ JSON, який DPMsgTool робить із того самого `.mes` (`Origin
 - Два шаблонні записи `0x3B70` і `0x3B73` не можуть стати довшими, ніж є, і мають зберегти своє одне `**`: гра копіює їх
   разом із назвою предмета замість `**` у буфер на 513 слів без перевірки. З тієї ж причини назви предметів мають лишатися
   короткими: мод не знає, які записи є назвами предметів, тому їх не обмежує.
+- Ті самі два записи, якщо `**` стоїть у самому кінці тексту: гра «з'їдає» те, що стоїть одразу за `**` (`{NEXT_FRAME}`,
+  крапку), і губить кінець тексту, якщо там нічого немає. Лишайте `**` і те, що за ним, як у завантаженому тексті.
+- Порожній `Text` для запису, який у завантаженому файлі не порожній: гра небезпечно поводиться з порожнім записом, коли
+  бере його як назву предмета. Для порожнього рядка напишіть один пробіл.
 - Номер піктограми, якого немає в завантаженому файлі; колір понад 255; розмір поза 8..128.
 - Відхилений запис лишається таким, яким його завантажила гра. У файли гри мод нічого не пише.
 
