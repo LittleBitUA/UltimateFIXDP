@@ -37,7 +37,7 @@ void ReleasePostResources();                     // before the device is reset (
 // SMAA 1x (smaa.cpp): the other choice for AntialiasFrame. Returns false when it cannot run (a shader that does not
 // compile, a texture that cannot be made): it says so in the log once, and the caller uses its FXAA-like pass instead.
 bool SmaaFrame(void* device, int percent);
-void ReleaseSmaaTargets();                       // its render targets, before the device is reset
+void ReleaseSmaaTargets();                       // its render targets: before the device is reset, and while FXAA is chosen
 
 // Building blocks of overlay.cpp for a final-image pass in another file.
 void* PostBackBuffer(void* device, UINT* width, UINT* height, UINT* format);  // the caller releases the surface

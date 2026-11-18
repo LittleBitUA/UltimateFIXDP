@@ -8,8 +8,8 @@
 //   2. weights  edge target + tables -> weight target (how much of each pixel the true border cuts off)
 //   3. blend    copy of the picture + weight target -> back buffer
 // The two targets are render-target textures of the back buffer's size (default pool: released before a Reset and
-// made again on the next frame, also when the size changes). The tables are managed textures and the shaders are not
-// bound to the pool, so they live through a Reset.
+// made again on the next frame, also when the size changes; released as well while the FXAA-like pass is chosen).
+// The tables are managed textures and the shaders are not bound to the pool, so they live through a Reset.
 // Anything that fails (the HLSL compiler, a texture format) switches the pass off for the run with one log line, and
 // AntialiasFrame goes back to its FXAA-like pass.
 #include "ui.h"
@@ -69,9 +69,10 @@ const WeightSource kWeightSources[3] = {{4, kWeightSource4, sizeof(kWeightSource
 
 bool g_failed = false;           // for the rest of the run: AntialiasFrame uses its own pass
 void* g_edgeShader = nullptr;    // IDirect3DPixelShader9
-void* g_weightShader = nullptr;
 void* g_blendShader = nullptr;
-int g_weightSteps = 0;           // the walk length g_weightShader was built for
+// One weight shader per entry of kWeightSources, built when a quality first needs it and kept: going back and forth
+// between the qualities in the menu compiles each text once, not on every change.
+void* g_weightShaders[3] = {};
 void* g_areaTex = nullptr;       // managed textures
 void* g_searchTex = nullptr;
 void* g_edgeTex = nullptr;       // render targets of the back buffer's size
@@ -79,7 +80,7 @@ void* g_edgeSurf = nullptr;
 void* g_weightTex = nullptr;
 void* g_weightSurf = nullptr;
 UINT g_targetW = 0, g_targetH = 0;
-bool g_runningLogged = false;
+int g_loggedQuality = -1;        // the quality the "pass running" line was written for; -1 = write it again
 
 void SafeRelease(void*& object) {
     if (object) Method<ReleaseFn>(object, kRelease)(object);
@@ -211,16 +212,12 @@ bool SmaaFrame(void* dev, int percent) {
         return CannotCreate(dev, "the search table texture could not be made");
     if (!g_edgeShader && !BuildShader(dev, "edge", kEdgeSource, sizeof(kEdgeSource) - 1, &g_edgeShader)) return false;
     if (!g_blendShader && !BuildShader(dev, "blend", kBlendSource, sizeof(kBlendSource) - 1, &g_blendShader)) return false;
-    if (g_weightSteps != preset.steps) {  // the first frame, or the quality was changed in the menu
-        SafeRelease(g_weightShader);
-        g_weightSteps = 0;
-        const WeightSource* source = &kWeightSources[0];
-        for (const WeightSource& s : kWeightSources)
-            if (s.steps == preset.steps) source = &s;
-        if (!BuildShader(dev, "weight", source->text, source->length, &g_weightShader)) return false;
-        g_weightSteps = preset.steps;
-        g_runningLogged = false;
-    }
+    int walk = 0;  // the entry of kWeightSources this quality uses
+    for (int i = 0; i < 3; ++i)
+        if (kWeightSources[i].steps == preset.steps) walk = i;
+    if (!g_weightShaders[walk] &&
+        !BuildShader(dev, "weight", kWeightSources[walk].text, kWeightSources[walk].length, &g_weightShaders[walk]))
+        return false;
 
     UINT w, h, fmt;
     void* back = PostBackBuffer(dev, &w, &h, &fmt);
@@ -234,7 +231,7 @@ bool SmaaFrame(void* dev, int percent) {
         }
         g_targetW = w;
         g_targetH = h;
-        g_runningLogged = false;
+        g_loggedQuality = -1;
     }
     void *copyTex = nullptr, *copySurf = nullptr;
     if (!PostCopyTarget(dev, w, h, fmt, &copyTex, &copySurf)) {
@@ -271,7 +268,7 @@ bool SmaaFrame(void* dev, int percent) {
     BindTexture(dev, 0, g_edgeTex, kFilterLinear);  // the walk reads four marks per fetch through the filter
     BindTexture(dev, 1, g_areaTex, kFilterPoint);
     BindTexture(dev, 2, g_searchTex, kFilterPoint);
-    DrawInto(dev, g_weightSurf, g_weightShader, w, h);
+    DrawInto(dev, g_weightSurf, g_weightShaders[walk], w, h);
 
     BindTexture(dev, 0, copyTex, kFilterLinear);    // a fetch between two pixels is their mix
     BindTexture(dev, 1, g_weightTex, kFilterPoint);
@@ -284,8 +281,8 @@ bool SmaaFrame(void* dev, int percent) {
     Method<SetDsFn>(dev, kSetDepthStencil)(dev, oldDepth);
     if (oldDepth) Method<ReleaseFn>(oldDepth, kRelease)(oldDepth);
     Method<ReleaseFn>(back, kRelease)(back);
-    if (!g_runningLogged) {
-        g_runningLogged = true;
+    if (g_loggedQuality != quality) {  // the first frame, new targets (a Reset, another size) or another quality
+        g_loggedQuality = quality;
         Log("smaa: pass running on a %ux%u back buffer, quality %d (walk of %d pixels each way, %s edges)", w, h, quality,
             preset.steps * 2 - 1, preset.colorEdges > 0.f ? "colour" : "brightness");
     }

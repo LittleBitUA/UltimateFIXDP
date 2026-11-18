@@ -568,10 +568,13 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.antialias = (int)GetPrivateProfileIntW(L"Graphics", L"Antialias", 0, ini);
     if (g_cfg.antialias < 0) g_cfg.antialias = 0;
     if (g_cfg.antialias > 100) g_cfg.antialias = 100;
-    {   // a number as the menu writes it, or the name of the method
+    {   // a number as the menu writes it (read like every other number here, so text after it does no harm), or the
+        // name of the method
         wchar_t mode[16];
-        GetPrivateProfileStringW(L"Graphics", L"AntialiasMode", L"0", mode, 16, ini);
-        g_cfg.antialiasMode = (lstrcmpiW(mode, L"SMAA") == 0 || lstrcmpiW(mode, L"1") == 0) ? 1 : 0;
+        GetPrivateProfileStringW(L"Graphics", L"AntialiasMode", L"", mode, 16, ini);
+        mode[4] = 0;  // "SMAA" and whatever follows it on the line
+        g_cfg.antialiasMode =
+            (GetPrivateProfileIntW(L"Graphics", L"AntialiasMode", 0, ini) == 1 || lstrcmpiW(mode, L"SMAA") == 0) ? 1 : 0;
     }
     g_cfg.smaaQuality = (int)GetPrivateProfileIntW(L"Graphics", L"SmaaQuality", 2, ini);
     if (g_cfg.smaaQuality < 0 || g_cfg.smaaQuality > 2) g_cfg.smaaQuality = 2;

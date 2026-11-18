@@ -751,7 +751,14 @@ void SharpenFrame(void* dev, int percent) {
 }
 
 void AntialiasFrame(void* dev, int percent) {
-    if (g_cfg.antialiasMode == 1 && SmaaFrame(dev, percent)) return;  // false = SMAA cannot run: the pass below takes over
+    if (g_cfg.antialiasMode == 1) {
+        if (SmaaFrame(dev, percent)) return;
+        // SMAA cannot run (its one log line says why) and the pass below takes over. The setting goes back in memory
+        // only: the menu row then shows what really smooths the picture, and the ini keeps the player's choice for
+        // the next start.
+        g_cfg.antialiasMode = 0;
+    }
+    ReleaseSmaaTargets();  // two textures of the back buffer's size are not kept while the other method works
     RunPass(dev, &g_fxaaShader, &g_fxaaFailed, "antialias", kFxaaSource, sizeof(kFxaaSource) - 1, kProfilesFxaa, percent);
 }
 
