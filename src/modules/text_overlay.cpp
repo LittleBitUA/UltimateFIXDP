@@ -2,12 +2,13 @@
 // below) with one font atlas (FONTWIDE). Four things, each behind its own setting in [Language]; the overlay and the glyph
 // log report to UltimateFix\loc.log:
 //
-//   TextOverlay    UltimateFix\text\*.txt hold lines "0x1234 = text" (UTF-8, the tags of src/mes.h) and glyphmap.txt says which
-//                  atlas cell each character is. When the game binds MES_ALL.MES (the call at 0045F679, its only load point; all
-//                  18 reads go through the pointer stored right after it) it gets a merged copy instead: every record in its
-//                  place, the listed ones encoded anew. Nothing is written to the game's files. Without text files there is no
-//                  patch at all.
-//   TextDump       writes the file the game loaded as such lines to UltimateFix\mes_dump.txt.
+//   TextOverlay    UltimateFix\text\mes_all.json and glyphmap.json are the two files of the SWERY Localization Tool (the JSON of
+//                  DPMsgTool and the tool's glyph map), taken as they are; *.txt files with lines "0x1234 = text" in the same
+//                  marker language can correct single records over them. When the game binds MES_ALL.MES (the call at 0045F679,
+//                  its only load point; all 18 reads go through the pointer stored right after it) it gets a merged copy
+//                  instead: every record in its place, the ones whose text differs encoded anew. Nothing is written to the
+//                  game's files. Without those files there is no patch at all.
+//   TextDump       writes the file the game loaded in the form of that JSON to UltimateFix\mes_dump.json.
 //   ShowMessageId  the drawer is wrapped; after each record it drew, its id is printed over it in the game's small font.
 //   GlyphLog       the one function every glyph quad goes through (FUN_0045A760) is watched: a cell that is empty in the atlas
 //                  or lies beyond it, and a draw that fills the batch of 300h quads, are reported once per message and cell.
@@ -81,8 +82,6 @@ void TextPath(wchar_t* out, const wchar_t* name) {  // out: MAX_PATH * 2 charact
     lstrcatW(out, name);
 }
 
-bool IsGlyphMapName(const wchar_t* name) { return lstrcmpiW(name, L"glyphmap.txt") == 0; }
-
 // A whole file in memory (VirtualFree it), with one zero byte after it. Null when it cannot be read or is too big.
 u8* LoadFile(const wchar_t* path, u32* size) {
     HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
@@ -116,18 +115,42 @@ const char* TextStart(const u8* data, u32 size) {
     return (const char*)data;
 }
 
-// The built-in cells of the US atlas, then UltimateFix\text\glyphmap.txt over them.
+// What a character becomes: the plain table of the tools (cell = character - 20h), the tool's glyph map over it (the
+// translator's own text\glyphmap.json, or the map the tool itself falls back to), and text\glyphmap.txt for characters
+// that are given a cell directly.
 void LoadGlyphMap() {
     GlyphMapDefault(g_map);
     wchar_t path[MAX_PATH * 2];
-    TextPath(path, L"glyphmap.txt");
     u32 size = 0;
+    TextPath(path, L"glyphmap.json");
     u8* data = LoadFile(path, &size);
-    if (!data) {
-        LocLog("glyph map: no text\\glyphmap.txt, only the built-in cells of the US atlas (ASCII and Latin-1) are known");
-        return;
+    const char* p = data ? TextStart(data, size) : nullptr;
+    if (!p) {
+        GlyphMapToolDefaults(g_map);
+        LocLog(data ? "glyph map: glyphmap.json is saved as UTF-16, save it as UTF-8; the tool's default map (67 characters) is used"
+                    : "glyph map: no text\\glyphmap.json, the tool's default map (67 characters) is used");
+    } else {
+        GlyphJsonReader reader = {{p, (const char*)data + size}, 0};
+        u32 key = 0, value[2] = {0, 0}, count = 0;
+        int entries = 0, skipped = 0, more;
+        while ((more = GlyphJsonNext(reader, &key, value, &count)) == 1) {
+            if (key && count >= 1 && count <= 2) {
+                GlyphMapSubst(g_map, key, value[0], value[1]);
+                ++entries;
+            } else if (++skipped <= 20) {
+                LocLog("glyph map: glyphmap.json entry %d is not one character with one or two characters as its value, skipped", entries + skipped);
+            }
+        }
+        if (more < 0) LocLog("glyph map: glyphmap.json could not be read to its end (not the JSON the tool writes)");
+        if (!entries) GlyphMapToolDefaults(g_map);
+        LocLog(entries ? "glyph map: %d characters from glyphmap.json" : "glyph map: glyphmap.json has no \"map\" with entries, the tool's default map is used", entries);
     }
-    const char* p = TextStart(data, size);
+    if (data) VirtualFree(data, 0, MEM_RELEASE);
+
+    TextPath(path, L"glyphmap.txt");
+    data = LoadFile(path, &size);
+    if (!data) return;
+    p = TextStart(data, size);
     const char* end = (const char*)data + size;
     int entries = 0, lineNo = 0;
     if (!p) {
@@ -145,7 +168,7 @@ void LoadGlyphMap() {
                 LocLog("glyph map: glyphmap.txt line %d is not \"<character> = <cell>\" with a cell of 0..0x97F, skipped", lineNo);
             }
         }
-        LocLog("glyph map: %d characters from glyphmap.txt over the built-in cells", entries);
+        LocLog("glyph map: %d characters with a cell of their own from glyphmap.txt", entries);
     }
     VirtualFree(data, 0, MEM_RELEASE);
 }
@@ -160,48 +183,66 @@ struct Build {
     u8* arena;         // the encoded records
     u32 arenaCap, arenaUsed;
     u8 icons[32];      // the icon numbers the loaded file uses
-    int applied, refused, files;
+    int applied, refused, same, padded, files;
 };
 
-u8 g_encoded[kMesMaxWords * 2];
+u8 g_encoded[kMesMaxWords * 2], g_normalised[kMesMaxWords * 2];
 
-// Why a line was refused; %u / %04X take the value that comes with the error.
+// Why a text was refused; %u / %04X take the value that comes with the error.
 const char* RefusalText(MesError e) {
     switch (e) {
-        case kMesBadUtf8: return "the text is not valid UTF-8 (save the file as UTF-8)";
-        case kMesNoGlyph: return "the character U+%04X has no cell in the glyph map (add it to text\\glyphmap.txt)";
-        case kMesBadTag: return "an unknown tag, or a tag without its closing brace";
-        case kMesStrayBrace: return "a single } (write }} for the brace itself)";
-        case kMesBadValue: return "a number of the tag is missing or out of range";
+        case kMesBadUtf8: return "the text is not valid UTF-8";
+        case kMesBadTag: return "a marker the tools do not have, or one that is not written as they write it";
+        case kMesBadValue: return "the number %u of a marker is out of range";
         case kMesBadIcon: return "icon %u is not used anywhere in the game's own text";
-        case kMesPageLines: return "{page} comes after %u lines, a page of this window has two";
-        case kMesNoDuration: return "{page} number %u has no duration and the original record has none for it: write {page N}, N in frames (60 a second)";
+        case kMesUnknownBr: return "{BR}: which code it stands for could not be established (see the mes_all.json lines above)";
+        case kMesUnknownWord: return "the marker with 0x%04X is accepted only where the loaded record has that word, and it has not";
         case kMesLineTooLong: return "a line has %u characters, more than the 384 one draw can hold";
         case kMesTooLong: return "the record is longer than %u words";
-        case kMesNoSuchId: return "the file has the ids 0x0000..0x%04X";
-        case kMesNoRecord: return "this id has no record in the loaded MES_ALL.MES (only existing records are replaced)";
+        case kMesNoSuchId: return "the loaded MES_ALL.MES has the record numbers 0..%u";
+        case kMesNoRecord: return "this number has no record in the loaded MES_ALL.MES (only existing records are replaced)";
         case kMesNotHandled: return "the record in the loaded file has a code this version does not handle, it is left alone";
+        case kMesTemplateSlots: return "the game puts an item name wherever this record has two words 10 in a row (\"**\", or a line 10 wide that starts with *): "
+                                       "it must have %u such place(s), as the loaded one";
         default: return "the game copies this record into a fixed buffer, it may not be longer than the loaded one (%u words)";
     }
 }
 
-// One "0x1234 = text" line: encoded into the arena and noted for its id, or refused with the reason in loc.log.
-void ApplyLine(Build& b, const wchar_t* name, int lineNo, u32 id, const char* text, const char* textEnd) {
-    char reason[240];
+// The text of one record, from `where` (a file and a place in it, for the log): encoded into the arena and noted for its
+// id, left out when it says what the loaded record says, or refused with the reason in loc.log.
+void ApplyText(Build& b, const char* where, u32 id, const char* text, const char* textEnd) {
+    char reason[300];
     u32 words = 0;
-    MesErrorInfo info = {0, 0};
-    const MesError e = MesEncodeFor(b.file, b.spanEnd, id, text, textEnd, g_map, b.icons, g_encoded, &words, &info);
-    if (e != kMesOk || b.arenaUsed + words * 2 > b.arenaCap) {
+    bool same = false;
+    MesErrorInfo info = {0, 0, 0, 0};
+    const MesError e = MesEncodeFor(b.file, b.spanEnd, id, text, textEnd, g_map, b.icons, g_encoded, g_normalised, &words, &same, &info);
+    if (e != kMesOk || (!same && b.arenaUsed + words * 2 > b.arenaCap)) {
         if (e == kMesOk) lstrcpyA(reason, "out of memory for the encoded text");
+        else if (e == kMesNoGlyph && info.value2)
+            wsprintfA(reason, "the character U+%04X is U+%04X by the glyph map, and that has no cell (the tools' characters are U+0020..7E and U+00A0..FF; "
+                              "others need a line in text\\glyphmap.txt)", info.value, info.value2);
+        else if (e == kMesNoGlyph)
+            wsprintfA(reason, "the character U+%04X has no cell: it is not in the glyph map and not one of the tools' characters (U+0020..7E, U+00A0..FF); "
+                              "a line in text\\glyphmap.txt can give it one", info.value);
         else wsprintfA(reason, RefusalText(e), info.value);
         ++b.refused;
         // the column means something for the errors of the text itself, which come first in the list
-        if (e != kMesOk && e < kMesTooLong) LocLog("text: %S line %d, id 0x%04X, column %u of the text: %s; line skipped", name, lineNo, id, info.column + 1, reason);
-        else LocLog("text: %S line %d, id 0x%04X: %s; line skipped", name, lineNo, id, reason);
+        if (e != kMesOk && e < kMesTooLong) LocLog("text: %s, record %u (0x%04X), column %u of the text: %s; the record stays as loaded", where, id, id, info.column + 1, reason);
+        else LocLog("text: %s, record %u (0x%04X): %s; the record stays as loaded", where, id, id, reason);
         return;
     }
-    if (b.ov[id].data) LocLog("text: %S line %d: id 0x%04X was given before, this line wins", name, lineNo, id);
-    else ++b.applied;
+    if (info.padded && ++b.padded <= 200)
+        LocLog("text: %s, record %u (0x%04X): {NEXT_FRAME} came after an odd number of lines %u time(s); the window turns two lines at a time, "
+               "so an empty line was added in front of it", where, id, id, info.padded);
+    if (same) {
+        if (b.ov[id].data) {  // an earlier file changed it, this one puts the loaded text back
+            b.ov[id].data = nullptr;
+            --b.applied;
+        }
+        ++b.same;
+        return;
+    }
+    if (!b.ov[id].data) ++b.applied;
     u8* at = b.arena + b.arenaUsed;
     for (u32 i = 0; i < words * 2; ++i) at[i] = g_encoded[i];
     b.arenaUsed += words * 2;
@@ -223,7 +264,9 @@ void ApplyFile(Build& b, const wchar_t* name, const u8* data, u32 size) {
         u32 id = 0;
         const MesLine kind = MesParseLine(line, lineEnd, &id, &text, &textEnd);
         if (kind == kLineEntry) {
-            ApplyLine(b, name, lineNo, id, text, textEnd);
+            char where[MAX_PATH + 32];
+            wsprintfA(where, "%S line %d", name, lineNo);
+            ApplyText(b, where, id, text, textEnd);
         } else if (kind == kLineBad) {
             ++b.refused;
             LocLog("text: %S line %d is not \"0x1234 = text\" (a comment starts with ;); line skipped", name, lineNo);
@@ -231,6 +274,83 @@ void ApplyFile(Build& b, const wchar_t* name, const u8* data, u32 size) {
     }
     ++b.files;
 }
+
+const char* const kKindNames[kKindCount] = {"{NEXT_SEGMENT}", "{NEXT_FRAME}", "{ICON}", "{SET_COLOR}", "{RESET_COLOR}", "{SET_SPACING}", "{BR}", ""};
+const u32 kKindCodes[kKindCount] = {kMesNewLine, kMesPage, kMesIcon, kMesColour, kMesColourBack, kMesSize, kMesSizeBack, kMesSizeBack};
+constexpr u32 kJsonTextCap = 1u << 16;
+
+// UltimateFix\text\mes_all.json, the file the SWERY Localization Tool saves (DPMsgTool's JSON): one element per record
+// number. First the whole file is held against the loaded MES (MesJsonCheck); only a file that passes is used.
+void ApplyJson(Build& b, const u8* data, u32 size) {
+    const char* start = TextStart(data, size);
+    if (!start) {
+        LocLog("text: mes_all.json is saved as UTF-16, the tools write UTF-8; not used");
+        return;
+    }
+    char* text = (char*)VirtualAlloc(nullptr, kJsonTextCap, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!text) return;
+    const char* end = (const char*)data + size;
+    MesJsonRecord r, firstBad = {};
+    MesErrorInfo info;
+    MesOriginal orig;
+    MesJsonCheck check = {};
+    MesJsonReader reader = {{start, end}, 0};
+    int more;
+    while ((more = MesJsonNext(reader, &r, text, kJsonTextCap)) == 1) {
+        const u32 index = reader.index - 1, before = check.headerDiffers;
+        const bool known = r.textLen <= kJsonTextCap && MesOriginalOf(b.file, b.spanEnd, index, &orig, &info) == kMesOk;
+        MesJsonCheckAdd(check, index, r, text, r.textLen, known ? &orig : nullptr);
+        if (!before && check.headerDiffers) firstBad = r;
+    }
+    u32 kind = 0;
+    const MesJsonVerdict verdict = MesJsonJudge(check, &kind, &g_map.brCode);
+    LocLog("text: mes_all.json: %u elements (the loaded MES has %u record numbers), %u compared with their records: Id1/Flag1/Flag2 are other "
+           "than the header words in %u, Id2 other than the line count in %u", check.elements, b.file.count, check.compared, check.headerDiffers,
+           check.linesDiffer);
+    for (u32 k = kKindSegment; k <= kKindSpacing; ++k)
+        LocLog("text: mes_all.json: %s and the code %04X: %u records have one of them, in %u of those as many of the one as of the other",
+               kKindNames[k], kKindCodes[k], check.either[k], check.agree[k]);
+    if (check.brTexts)
+        LocLog(g_map.brCode ? "text: mes_all.json: {BR} is taken as the code FFF0: all %u records that have either have as many of the one as of the other"
+                            : "text: mes_all.json: {BR} does not line up with the code FFF0 (%u records have either, %u agree): texts with {BR} are refused",
+               check.either[kKindBr], check.agree[kKindBr]);
+    if (more < 0) {
+        LocLog("text: mes_all.json is not used: it could not be read beyond element %u (not the JSON the tools write, or cut off)", reader.index);
+    } else if (verdict == kJsonNotThisMes) {
+        MesOriginalOf(b.file, b.spanEnd, check.firstHeaderDiffers, &orig, &info);
+        LocLog("text: mes_all.json is not used: it was not made from the MES_ALL.MES the game loaded. First difference: record %u has Id1=%d Flag1=%d "
+               "Flag2=%d, the loaded record starts with the words %u, %u (lines), %u, %u", check.firstHeaderDiffers, firstBad.id1, firstBad.flag1,
+               firstBad.flag2, orig.w0, orig.w1, orig.w2, orig.w3);
+    } else if (verdict == kJsonMarkersDiffer) {
+        LocLog("text: mes_all.json is not used: %s does not line up with the code %04X in the loaded MES (see the counts above), so this version "
+               "does not read the markers of this file right", kKindNames[kind], kKindCodes[kind]);
+    } else {
+        reader = {{start, end}, 0};
+        u32 noText = 0;
+        while (MesJsonNext(reader, &r, text, kJsonTextCap) == 1) {
+            const u32 index = reader.index - 1;
+            if (r.empty) continue;
+            if (!(r.have & kJsonText)) {
+                ++noText;
+            } else if (r.textLen > kJsonTextCap) {
+                ++b.refused;
+                LocLog("text: mes_all.json, record %u (0x%04X): the text is longer than %u bytes; the record stays as loaded", index, index, kJsonTextCap);
+            } else if (MesOriginalOf(b.file, b.spanEnd, index, &orig, &info) == kMesOk && !MesJsonHeaderMatches(r, orig)) {
+                ++b.refused;
+                LocLog("text: mes_all.json, record %u (0x%04X): Id1/Flag1/Flag2 (%d, %d, %d) are not the header words of the loaded record (%u, %u, %u); "
+                       "the record stays as loaded", index, index, r.id1, r.flag1, r.flag2, orig.w0, orig.w2, orig.w3);
+            } else {
+                ApplyText(b, "mes_all.json", index, text, text + r.textLen);
+            }
+        }
+        if (noText) LocLog("text: mes_all.json: %u elements have no \"Text\" and are not marked empty; skipped", noText);
+        ++b.files;
+    }
+    if (verdict != kJsonGood || more < 0) Log("text: UltimateFix\\text\\mes_all.json is not used, UltimateFix\\loc.log says why");
+    VirtualFree(text, 0, MEM_RELEASE);
+}
+
+bool IsTextFileName(const wchar_t* name) { return lstrcmpiW(name, L"glyphmap.txt") != 0; }
 
 // The names of UltimateFix\text\*.txt without glyphmap.txt, sorted, so that "the later line wins" does not depend on the
 // order the file system lists them in. Returns how many; `names` may be null to count only.
@@ -242,7 +362,7 @@ int ListTextFiles(wchar_t (*names)[MAX_PATH]) {
     if (h == INVALID_HANDLE_VALUE) return 0;
     int n = 0;
     do {
-        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || IsGlyphMapName(fd.cFileName) || n >= kMaxTextFiles) continue;
+        if ((fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) || !IsTextFileName(fd.cFileName) || n >= kMaxTextFiles) continue;
         if (names) {
             int at = n;
             for (; at > 0 && lstrcmpiW(names[at - 1], fd.cFileName) > 0; --at) lstrcpyW(names[at], names[at - 1]);
@@ -254,19 +374,30 @@ int ListTextFiles(wchar_t (*names)[MAX_PATH]) {
     return n;
 }
 
-// Reads every text file into the override table. The arena is sized from the files: a record takes at most two bytes per
-// byte of its text (a character of one byte is one word) plus 12 for its fixed words, on a line of at least 6 bytes; each
-// copy is checked against the arena anyway.
+bool HaveJson() {
+    wchar_t path[MAX_PATH * 2];
+    TextPath(path, L"mes_all.json");
+    return GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES;
+}
+
+// Reads mes_all.json and then every text file into the override table (a line of a text file wins over the JSON). The
+// arena is sized from the files: a record takes at most two bytes per byte of its text (a character of one byte is one
+// word, a glyph map carrier pair two for a character of two bytes) plus 12 for its fixed words, on a line of at least 6
+// bytes; each copy is checked against the arena anyway.
 void ReadTextFiles(Build& b) {
     wchar_t (*names)[MAX_PATH] = (wchar_t (*)[MAX_PATH])VirtualAlloc(nullptr, sizeof(wchar_t) * MAX_PATH * kMaxTextFiles,
                                                                    MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (!names) return;
+    wchar_t path[MAX_PATH * 2];
+    TextPath(path, L"mes_all.json");
+    u32 jsonSize = 0;
+    u8* json = LoadFile(path, &jsonSize);
+    if (!json && HaveJson()) LocLog("text: mes_all.json cannot be read (or is larger than 32 MB), not used");
     const int count = ListTextFiles(names);
     u8* data[kMaxTextFiles];
     u32 size[kMaxTextFiles];
-    u32 total = 0;
+    u32 total = json ? jsonSize : 0;
     for (int i = 0; i < count; ++i) {
-        wchar_t path[MAX_PATH * 2];
         TextPath(path, names[i]);
         size[i] = 0;
         data[i] = LoadFile(path, &size[i]);
@@ -280,6 +411,10 @@ void ReadTextFiles(Build& b) {
     b.arenaCap = total * 3 + 4096;
     b.arena = (u8*)VirtualAlloc(nullptr, b.arenaCap, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (!b.arena) Log("text: no memory for %u bytes of text files, the overlay is not used", total);
+    if (json) {
+        if (b.arena) ApplyJson(b, json, jsonSize);
+        VirtualFree(json, 0, MEM_RELEASE);
+    }
     for (int i = 0; i < count; ++i) {
         if (!data[i]) continue;
         if (b.arena) ApplyFile(b, names[i], data[i], size[i]);
@@ -307,53 +442,48 @@ struct Out {
     void Str(const char* s) { Write(s, (u32)lstrlenA(s)); }
 };
 
-// UltimateFix\mes_dump.txt: the loaded file as lines the overlay reads back, in id order. Cells the glyph map has no
-// character for come out as {#cell}.
+// UltimateFix\mes_dump.json: the loaded file in the form of the tools' mes_all.json, as this code reads it (plain
+// characters, no glyph map). Held next to the JSON DPMsgTool makes from the same MES it shows where the two readings
+// differ, if anywhere.
 void DumpFile(const Build& b) {
     wchar_t path[MAX_PATH + 16];
     lstrcpyW(path, g_paths.dataDir);
-    lstrcatW(path, L"mes_dump.txt");
+    lstrcatW(path, L"mes_dump.json");
+    const u32 textCap = 1u << 16, elementCap = 1u << 18;
     Out* out = (Out*)VirtualAlloc(nullptr, sizeof(Out), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    const u32 textCap = 1u << 16;
-    char* text = (char*)VirtualAlloc(nullptr, textCap, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    char* text = (char*)VirtualAlloc(nullptr, textCap + elementCap, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     HANDLE f = (out && text) ? CreateFileW(path, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr) : INVALID_HANDLE_VALUE;
     if (f == INVALID_HANDLE_VALUE) {
-        Log("text: TextDump: UltimateFix\\mes_dump.txt could not be written");
+        Log("text: TextDump: UltimateFix\\mes_dump.json could not be written");
     } else {
         out->file = f;
         out->n = 0;
-        out->Str("\xEF\xBB\xBF; MES_ALL.MES as the game loaded it, one record per line: id = text. Tags: {n} new line, {page N} end of a page\r\n"
-                 "; (N = frames for the next page), {color R G B} {/color}, {size N} {/size}, {icon N}, {sp} a space at the edge,\r\n"
-                 "; {#XXX} an atlas cell the glyph map has no character for, {FFF5} the marker of a record without a window.\r\n"
-                 "; A line copied to UltimateFix\\text\\<any name>.txt and changed there replaces the record (docs/TEXT_OVERLAY.md of the mod).\r\n");
+        out->Str("[\r\n");
         int records = 0, skipped = 0;
         for (u32 id = 0; id < b.file.count; ++id) {
             const u32 off = MesOffset(b.file, id);
-            if (!off) continue;
-            char head[64];
+            MesText element = {text + textCap, elementCap, 0};
             MesOriginal orig;
-            if (!MesReadOriginal(b.file.data + off, (b.spanEnd[id] - off) / 2, &orig, nullptr)) {
-                wsprintfA(head, "; 0x%04X: a control code this version does not handle\r\n", id);
-                out->Str(head);
+            u32 len = 0;
+            const bool known = off && MesReadOriginal(b.file.data + off, (b.spanEnd[id] - off) / 2, &orig, nullptr);
+            if (known) len = MesDecode(b.file.data + off, orig.words, text, textCap);
+            if (!off) {
+                MesJsonRecordOut(element, 0, 0, 0, 0, 0, text, 0, true);
+            } else if (!known || len > textCap) {  // a code this version does not handle: the header words, no text
+                MesJsonRecordOut(element, MesRd16(b.file.data + off), MesRd16(b.file.data + off + 2), MesRd16(b.file.data + off + 4),
+                                 MesRd16(b.file.data + off + 6), 0, text, 0, false);
                 ++skipped;
-                continue;
+            } else {
+                MesJsonRecordOut(element, orig.w0, orig.w1, orig.w2, orig.w3, MesRd16(b.file.data + off + 8), text, len, false);
+                ++records;
             }
-            const u32 len = MesDecode(b.file.data + off, orig.words, g_map, text, textCap);
-            if (len > textCap) {
-                wsprintfA(head, "; 0x%04X: too long to dump\r\n", id);
-                out->Str(head);
-                ++skipped;
-                continue;
-            }
-            wsprintfA(head, "0x%04X = ", id);
-            out->Str(head);
-            out->Write(text, len);
-            out->Str("\r\n");
-            ++records;
+            if (element.n <= elementCap) out->Write(element.out, element.n);
+            out->Str(id + 1 < b.file.count ? ",\r\n" : "\r\n");
         }
+        out->Str("]");
         out->Flush();
         CloseHandle(f);
-        Log("text: TextDump: %d records written to UltimateFix\\mes_dump.txt (%d could not be shown as text)", records, skipped);
+        Log("text: TextDump: %d records written to UltimateFix\\mes_dump.json (%d more could not be shown as text)", records, skipped);
     }
     if (text) VirtualFree(text, 0, MEM_RELEASE);
     if (out) VirtualFree(out, 0, MEM_RELEASE);
@@ -395,6 +525,9 @@ u8* MergedFor(const u8* data, u32 size) {
     if (g_cfg.textDump) DumpFile(b);
     if (g_cfg.textOverlay) ReadTextFiles(b);
 
+    if (b.files)
+        LocLog("text: %d records differ from the loaded MES_ALL.MES and are replaced, %d say the same and stay byte for byte, %d texts refused",
+               b.applied, b.same, b.refused);
     if (b.applied) {
         const u32 total = MesMerge(b.file, b.order, b.n, b.ov, nullptr, 0);
         // 64 zero bytes behind the end: the game's scanners have no limit, a few words of slack cost nothing
@@ -419,13 +552,12 @@ u8* MergedFor(const u8* data, u32 size) {
             LocLog("text: the merged MES could not be built, the game keeps its own text");
         }
         if (g_merged) {
-            Log("text: overlay active: %d records replaced from %d files in UltimateFix\\text (%d lines refused, see UltimateFix\\loc.log); "
-                "merged MES %u bytes, the loaded one %u", b.applied, b.files, b.refused, total, size);
-            LocLog("text: %d records replaced from %d files, %d lines refused", b.applied, b.files, b.refused);
+            Log("text: overlay active: %d records replaced from %d files in UltimateFix\\text (%d say what the loaded file says, %d texts "
+                "refused, see UltimateFix\\loc.log); merged MES %u bytes, the loaded one %u", b.applied, b.files, b.same, b.refused, total, size);
         }
     } else if (b.files) {
-        Log("text: no record replaced (%d files read, %d lines refused, see UltimateFix\\loc.log), the game keeps its own text", b.files, b.refused);
-        LocLog("text: no record replaced (%d files read, %d lines refused)", b.files, b.refused);
+        Log("text: no record replaced (%d files read, %d texts say what the loaded file says, %d refused, see UltimateFix\\loc.log), the game "
+            "keeps its own text", b.files, b.same, b.refused);
     }
     if (b.arena) VirtualFree(b.arena, 0, MEM_RELEASE);
     VirtualFree(tables, 0, MEM_RELEASE);
@@ -767,7 +899,7 @@ void TextToolsFrame() {
 
 bool InstallTextTools() {
     const bool wantDraw = g_cfg.glyphLog || g_cfg.showMessageId;
-    const bool wantData = g_cfg.textDump || (g_cfg.textOverlay && ListTextFiles(nullptr) > 0);
+    const bool wantData = g_cfg.textDump || (g_cfg.textOverlay && (HaveJson() || ListTextFiles(nullptr) > 0));
     if (!wantDraw && !wantData) return false;  // no text files and no tool asked for: nothing is patched
     if (g_cfg.safeMode) {
         Log("text: SafeMode: the text overlay, the text dump, the glyph log and the message ids are off for this run");

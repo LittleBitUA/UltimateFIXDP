@@ -55,7 +55,7 @@ $(OUT)/test_pacer: tests/test_pacer.cpp src/pacer.h
 	@mkdir -p $(OUT)
 	$(HOSTCXX) -std=c++17 -Isrc -o $@ tests/test_pacer.cpp
 
-# MES=/path/to/MES_ALL.MES also runs every record of a real file through the text encoder and back.
+# MES=/path/to/MES_ALL.MES also writes a real file as the tools' mes_all.json and reads that back: every record must come out as it is.
 $(OUT)/test_mes: tests/test_mes.cpp src/mes.h
 	@mkdir -p $(OUT)
 	$(HOSTCXX) -std=c++17 -Wall -Wextra -Isrc -o $@ tests/test_mes.cpp
@@ -70,7 +70,7 @@ test: $(OUT)/verify_sites $(OUT)/dump_stub $(OUT)/test_pacer $(OUT)/test_hash $(
 	$(OUT)/test_pacer
 	$(OUT)/test_hash
 	$(OUT)/test_dsreport
-	$(OUT)/test_mes docs/glyphmap.example.txt $(if $(MES),"$(MES)")
+	$(OUT)/test_mes $(if $(MES),"$(MES)")
 	$(OUT)/verify_sites "$(DPEXE)"
 	$(OUT)/dump_stub $(OUT)/zero_delta_stub.bin $(OUT)/scale_thunk.bin $(OUT)/backbuffer_thunk.bin $(OUT)/hud_stub.bin $(OUT)/diff_store.bin $(OUT)/title_dialog.bin $(OUT)/aim_h.bin $(OUT)/aim_v.bin $(OUT)/stick_orig.bin $(OUT)/aim_shape.bin $(OUT)/vis_bridge.bin $(OUT)/trig1.bin $(OUT)/trig2.bin $(OUT)/trig3.bin $(OUT)/nav1.bin $(OUT)/nav2.bin $(OUT)/cambridge.bin $(OUT)/strafebridge.bin $(OUT)/entryhook.bin
 

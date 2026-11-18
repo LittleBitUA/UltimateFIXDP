@@ -36,10 +36,10 @@ struct Config {
     int menu;                // F10 settings menu inside the game
     int traceResources;      // log every texture/render target/depth surface the game creates (diagnostic)
     int forceUsSlot;         // language slot US (6) regardless of config.cnf: where translations live
-    int textOverlay;         // replace records of MES_ALL.MES in memory from UltimateFix\\text\\*.txt (inert without files)
+    int textOverlay;         // replace records of MES_ALL.MES in memory from UltimateFix\\text (mes_all.json of the SWERY tool, *.txt); inert without files
     int showMessageId;       // for translators: print the id of every drawn text record over it
     int glyphLog;            // for translators: log empty / out-of-atlas font cells and full glyph batches to loc.log
-    int textDump;            // for translators: write the loaded MES_ALL.MES as overlay text to mes_dump.txt
+    int textDump;            // for translators: write the loaded MES_ALL.MES in the form of the tool's mes_all.json to mes_dump.json
     int farClass3;           // culling distance of visibility class 3 (game: 5000)
     int farClass4;           // class 4 (game: 1000)
     int farClass5;           // class 5, objects without any class bit (game: 500)
