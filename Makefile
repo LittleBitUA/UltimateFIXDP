@@ -13,6 +13,7 @@ CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -ffreestanding -fno-builtin -fno-except
 LDFLAGS  := -shared -nostdlib -nostartfiles -Wl,-e,_DllEntry@12 -Wl,--kill-at -Wl,--dynamicbase \
             -Wl,--nxcompat -s
 LIBS     := -lkernel32 -luser32 -lgdi32 -lgcc
+SRC      += src/ui/xbox_look.cpp
 
 all: $(OUT)/X3DAudio1_7.dll $(OUT)/ufx_laa.exe $(OUT)/ufx_play.exe
 

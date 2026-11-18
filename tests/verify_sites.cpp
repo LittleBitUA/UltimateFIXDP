@@ -100,6 +100,16 @@ int main(int argc, char** argv) {
         ok &= match;
     }
 
+    // The composite pixel shader the Xbox 360 look recognises at run time by size and hash: both copies in the file.
+    for (uint32_t va : {kCompositeShader.va, kCompositeShaderCopyVa}) {
+        size_t off, last;
+        bool match = vaToOff(va, &off) && vaToOff(va + kCompositeShaderSize - 1, &last) &&
+                     Fnv1a(&g_file[off], kCompositeShaderSize) == kCompositeShaderFnv &&
+                     rd32(off + kCompositeShaderSize - 4) == 0x0000FFFF;  // the end token closes the byte code exactly there
+        printf("%s  composite shader hash    %08X (%u bytes)\n", match ? "ok  " : "FAIL", va, kCompositeShaderSize);
+        ok &= match;
+    }
+
     for (const ShadowSite& site : kShadowSites) {
         size_t off;
         uint8_t expected[5] = {0x68, (uint8_t)site.value, (uint8_t)(site.value >> 8), 0, 0};

@@ -53,6 +53,9 @@ const Tr kPacingTr[4] = {{L"Вимк.", L"Off"}, {L"Ліміт 60 к/с", L"Limi
 const Tr kTriggerTestTr[7] = {{L"Вимк.", L"Off"}, {L"Клік пістолета", L"Pistol click"}, {L"Важкий клік", L"Heavy click"},
                               {L"Автомат: вібрація", L"Machine gun: vibration"}, {L"Опір", L"Resistance"}, {L"Повільна вібрація", L"Slow rumble"},
                               {L"Обидва триґери", L"Both triggers"}};
+const Tr kXboxContrastTr[4] = {{L"Вимк.", L"Off"}, {L"А: як у ZachFix", L"A: as ZachFix"}, {L"Б: навколо сірого", L"B: around mid grey"},
+                               {L"В: розтяг рівнів", L"C: level stretch"}};
+const Tr kXboxChromaTr[3] = {{L"Вимк.", L"Off"}, {L"А: 0 = повний колір", L"A: 0 = full colour"}, {L"Б: 1 = повний колір", L"B: 1 = full colour"}};
 const int kResPresets[5] = {0, 1280, 1920, 2560, 3840};
 const Tr kResNames[5] = {{L"Вимк.", L"Off"}, {L"720p", L"720p"}, {L"1080p", L"1080p"}, {L"2K", L"2K"}, {L"4K", L"4K"}};
 
@@ -222,10 +225,29 @@ Item g_pageGraphics[] = {
      {L"Чіткість і вигляд", L"Sharpness and look"}},
     {{L"Анізотропна фільтрація текстур (макс.)", L"Anisotropic texture filtering (max)"}, &g_cfg.anisotropy, kInt, 1, 16, 1, false, L"Graphics", L"Anisotropy", ApplyGraphicsTweaks, nullptr,
      {L"Чіткість текстур під кутом (дорога, стіни). Гра за замовчуванням 8.", L"Sharpness of textures at an angle (road, walls). The game uses 8."}, NOTR},
-    {{L"Експозиція як на Xbox", L"Xbox exposure"}, &g_cfg.xboxExposure, kBool, 0, 1, 1, false, L"Graphics", L"XboxExposure", ApplyGraphicsTweaks, nullptr,
-     {L"PC-версія затемнює картинку на 15% (множник 0,85), консоль ні. Увімкнення знімає множник.", L"The PC version darkens the picture by 15% (a 0.85 factor), the console did not. Turning it on removes the factor."}, NOTR},
     {{L"Виправлення зсуву відбиттів (експеримент)", L"Reflection offset fix (experiment)"}, &g_cfg.reflectionBiasFix, kBool, 0, 1, 1, false, L"Graphics", L"ReflectionBiasFix", ApplyGraphicsTweaks, nullptr,
      {L"Матриця зсуву відбиттів двічі брала ширину замість ширини й висоти (помилка PC-порту), тож відбиття в калюжах і склі були трохи зсунуті по вертикалі. Виправлення знайдене нами в дизасемблері гри; у грі ще не підтверджене. Змінюється одразу.", L"The reflection offset matrix took the width twice instead of width and height (a bug of the PC port), so reflections in puddles and glass were shifted slightly vertically. The fix was found by us in the game disassembly; not yet confirmed in the game. Changes at once."}, NOTR},
+    {{L"Вигляд Xbox 360 (експеримент)", L"Xbox 360 look (experiment)"}, &g_cfg.xboxLook, kBool, 0, 1, 1, false, L"Graphics", L"XboxLook", nullptr, nullptr,
+     {L"Повертає те, що картинка мала на консолі, а на PC зникло: кольорокорекцію сцени (контраст, насиченість і відтінок для години доби й погоди: гра досі рахує ці числа щокадру, але її шейдер їх не читає) і гаму телевізора. Сила й варіанти нижче. У головному меню гри не діє. У грі ще не перевірено, тому типово вимкнено. Для повного вигляду ввімкніть ще «Експозиція як на Xbox». Змінюється одразу.",
+      L"Brings back what the picture had on the console and lost on PC: the scene colour grading (contrast, saturation and tint for the hour and the weather: the game still computes these numbers every frame, but its shader does not read them) and the TV gamma. Strength and variants are below. Does nothing in the game's main menu. Not checked in the game yet, so off by default. For the full look also turn on 'Xbox exposure'. Changes at once."},
+     {L"Вигляд Xbox 360", L"Xbox 360 look"}},
+    {{L"Кольорокорекція сцени, %", L"Scene colour grading, %"}, &g_cfg.xboxGrade, kInt, 0, 100, 10, false, L"Graphics", L"XboxGrade", nullptr, nullptr,
+     {L"Наскільки сильно застосовувати контраст, насиченість і колірний відтінок, які гра задає для години доби й погоди. 0 = кольори як на PC. Діє лише з увімкненим «Вигляд Xbox 360». Змінюється одразу.",
+      L"How strongly the contrast, saturation and colour tint the game sets for the hour and the weather are applied. 0 = the PC colours. Works only with 'Xbox 360 look' on. Changes at once."}, NOTR},
+    {{L"Контраст: варіант формули", L"Contrast: formula variant"}, &g_cfg.xboxContrast, kInt, 0, 3, 1, false, L"Graphics", L"XboxContrastFormula", nullptr, kXboxContrastTr,
+     {L"Шейдера консолі в нас немає, тому точна формула невідома: є три прочитання тих самих чисел гри. А: так формулу Xbox описує ZachFix (додатне значення затемнює). Б: контраст навколо середнього сірого (наша здогадка). В: розтяг між точками чорного й білого. Перемикайте в одній і тій самій сцені й порівнюйте. Числа гри пишуться в ufx.log (рядки «xboxlook: ENV»): надішліть їх разом із враженнями.",
+      L"We do not have the console's shader, so the exact formula is unknown: there are three readings of the same numbers of the game. A: how ZachFix describes the Xbox formula (a positive value darkens). B: contrast around mid grey (our guess). C: a stretch between a black and a white point. Switch them in one and the same scene and compare. The game's numbers go to ufx.log (lines 'xboxlook: ENV'): send them along with what you see."}, NOTR},
+    {{L"Насиченість: варіант формули", L"Saturation: formula variant"}, &g_cfg.xboxChroma, kInt, 0, 2, 1, false, L"Graphics", L"XboxChromaFormula", nullptr, kXboxChromaTr,
+     {L"Невідомо, яке число гри означає повний колір: 0 чи 1. Якщо з одним варіантом картинка стала чорно-білою, правильний інший.",
+      L"It is not known which number of the game means full colour: 0 or 1. If the picture turns black and white with one variant, the other one is right."}, NOTR},
+    {{L"Гама телевізора (HDTV), %", L"TV gamma (HDTV), %"}, &g_cfg.xboxGamma, kInt, 0, 100, 10, false, L"Graphics", L"XboxGamma", nullptr, nullptr,
+     {L"Консоль виводила картинку на телевізор через криву BT.709: тіні темніші й глибші, ніж на моніторі. Діє на весь кадр разом з інтерфейсом гри (меню F10 не зачіпає). 0 = вимкнено. Це загальна властивість консолі, для цієї гри не підтверджена. Діє лише з увімкненим «Вигляд Xbox 360». Змінюється одразу.",
+      L"The console sent the picture to a TV through the BT.709 curve: darker, deeper shadows than on a monitor. Applies to the whole frame with the game's interface (not to the F10 menu). 0 = off. A general property of the console, not confirmed for this game. Works only with 'Xbox 360 look' on. Changes at once."}, NOTR},
+    {{L"М'які світлі ділянки, %", L"Soft highlights, %"}, &g_cfg.xboxShoulder, kInt, 0, 100, 10, false, L"Graphics", L"XboxShoulder", nullptr, nullptr,
+     {L"Яскраві місця (небо, лампи) не вибілюються різко, а стискаються плавно. На консолі цього не було: це покращення, а не відновлення. 0 = вимкнено. Діє лише з увімкненим «Вигляд Xbox 360». Змінюється одразу.",
+      L"Bright areas (sky, lamps) roll off smoothly instead of clipping to white. The console did not have this: an improvement, not a restoration. 0 = off. Works only with 'Xbox 360 look' on. Changes at once."}, NOTR},
+    {{L"Експозиція як на Xbox", L"Xbox exposure"}, &g_cfg.xboxExposure, kBool, 0, 1, 1, false, L"Graphics", L"XboxExposure", ApplyGraphicsTweaks, nullptr,
+     {L"PC-версія затемнює картинку на 15% (множник 0,85), консоль ні. Увімкнення знімає множник. Працює й без перемикача «Вигляд Xbox 360».", L"The PC version darkens the picture by 15% (a 0.85 factor), the console did not. Turning it on removes the factor. Works without the 'Xbox 360 look' switch too."}, NOTR},
     {{L"Іконки кнопок ґеймпада", L"Gamepad button icons"}, &g_cfg.glyphTheme, kInt, 0, 3, 1, true, L"Graphics", L"GlyphTheme", nullptr, kGlyphTr,
      {L"Іконки підказок при грі з ґеймпадом. Авто: PlayStation для DualSense, інакше Xbox.\nПотрібні файли в UltimateFix\\glyphs\\gamepad.", L"Hint icons when playing with a gamepad. Auto: PlayStation for a DualSense, else Xbox.\nThe files must be in UltimateFix\\glyphs\\gamepad."},
      {L"Інтерфейс", L"Interface"}},

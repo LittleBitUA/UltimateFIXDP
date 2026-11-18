@@ -74,6 +74,12 @@ struct Config {
     int scalePostBuffers;    // also enlarge the blur/bloom storage buffers with the scene
     int anisotropy;          // maximum anisotropic filtering, 1..16 (the game uses 8)
     int xboxExposure;        // no 0.85 / 0.75 exposure factors, as on the console
+    int xboxLook;            // master switch of the Xbox 360 look: scene grading in the final composite and the display gamma
+    int xboxGrade;           // strength of the scene grading (the game's contrast, chroma and colour offset), percent
+    int xboxContrast;        // how the contrast pair is applied: 0 not, 1 (x - k) * p, 2 x * p + k, 3 (x - k) / p
+    int xboxChroma;          // how the chroma value is read: 0 not, 1 = 0 keeps the colour, 2 = 1 keeps the colour
+    int xboxGamma;           // HDTV display gamma on the final picture (sRGB decoded, BT.709 encoded), percent
+    int xboxShoulder;        // soft roll-off of the highlights instead of the hard clip, percent (not a console feature)
     int reflectionBiasFix;   // reflection bias matrix uses the height instead of the width twice
     int difficultyEnabled;   // take control of the difficulty byte (the PC port always plays on Easy)
     int difficulty;          // 0 easy, 1 normal, 2 hard: where the new-game selection screen opens, and the menu writes it at any time
@@ -277,6 +283,7 @@ bool IsOpen();
 void SharpenFrame(void* device, int percent);
 void AntialiasFrame(void* device, int percent);
 void ColorFrame(void* device);
+void XboxGammaFrame(void* device);
 void RequestScreenshot();
 void OpenPhotoPage();
 void PerfPostBegin(void* device);

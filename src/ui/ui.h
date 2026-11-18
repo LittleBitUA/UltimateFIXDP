@@ -23,6 +23,21 @@ void SharpenFrame(void* device, int percent);   // unsharp mask, 0 = off
 void AntialiasFrame(void* device, int percent); // edge-directional smoothing (FXAA-like), 0 = off
 void AmbientOcclusionPass(void* device, int strengthPercent, int radiusPixels);  // in front of the final composite
 void ColorFrame(void* device);                  // photo filters: brightness, contrast, saturation, tint, vignette
+// The same helpers for passes that live in other files: a pixel shader from HLSL (the first profile that compiles; with
+// `logName` the compiler's message is logged when a profile fails), and one pass over the finished back buffer (c0 = texel
+// size and percent / 100, `extra` = c1 and c2 or null).
+bool BuildPixelShader(void* device, const char* source, size_t length, void** shader, const char* const* profiles, const char* logName);
+void FinalImagePass(void* device, void** shader, bool* failed, const char* name, const char* source, size_t length,
+                    const char* const* profiles, int percent, const float* extra);
+// Xbox 360 look (xbox_look.cpp). Begin runs right before the game's final composite draw: when the bound pixel shader is the
+// game's composite, it is swapped for ours and true is returned; End then puts the shader and the two constants back.
+struct LookSaved {
+    void* shader;        // the game's pixel shader (a reference is held until End)
+    float constants[8];  // c20 and c21 as they were
+};
+bool XboxLookBegin(void* device, LookSaved* saved);
+void XboxLookEnd(void* device, const LookSaved* saved);
+void XboxGammaFrame(void* device);              // display gamma of the console on the finished picture
 void RequestScreenshot();                       // a PNG of the next frame (no menu in it)
 void OpenPhotoPage();                           // opens the menu on the photo mode page
 void PerfPostBegin(void* device);   // GPU time of the final-image passes (with the performance overlay)

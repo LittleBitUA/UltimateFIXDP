@@ -304,6 +304,7 @@ HRESULT WINAPI OurPresent(void* dev, const RECT* src, const RECT* dst, HWND wnd,
         if (g_cfg.antialias > 0) ui::AntialiasFrame(dev, g_cfg.antialias);
         ui::ColorFrame(dev);
         if (g_cfg.sharpen > 0) ui::SharpenFrame(dev, g_cfg.sharpen);
+        ui::XboxGammaFrame(dev);  // last: it stands for the screen of the console, behind everything the game and the filters drew
         ui::PerfPostEnd(dev);
         ui::ScreenshotFrame(dev);
     }

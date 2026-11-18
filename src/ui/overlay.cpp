@@ -426,7 +426,8 @@ typedef HRESULT(WINAPI* SetPsFn)(void*, void*);
 typedef HRESULT(WINAPI* SetTexFn2)(void*, DWORD, void*);
 typedef HRESULT(WINAPI* SetPsConstFn)(void*, UINT, const float*, UINT);
 
-bool BuildShader(void* dev, const char* source, size_t length, void** shader, const char* const* profiles) {
+// With `logName` the compiler's message for a profile that failed is written to the log (it is plain text).
+bool BuildShader(void* dev, const char* source, size_t length, void** shader, const char* const* profiles, const char* logName = nullptr) {
     HMODULE d3dx = GetModuleHandleW(L"d3dx9_43.dll");
     if (!d3dx) d3dx = LoadLibraryW(L"d3dx9_43.dll");
     CompileFn compile = d3dx ? (CompileFn)(void*)GetProcAddress(d3dx, "D3DXCompileShader") : nullptr;
@@ -434,6 +435,7 @@ bool BuildShader(void* dev, const char* source, size_t length, void** shader, co
     for (; *profiles; ++profiles) {
         void *code = nullptr, *errors = nullptr, *table = nullptr;
         HRESULT hr = compile(source, (UINT)length, nullptr, nullptr, "main", *profiles, 0, &code, &errors, &table);
+        if (errors && logName && FAILED(hr)) Log("%s: %s: %.400s", logName, *profiles, (const char*)Method<BufPtrFn>(errors, 3)(errors));
         if (errors) Method<ReleaseFn>(errors, kRelease)(errors);
         if (table) Method<ReleaseFn>(table, kRelease)(table);
         if (FAILED(hr) || !code) continue;
@@ -732,6 +734,15 @@ const char* const kProfilesSharp[] = {"ps_2_0", nullptr};
 const char* const kProfilesFxaa[] = {"ps_2_b", "ps_2_a", "ps_2_0", nullptr};
 
 }  // namespace
+
+bool BuildPixelShader(void* dev, const char* source, size_t length, void** shader, const char* const* profiles, const char* logName) {
+    return BuildShader(dev, source, length, shader, profiles, logName);
+}
+
+void FinalImagePass(void* dev, void** shader, bool* failed, const char* name, const char* source, size_t length,
+                    const char* const* profiles, int percent, const float* extra) {
+    RunPass(dev, shader, failed, name, source, length, profiles, percent, extra);
+}
 
 void ColorFrame(void* dev) {
     static const float tints[6][3] = {{1.f, 1.f, 1.f}, {1.08f, 1.0f, 0.90f}, {0.92f, 0.98f, 1.10f},

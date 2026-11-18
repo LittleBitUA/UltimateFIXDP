@@ -132,6 +132,26 @@ static const char kDefaultIni[] =
     "; The PC port darkens the picture by 0.85 (and 0.75 more in one cutscene state); the console did not.\r\n"
     "; 1 = remove the factors (about 15% brighter). Changes at once.\r\n"
     "XboxExposure=0\r\n"
+    "; Xbox 360 look (experimental, not checked in the game yet; nothing happens in the main menu or with SafeMode=1). The game\r\n"
+    "; still computes a contrast, a chroma value and a colour offset for the hour and the weather every frame, but the PC pixel\r\n"
+    "; shader of the final picture does not read them. 1 = the mod's own copy of that shader applies them, and the finished\r\n"
+    "; picture gets the console's TV gamma. XboxExposure above is separate and works with or without this. Changes at once.\r\n"
+    "XboxLook=0\r\n"
+    "; Strength of the scene grading in percent, 0..100 (0 = none, the PC colours).\r\n"
+    "XboxGrade=100\r\n"
+    "; The console's shader is not available, so the exact formulas are not known; these choose between the readings.\r\n"
+    "; Contrast k (the game also hands over p = 1 - 2k): 0 = not applied, 1 = (x - k) * p (how ZachFix reads the console shader),\r\n"
+    "; 2 = x * p + k (contrast around mid grey), 3 = (x - k) / p (stretch between a black and a white point).\r\n"
+    "XboxContrastFormula=1\r\n"
+    "; Chroma c: 0 = not applied, 1 = c is the amount of grey mixed in (0 keeps the colour), 2 = c is the saturation (1 keeps it).\r\n"
+    "; If the picture turns black and white with one of them, the other one is right.\r\n"
+    "XboxChromaFormula=1\r\n"
+    "; The console sends the picture to a TV through the BT.709 curve: darker, deeper shadows than a PC monitor shows. Percent\r\n"
+    "; 0..100 on the whole frame with the game's interface (0 = off). A general rule of the console, not confirmed for this game.\r\n"
+    "XboxGamma=100\r\n"
+    "; Soft highlights: bright areas roll off smoothly instead of clipping to white. Percent 0..100, 0 = off. Not a console\r\n"
+    "; feature (an improvement that uses the same shader).\r\n"
+    "XboxShoulder=0\r\n"
     "; The reflection matrix of the game uses the width twice instead of width and height (a bug of the\r\n"
     "; port): reflections were shifted slightly vertically. Off by default until checked in the game.\r\n"
     "ReflectionBiasFix=0\r\n"
@@ -574,6 +594,20 @@ void LoadConfig(const wchar_t* ini) {
     if (g_cfg.anisotropy < 1) g_cfg.anisotropy = 1;
     if (g_cfg.anisotropy > 16) g_cfg.anisotropy = 16;
     g_cfg.xboxExposure = (int)GetPrivateProfileIntW(L"Graphics", L"XboxExposure", 0, ini);
+    g_cfg.xboxLook = (int)GetPrivateProfileIntW(L"Graphics", L"XboxLook", 0, ini);
+    g_cfg.xboxGrade = (int)GetPrivateProfileIntW(L"Graphics", L"XboxGrade", 100, ini);
+    if (g_cfg.xboxGrade < 0) g_cfg.xboxGrade = 0;
+    if (g_cfg.xboxGrade > 100) g_cfg.xboxGrade = 100;
+    g_cfg.xboxContrast = (int)GetPrivateProfileIntW(L"Graphics", L"XboxContrastFormula", 1, ini);
+    if (g_cfg.xboxContrast < 0 || g_cfg.xboxContrast > 3) g_cfg.xboxContrast = 1;
+    g_cfg.xboxChroma = (int)GetPrivateProfileIntW(L"Graphics", L"XboxChromaFormula", 1, ini);
+    if (g_cfg.xboxChroma < 0 || g_cfg.xboxChroma > 2) g_cfg.xboxChroma = 1;
+    g_cfg.xboxGamma = (int)GetPrivateProfileIntW(L"Graphics", L"XboxGamma", 100, ini);
+    if (g_cfg.xboxGamma < 0) g_cfg.xboxGamma = 0;
+    if (g_cfg.xboxGamma > 100) g_cfg.xboxGamma = 100;
+    g_cfg.xboxShoulder = (int)GetPrivateProfileIntW(L"Graphics", L"XboxShoulder", 0, ini);
+    if (g_cfg.xboxShoulder < 0) g_cfg.xboxShoulder = 0;
+    if (g_cfg.xboxShoulder > 100) g_cfg.xboxShoulder = 100;
     g_cfg.reflectionBiasFix = (int)GetPrivateProfileIntW(L"Graphics", L"ReflectionBiasFix", 0, ini);
     g_cfg.difficultyEnabled = (int)GetPrivateProfileIntW(L"Gameplay", L"DifficultyControl", 1, ini);
     g_cfg.difficulty = (int)GetPrivateProfileIntW(L"Gameplay", L"Difficulty", 1, ini);
@@ -607,6 +641,7 @@ void LoadConfig(const wchar_t* ini) {
         g_cfg.keepBlurLook = 0;
         g_cfg.antialias = 0;
         g_cfg.ambientOcclusion = 0;
+        g_cfg.xboxLook = 0;  // its composite hook (the SSAO one) and its world test are not installed in this mode
         g_cfg.sharpen = 0;
         g_cfg.frameStats = 0;
         g_cfg.perfOverlay = 0;
