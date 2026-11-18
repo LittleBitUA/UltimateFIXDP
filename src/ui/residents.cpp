@@ -46,6 +46,7 @@ const AreaName kAreas[] = {
     {15, L"закусочна", L"diner"},
     {16, L"дім (Jim)", L"Jim's house"},
     {18, L"дім (Keith, Lilly)", L"Keith and Lilly's house"},
+    {19, L"дім (Sallie, Richard)", L"Sallie and Richard's house"},  // both sleep there by their timetables
     {20, L"майстерня (Quint)", L"Quint's workshop"},
     {21, L"крамниця (Wesley)", L"Wesley's shop"},
     {22, L"дім (George)", L"George's house"},
@@ -108,6 +109,32 @@ const ActionName kActions[] = {
     {"lihabili", L"реабілітація", L"rehabilitation"},
     {"driving", L"за кермом", L"driving"},
     {"patrol", L"патрулює", L"on patrol"},
+    {"front", L"на робочому місці", L"at the front desk"},   // the hotel's and the hospital's front rooms
+    {"bring", L"несе обід", L"bringing lunch"},             // "bring.lunch"
+    {"fusagikomu", L"сумує", L"brooding"},                  // Japanese: to mope, to be downcast
+};
+
+// Room names of the timetables (the word between the room number and the node), as a player would say them.
+struct RoomName {
+    const char* word;
+    const wchar_t* uk;
+    const wchar_t* en;
+};
+const RoomName kRooms[] = {
+    {"front", L"приймальня", L"front desk"},
+    {"living", L"вітальня", L"living room"},
+    {"inside", L"всередині", L"inside"},
+    {"property", L"на ділянці", L"on the grounds"},
+    {"suiteroom", L"номер люкс", L"suite"},
+    {"autopsyroom", L"морг", L"autopsy room"},
+    {"annastree", L"біля дерева Анни", L"by Anna's tree"},
+    {"kitchen", L"кухня", L"kitchen"},
+    {"bedroom", L"спальня", L"bedroom"},
+    {"office", L"кабінет", L"office"},
+    {"counter", L"прилавок", L"counter"},
+    {"garage", L"гараж", L"garage"},
+    {"yard", L"двір", L"yard"},
+    {"prison", L"камера", L"cell"},
 };
 
 bool English() { return g_cfg.language == 1; }
@@ -155,7 +182,11 @@ bool PlaceText(const char* place, wchar_t* out, int capacity) {
     for (const AreaName& a : kAreas)
         if (a.area == area) lstrcpynW(name, English() ? a.en : a.uk, 40);
     wchar_t text[96];
-    if (room[0]) wsprintfW(text, L"%s (%S)", name, room);
+    const wchar_t* roomName = nullptr;
+    for (const RoomName& r : kRooms)
+        if (lstrcmpiA(room, r.word) == 0) roomName = English() ? r.en : r.uk;
+    if (roomName) wsprintfW(text, L"%s, %s", name, roomName);
+    else if (room[0]) wsprintfW(text, L"%s (%S)", name, room);
     else lstrcpyW(text, name);
     lstrcpynW(out, text, capacity);
     return true;
