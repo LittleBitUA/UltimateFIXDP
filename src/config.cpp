@@ -407,6 +407,8 @@ static const char kDefaultIni[] =
     "TraceCamera=0\r\n"
     "\r\n"
     "[Menu]\r\n"
+    "; 1 = a small card in the top right corner for the first seconds of a start: the mod's settings are on F10.\r\n"
+    "StartHint=1\r\n"
     "; How opaque the F10 panel is, percent 20..100 (lower: the game shows through). Changes at once.\r\n"
     "Opacity=80\r\n"
     "; Place and size of the F10 panel in the 1280x720 picture. Drag the header to move it, the corner to resize it, double-click\r\n"
@@ -802,6 +804,7 @@ void LoadConfig(const wchar_t* ini) {
     }
     g_cfg.traceResources = (int)GetPrivateProfileIntW(L"Debug", L"TraceResources", 0, ini);
     g_cfg.menu = (int)GetPrivateProfileIntW(L"Menu", L"Enabled", 1, ini);
+    g_cfg.startHint = (int)GetPrivateProfileIntW(L"Menu", L"StartHint", 1, ini);
     g_cfg.menuX = (int)GetPrivateProfileIntW(L"Menu", L"X", 100, ini);
     g_cfg.menuY = (int)GetPrivateProfileIntW(L"Menu", L"Y", 52, ini);
     g_cfg.menuW = (int)GetPrivateProfileIntW(L"Menu", L"Width", 1080, ini);

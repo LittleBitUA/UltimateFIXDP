@@ -2132,6 +2132,51 @@ static volatile bool g_wantPhoto = false;
 bool PhotoPageOpen() { return g_open && g_page == kPhotoPage; }
 void OpenPhotoPage() { g_wantPhoto = true; }
 
+// The hint at the start: a small card in the top right corner that the menu is on F10. It shows for 15 seconds of the first
+// frames (fading out in the last one) and goes away for good once the menu was opened. [Menu] StartHint=0 turns it off.
+bool g_everOpened = false;
+DWORD g_hintStart = 0;
+
+void StartHint(void* device) {
+    if (!g_cfg.startHint || g_everOpened) return;
+    const DWORD now = GetTickCount();
+    if (!g_hintStart) g_hintStart = now ? now : 1;
+    const DWORD t = now - g_hintStart;
+    const DWORD kShow = 15000, kFade = 1000;
+    if (t >= kShow) {
+        g_everOpened = true;  // shown once per start
+        return;
+    }
+    float a = t > kShow - kFade ? (float)(kShow - t) / (float)kFade : 1.0f;
+    if (t < 250) a = (float)t / 250.0f;  // a quick fade in
+    auto alpha = [a](u32 c) { return ((u32)((float)(c >> 24) * a) << 24) | (c & 0xFFFFFF); };
+    if (!OverlayBegin(device)) return;
+    const bool en = g_cfg.language == 1;
+    const wchar_t* title = L"UltimateFIXDP";
+    const wchar_t* line = en ? L"Settings, photo mode and mods" : L"Налаштування, фоторежим і моди";
+    const wchar_t* press = en ? L"press" : L"натисніть";
+    const float w = 480, h = 84, x = 1280 - w - 28, y = 28;
+    FillRect(x + 3, y + 4, w, h, alpha(0x60000000));  // shadow
+    FillRect(x, y, w, h, alpha(0xEE15151B));
+    FillRect(x, y, 4, h, alpha(0xFFD0343C));
+    FillRect(x + 4, y, w - 4, 1, alpha(0xFF2A2A34));
+    wchar_t ver[64];
+    wsprintfW(ver, L"%S", kVersion);
+    const float tw = DrawText(title, x + 22, y + 14, alpha(0xFFF2F2F5), 20);
+    DrawText(ver, x + 22 + tw + 10, y + 19, alpha(0xFF9696A4), 14);
+    DrawText(line, x + 22, y + 48, alpha(0xFFC4C4CE), 15);
+    // the key cap on the right
+    const float kw = 64, kh = 40, kx = x + w - kw - 18, ky = y + (h - kh) / 2;
+    const float pw = TextWidth(press, 13);
+    DrawText(press, kx - pw - 10, ky + 13, alpha(0xFF9696A4), 13);
+    FillRect(kx, ky + 3, kw, kh, alpha(0xFF0B0B0F));
+    FillRect(kx, ky, kw, kh, alpha(0xFF2E2E3A));
+    FillRect(kx, ky, kw, 1, alpha(0xFF4A4A58));
+    const float fw = TextWidth(L"F10", 20);
+    DrawText(L"F10", kx + (kw - fw) / 2, ky + 9, alpha(0xFFF2F2F5), 20);
+    OverlayEnd();
+}
+
 void OnFrame(void* device) {
     MergePages();
     static bool geometryLoaded = false;
@@ -2163,7 +2208,11 @@ void OnFrame(void* device) {
     if (g_open != wasOpen) OpenChanged(foreground);  // F10, Esc or the photo mode key
     if (g_swallowEsc && !Down(VK_ESCAPE)) g_swallowEsc = false;  // a later Esc press is the game's again
     RememberKeys();
-    if (!g_open) return;
+    if (g_open) g_everOpened = true;
+    if (!g_open) {
+        StartHint(device);
+        return;
+    }
 
     if (!OverlayBegin(device)) {
         Log("menu: could not set up drawing, closing");
