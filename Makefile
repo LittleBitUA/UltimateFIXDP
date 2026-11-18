@@ -13,6 +13,7 @@ CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -ffreestanding -fno-builtin -fno-except
 LDFLAGS  := -shared -nostdlib -nostartfiles -Wl,-e,_DllEntry@12 -Wl,--kill-at -Wl,--dynamicbase \
             -Wl,--nxcompat -s
 LIBS     := -lkernel32 -luser32 -lgdi32 -lgcc
+SRC      += src/modules/npc_map.cpp src/ui/residents.cpp
 
 all: $(OUT)/X3DAudio1_7.dll $(OUT)/ufx_laa.exe $(OUT)/ufx_play.exe
 
@@ -65,7 +66,17 @@ test: $(OUT)/verify_sites $(OUT)/dump_stub $(OUT)/test_pacer $(OUT)/test_hash $(
 	$(OUT)/verify_sites "$(DPEXE)"
 	$(OUT)/dump_stub $(OUT)/zero_delta_stub.bin $(OUT)/scale_thunk.bin $(OUT)/backbuffer_thunk.bin $(OUT)/hud_stub.bin $(OUT)/diff_store.bin $(OUT)/title_dialog.bin $(OUT)/aim_h.bin $(OUT)/aim_v.bin $(OUT)/stick_orig.bin $(OUT)/aim_shape.bin $(OUT)/vis_bridge.bin $(OUT)/trig1.bin $(OUT)/trig2.bin $(OUT)/trig3.bin $(OUT)/nav1.bin $(OUT)/nav2.bin $(OUT)/cambridge.bin $(OUT)/strafebridge.bin $(OUT)/entryhook.bin
 
+# The residents' timetable lookup (src/schedule.h, used by modules/npc_map.cpp), part of "make test".
+$(OUT)/test_schedule: tests/test_schedule.cpp src/schedule.h
+	@mkdir -p $(OUT)
+	$(HOSTCXX) -std=c++17 -Isrc -o $@ tests/test_schedule.cpp
+
+test-schedule: $(OUT)/test_schedule
+	$(OUT)/test_schedule
+
+test: test-schedule
+
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all test clean
+.PHONY: all test clean test-schedule

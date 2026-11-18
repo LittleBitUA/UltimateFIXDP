@@ -407,6 +407,7 @@ extern "C" void __cdecl WaypointMapOverlay() {
             cy = (F(table, 0x08) + F(table, 0x18)) * 0.5f;
         }
     }
+    NpcMapOverlay(g_wpMapObj, cx, cy, W, H, Print);  // the residents (npc_map.cpp): same pass, same place on the screen
     Print(cx, cy - 8.f, kWhite, "+", 0);
     // the X is placed north up (orientation 1) or south up (2). Without the map fix the stock map turns with the player, and
     // orientation 0 keeps that; the turn is not reproduced here, so no X rather than one in the wrong place

@@ -152,6 +152,7 @@ static void Startup() {
     if (!g_cfg.safeMode && InstallPhysicsFreeze()) ++on;
     if (!g_cfg.safeMode && InstallCombatStrafe()) ++on;
     if (!g_cfg.safeMode && g_cfg.waypoint && InstallWaypoint()) ++on;
+    if (!g_cfg.safeMode && InstallNpcMap()) ++on;  // after the waypoint: its map pass draws the residents
     if (!g_cfg.safeMode && InstallGlyphIndexFix()) ++on;
     if (g_cfg.byteTextCyrillic && InstallByteTextFix()) ++on;
     if (!g_cfg.safeMode && g_cfg.halveFlashes && InstallEffectStep()) ++on;

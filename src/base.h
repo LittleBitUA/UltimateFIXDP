@@ -107,6 +107,7 @@ struct Config {
     int mapOrientation;      // 0 rotating (game), 1 north up, 2 south up
     int mapMinZoom;          // percent, 10..100
     int mapDefaultZoom;      // percent
+    int showResidents;       // the town's residents as named marks on the pause map (read-only, off by default: it tells more than the game's map)
     int crashDump;           // write a report and a minidump when the game crashes
     int traceCamera;         // log player state changes, camera jumps and the car input once a second (diagnostic, off by default)
     int byteTextCyrillic;    // byte-string text with characters of 80h and above (a single-byte Cyrillic code page) draws right
@@ -249,6 +250,26 @@ void EnsureLauncherStub(const wchar_t* gameDir);  // in the game: put the quick-
 void InstallCpuTweaks();
 bool InstallWaypoint();
 void WaypointFrame(void* device);  // once per frame from the Present hook: the waypoint keys and the state its drawing needs
+// npc_map.cpp: the town's residents, read-only (no patches, no calls into the game)
+bool InstallNpcMap();  // checks the facts the module relies on (kNpcFacts); false = the overlay and the viewer stay off
+typedef void (*MapPrintFn)(float x, float y, const float* rgba, const char* format, int value);  // the waypoint's centred print in the game's font
+// From the waypoint's pass over the pause map: a mark and the name for every resident the game has around the player. cx, cy = the
+// middle of the map on the screen, w, h = the size of the 2D space.
+void NpcMapOverlay(u32 mapObject, float cx, float cy, float w, float h, MapPrintFn print);
+// One row of the schedule viewer: where a resident is now by the game's own timetable, and where next.
+struct ResidentRow {
+    char name[20];
+    signed char nowHour, nowMinute;    // when the current entry began; -1 = it has no time (it lasts the whole day)
+    signed char nextHour, nextMinute;  // when the next one begins; -1 = there is no other entry
+    char nowPlace[32], nowAction[32];  // as the timetable has them: "ZZ_RRroom_NNnode" (ZZ = area), "idling"...; "none" = not on it
+    char nextPlace[32], nextAction[32];
+};
+constexpr int kScheduleNoGame = -1;   // no game world is being played (title screen, loading)
+constexpr int kScheduleNotInUse = -2;  // the game runs no timetables now (FUN_004B19F0 loads none in some chapters and places)
+constexpr int kScheduleOff = -3;      // the module is off (another DP.exe, SafeMode)
+// Fills rows for the residents that have a block in a loaded timetable; returns their number or one of the codes above.
+// hour, minute = the game clock, rainy = 1 when the rain timetables apply. Main thread only (the Present hook).
+int ReadResidentSchedules(ResidentRow* rows, int max, int* hour, int* minute, int* rainy);
 bool InstallByteTextFix();
 bool InstallEffectStep();
 extern int g_sceneWidth;  // width of the 3D scene after the render scale (0 = not scaled)
