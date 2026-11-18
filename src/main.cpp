@@ -42,6 +42,13 @@ static bool BuildPaths() {
     lstrcatW(g_paths.saveBackupDir, L"savebackups");
     CreateDirectoryW(g_paths.saveBackupDir, nullptr);
 
+    // The game never creates its own save folder: when savedata\ is missing (a fresh or cleaned install) every save ends
+    // with "Save failed". Creating it is harmless when it exists.
+    wchar_t saveDir[MAX_PATH];
+    lstrcpyW(saveDir, g_paths.gameDir);
+    lstrcatW(saveDir, L"savedata");
+    CreateDirectoryW(saveDir, nullptr);
+
     lstrcpyW(g_paths.iniFile, g_paths.gameDir);
     lstrcatW(g_paths.iniFile, L"UltimateFix.ini");
     return true;
