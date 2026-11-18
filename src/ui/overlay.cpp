@@ -1,0 +1,924 @@
+// Draws rectangles and text on top of the finished frame, just before it is presented.
+//
+// Text is rendered with GDI into small textures (so every language the system fonts cover works,
+// Ukrainian included) and drawn as textured quads with the fixed-function pipeline. The device state is
+// saved with a state block and restored afterwards; the game never notices.
+#include "ui.h"
+#include "d3d9.h"
+
+namespace ufx {
+namespace ui {
+namespace {
+
+using namespace d3d;
+
+struct Vertex {
+    float x, y, z, rhw;
+    u32 color;
+    float u, v;
+};
+
+struct TextEntry {
+    void* texture;
+    int width, height;
+    int pixelHeight;
+    int length;
+    u32 hash;
+    u32 lastUsed;  // the use clock at the last lookup: the least recently used entry is replaced when the cache is full
+    wchar_t text[256];
+};
+
+// Room for every string of a menu page plus the panels. When it is full only the oldest entry is replaced, so the
+// strings on screen are not rebuilt all at once (that used to make a hitch of dozens of GDI uploads in one frame).
+constexpr int kMaxTexts = 256;
+TextEntry g_texts[kMaxTexts];
+int g_textCount = 0;
+u32 g_useClock = 0;
+
+void* g_dev = nullptr;
+void* g_stateBlock = nullptr;  // the block OverlayBegin saved the game's state into
+bool g_stateBlockOwned = false;  // a block of its own for this one pass: released in OverlayEnd
+void* g_sbCache = nullptr;     // the reused D3DSBT_ALL block (captured again at every OverlayBegin), released before a Reset
+void* g_sbDevice = nullptr;
+void* g_oldTarget = nullptr;
+bool g_inScene = false;
+
+typedef ULONG(WINAPI* ReleaseFn)(void*);
+typedef HRESULT(WINAPI* DwordDwordFn)(void*, DWORD, DWORD);
+typedef HRESULT(WINAPI* Dword3Fn)(void*, DWORD, DWORD, DWORD);
+
+void SetRS(u32 state, u32 value) { Method<DwordDwordFn>(g_dev, kSetRenderState)(g_dev, state, value); }
+void SetTSS(u32 type, u32 value) { Method<Dword3Fn>(g_dev, kSetTextureStageState)(g_dev, 0, type, value); }
+void SetSampler(u32 type, u32 value) { Method<Dword3Fn>(g_dev, kSetSamplerState)(g_dev, 0, type, value); }
+
+// One memory DC and one font per pixel size, kept for the whole session (a new font for every string was slow).
+HDC g_textDc = nullptr;
+struct FontEntry {
+    int px;
+    HFONT font;
+};
+constexpr int kMaxFonts = 16;
+FontEntry g_fonts[kMaxFonts];
+int g_fontCount = 0;
+
+HDC TextDc() {
+    if (!g_textDc) g_textDc = CreateCompatibleDC(nullptr);
+    return g_textDc;
+}
+
+// The font is never left selected in the DC, so an old one can be deleted when the table is full.
+HFONT FontFor(int px) {
+    for (int i = 0; i < g_fontCount; ++i)
+        if (g_fonts[i].px == px) return g_fonts[i].font;
+    HFONT font = CreateFontW(-px, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
+                             CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+    if (!font) return nullptr;
+    int slot = g_fontCount < kMaxFonts ? g_fontCount++ : kMaxFonts - 1;
+    if (slot == kMaxFonts - 1 && g_fonts[slot].font) DeleteObject(g_fonts[slot].font);
+    g_fonts[slot].px = px;
+    g_fonts[slot].font = font;
+    return font;
+}
+
+u32 HashText(const wchar_t* text, int* length) {
+    u32 h = 2166136261u;  // FNV-1a: an exact (ordinal) key, not the locale-aware lstrcmpW
+    int n = 0;
+    for (; text[n]; ++n) h = (h ^ (u32)text[n]) * 16777619u;
+    *length = n;
+    return h;
+}
+
+// Renders `text` with GDI and uploads it as an A8R8G8B8 texture (white, alpha = coverage).
+TextEntry* MakeText(const wchar_t* text, int len, u32 hash, int px) {
+    if (len <= 0 || len >= 256) return nullptr;
+    TextEntry* slot = nullptr;
+    if (g_textCount < kMaxTexts) {
+        slot = &g_texts[g_textCount];
+    } else {  // full: replace the least recently used entry
+        slot = &g_texts[0];
+        for (int i = 1; i < kMaxTexts; ++i)
+            if (g_texts[i].lastUsed < slot->lastUsed) slot = &g_texts[i];
+        if (slot->texture) Method<ReleaseFn>(slot->texture, kRelease)(slot->texture);
+        slot->texture = nullptr;
+        slot->length = 0;  // an empty slot until the new texture is ready
+        slot->text[0] = 0;
+    }
+
+    HDC dc = TextDc();
+    HFONT font = dc ? FontFor(px) : nullptr;
+    if (!font) return nullptr;
+    HGDIOBJ oldFont = SelectObject(dc, font);
+    SIZE size;
+    GetTextExtentPoint32W(dc, text, len, &size);
+    int w = size.cx + 4, h = size.cy + 4;
+
+    BITMAPINFO bi;
+    ZeroMemory(&bi, sizeof(bi));
+    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    bi.bmiHeader.biWidth = w;
+    bi.bmiHeader.biHeight = -h;  // top-down
+    bi.bmiHeader.biPlanes = 1;
+    bi.bmiHeader.biBitCount = 32;
+    bi.bmiHeader.biCompression = BI_RGB;
+    void* bits = nullptr;
+    HBITMAP bmp = CreateDIBSection(dc, &bi, DIB_RGB_COLORS, &bits, nullptr, 0);
+    TextEntry* result = nullptr;
+    if (bmp && bits) {
+        HGDIOBJ oldBmp = SelectObject(dc, bmp);
+        ZeroMemory(bits, (size_t)w * h * 4);
+        SetBkMode(dc, TRANSPARENT);
+        SetTextColor(dc, RGB(255, 255, 255));
+        TextOutW(dc, 2, 2, text, len);
+        GdiFlush();
+
+        typedef HRESULT(WINAPI * CreateTextureFn)(void*, UINT, UINT, UINT, DWORD, DWORD, DWORD, void**, void*);
+        void* tex = nullptr;
+        HRESULT hr = Method<CreateTextureFn>(g_dev, kCreateTexture)(g_dev, (UINT)w, (UINT)h, 1, 0, 21 /*A8R8G8B8*/,
+                                                                     1 /*MANAGED*/, &tex, nullptr);
+        if (SUCCEEDED(hr) && tex) {
+            typedef HRESULT(WINAPI * LockFn)(void*, UINT, LockedRect*, const RECT*, DWORD);
+            typedef HRESULT(WINAPI * UnlockFn)(void*, UINT);
+            LockedRect lr;
+            if (SUCCEEDED(Method<LockFn>(tex, kTexLockRect)(tex, 0, &lr, nullptr, 0))) {
+                const u32* src = (const u32*)bits;
+                for (int y = 0; y < h; ++y) {
+                    u32* dst = (u32*)((u8*)lr.bits + (size_t)y * lr.pitch);
+                    for (int x = 0; x < w; ++x) {
+                        u32 a = src[y * w + x] & 0xFF;  // grey text on black: any channel is the coverage
+                        dst[x] = (a << 24) | 0x00FFFFFF;
+                    }
+                }
+                Method<UnlockFn>(tex, kTexUnlockRect)(tex, 0);
+                if (slot == &g_texts[g_textCount]) ++g_textCount;
+                TextEntry& e = *slot;
+                e.texture = tex;
+                e.width = w;
+                e.height = h;
+                e.pixelHeight = px;
+                e.length = len;
+                e.hash = hash;
+                e.lastUsed = ++g_useClock;
+                for (int i = 0; i <= len; ++i) e.text[i] = text[i];
+                result = &e;
+            } else {
+                Method<ReleaseFn>(tex, kRelease)(tex);
+            }
+        }
+        SelectObject(dc, oldBmp);
+    }
+    if (bmp) DeleteObject(bmp);
+    SelectObject(dc, oldFont);
+    return result;
+}
+
+TextEntry* GetText(const wchar_t* text, int px) {
+    int len;
+    u32 hash = HashText(text, &len);
+    for (int i = 0; i < g_textCount; ++i) {
+        TextEntry& e = g_texts[i];
+        if (e.hash != hash || e.length != len || e.pixelHeight != px || !e.texture) continue;
+        int k = 0;
+        while (k < len && e.text[k] == text[k]) ++k;
+        if (k == len) {
+            e.lastUsed = ++g_useClock;
+            return &e;
+        }
+    }
+    return MakeText(text, len, hash, px);
+}
+
+// Scale of the overlay relative to the 1280x720 layout: the back buffer may be bigger. The output is always 16:9, so both
+// axes scale the same; the two functions stay apart in case that ever changes.
+float ScaleX() { return g_outputW ? (float)g_outputW / 1280.f : 1.f; }
+float ScaleY() { return g_outputW && g_outputH ? (float)g_outputH / 720.f : ScaleX(); }
+int FontPx(int px) { return (int)((float)px * ScaleY() + 0.5f); }  // the font is rendered at the real size
+
+// Draws a quad in back buffer pixels.
+void Quad(float x0, float y0, float x1, float y1, u32 color, float u0, float v0, float u1, float v1) {
+    // -0.5 aligns texels with pixels for pre-transformed vertices
+    Vertex v[6] = {
+        {x0 - 0.5f, y0 - 0.5f, 0.f, 1.f, color, u0, v0}, {x1 - 0.5f, y0 - 0.5f, 0.f, 1.f, color, u1, v0},
+        {x0 - 0.5f, y1 - 0.5f, 0.f, 1.f, color, u0, v1}, {x1 - 0.5f, y0 - 0.5f, 0.f, 1.f, color, u1, v0},
+        {x1 - 0.5f, y1 - 0.5f, 0.f, 1.f, color, u1, v1}, {x0 - 0.5f, y1 - 0.5f, 0.f, 1.f, color, u0, v1},
+    };
+    typedef HRESULT(WINAPI * DrawUpFn)(void*, DWORD, UINT, const void*, UINT);
+    Method<DrawUpFn>(g_dev, kDrawPrimitiveUP)(g_dev, 4 /*TRIANGLELIST*/, 2, v, sizeof(Vertex));
+}
+
+void ReleaseStateBlockCache() {
+    if (g_sbCache) Method<ReleaseFn>(g_sbCache, kRelease)(g_sbCache);
+    g_sbCache = nullptr;
+    g_sbDevice = nullptr;
+}
+
+// Saves the whole device state. A reused block is only captured again (creating and releasing a D3DSBT_ALL block
+// for every pass cost CPU time every frame); `keep` = false gives the pass a block of its own, released at the end.
+bool SaveState(void* dev, bool keep) {
+    typedef HRESULT(WINAPI * CreateSbFn)(void*, DWORD, void**);
+    typedef HRESULT(WINAPI * Fn0)(void*);
+    g_stateBlock = nullptr;
+    g_stateBlockOwned = false;
+    if (keep && g_sbCache && g_sbDevice == dev) {
+        if (SUCCEEDED(Method<Fn0>(g_sbCache, kSbCapture)(g_sbCache))) {
+            g_stateBlock = g_sbCache;
+            return true;
+        }
+    }
+    if (keep) ReleaseStateBlockCache();  // another device, or the capture failed: start again
+    void* block = nullptr;
+    if (FAILED(Method<CreateSbFn>(dev, kCreateStateBlock)(dev, 1 /*D3DSBT_ALL*/, &block)) || !block) return false;
+    g_stateBlock = block;
+    if (keep) {
+        g_sbCache = block;
+        g_sbDevice = dev;
+    } else {
+        g_stateBlockOwned = true;
+    }
+    return true;
+}
+
+bool BeginOverlay(void* dev, bool keepStateBlock) {
+    g_dev = dev;
+    typedef HRESULT(WINAPI * GetRtFn)(void*, DWORD, void**);
+    typedef HRESULT(WINAPI * SetRtFn)(void*, DWORD, void*);
+    typedef HRESULT(WINAPI * GetBbFn)(void*, UINT, UINT, UINT, void**);
+    typedef HRESULT(WINAPI * Fn0)(void*);
+    typedef HRESULT(WINAPI * SetPtrFn)(void*, void*);
+    typedef HRESULT(WINAPI * SetViewportFn)(void*, const Viewport*);
+
+    if (!SaveState(dev, keepStateBlock)) return false;
+
+    g_oldTarget = nullptr;
+    Method<GetRtFn>(dev, kGetRenderTarget)(dev, 0, &g_oldTarget);
+    void* back = nullptr;
+    if (SUCCEEDED(Method<GetBbFn>(dev, kGetBackBuffer)(dev, 0, 0, 0, &back)) && back) {
+        Method<SetRtFn>(dev, kSetRenderTarget)(dev, 0, back);
+        Method<ReleaseFn>(back, kRelease)(back);
+    }
+    g_inScene = SUCCEEDED(Method<Fn0>(dev, kBeginScene)(dev));
+
+    Viewport vp = {0, 0, (DWORD)(g_outputW ? g_outputW : 1280), (DWORD)(g_outputH ? g_outputH : 720), 0.f, 1.f};
+    Method<SetViewportFn>(dev, kSetViewport)(dev, &vp);
+    Method<SetPtrFn>(dev, kSetVertexShader)(dev, nullptr);
+    Method<SetPtrFn>(dev, kSetPixelShader)(dev, nullptr);
+    typedef HRESULT(WINAPI * SetFvfFn)(void*, DWORD);
+    Method<SetFvfFn>(dev, kSetFVF)(dev, kFvfXyzrhwDiffuseTex1);
+
+    SetRS(RS_ZENABLE, 0);
+    SetRS(RS_ZWRITEENABLE, 0);
+    SetRS(RS_ALPHATESTENABLE, 0);
+    SetRS(RS_CULLMODE, 1);
+    SetRS(RS_ALPHABLENDENABLE, 1);
+    SetRS(RS_SRCBLEND, 5);   // SRCALPHA
+    SetRS(RS_DESTBLEND, 6);  // INVSRCALPHA
+    SetRS(RS_BLENDOP, 1);
+    SetRS(RS_SEPARATEALPHABLEND, 0);
+    SetRS(RS_FOGENABLE, 0);
+    SetRS(RS_SPECULARENABLE, 0);
+    SetRS(RS_STENCILENABLE, 0);
+    SetRS(RS_CLIPPING, 1);
+    SetRS(RS_LIGHTING, 0);
+    SetRS(RS_COLORWRITEENABLE, 0xF);
+    SetRS(RS_SCISSORTESTENABLE, 0);
+    SetRS(RS_SRGBWRITEENABLE, 0);
+    SetRS(RS_FILLMODE, 3);
+    SetSampler(SAMP_MINFILTER, 2);
+    SetSampler(SAMP_MAGFILTER, 2);
+    SetSampler(SAMP_MIPFILTER, 0);
+    SetSampler(SAMP_ADDRESSU, 3);
+    SetSampler(SAMP_ADDRESSV, 3);
+    SetSampler(SAMP_SRGBTEXTURE, 0);
+    Method<Dword3Fn>(dev, kSetTextureStageState)(dev, 1, TSS_COLOROP, TOP_DISABLE);
+    Method<Dword3Fn>(dev, kSetTextureStageState)(dev, 1, TSS_ALPHAOP, TOP_DISABLE);
+    return true;
+}
+
+}  // namespace
+
+bool OverlayBegin(void* dev) { return BeginOverlay(dev, true); }
+
+void OverlayEnd() {
+    typedef HRESULT(WINAPI * Fn0)(void*);
+    typedef HRESULT(WINAPI * SetRtFn)(void*, DWORD, void*);
+    if (g_inScene) Method<Fn0>(g_dev, kEndScene)(g_dev);
+    g_inScene = false;
+    if (g_oldTarget) {
+        Method<SetRtFn>(g_dev, kSetRenderTarget)(g_dev, 0, g_oldTarget);
+        Method<ReleaseFn>(g_oldTarget, kRelease)(g_oldTarget);
+        g_oldTarget = nullptr;
+    }
+    if (g_stateBlock) {
+        Method<Fn0>(g_stateBlock, kSbApply)(g_stateBlock);
+        if (g_stateBlockOwned) Method<ReleaseFn>(g_stateBlock, kRelease)(g_stateBlock);  // the reused one stays for the next pass
+        g_stateBlock = nullptr;
+        g_stateBlockOwned = false;
+    }
+}
+
+void FillRect(float x, float y, float w, float h, u32 argb) {
+    typedef HRESULT(WINAPI * SetTexFn)(void*, DWORD, void*);
+    Method<SetTexFn>(g_dev, kSetTexture)(g_dev, 0, nullptr);
+    SetTSS(TSS_COLOROP, TOP_SELECTARG1);
+    SetTSS(TSS_COLORARG1, TA_DIFFUSE);
+    SetTSS(TSS_ALPHAOP, TOP_SELECTARG1);
+    SetTSS(TSS_ALPHAARG1, TA_DIFFUSE);
+    float kx = ScaleX(), ky = ScaleY();
+    Quad(x * kx, y * ky, (x + w) * kx, (y + h) * ky, argb, 0.f, 0.f, 1.f, 1.f);
+}
+
+float TextWidth(const wchar_t* text, int px) {
+    TextEntry* e = GetText(text, FontPx(px));
+    return e ? (float)(e->width - 4) / ScaleX() : 0.f;
+}
+
+// Measured with GDI only (no texture is made), so a long text can be tried at many break points cheaply.
+int TextFit(const wchar_t* text, int length, float maxWidth, int px) {
+    if (length <= 0) return 0;
+    HDC dc = TextDc();
+    HFONT font = dc ? FontFor(FontPx(px)) : nullptr;
+    if (!font) return length;
+    HGDIOBJ old = SelectObject(dc, font);
+    int fit = 0;
+    SIZE size;
+    int room = (int)(maxWidth * ScaleX());
+    if (!GetTextExtentExPointW(dc, text, length, room > 0 ? room : 0, &fit, nullptr, &size)) fit = length;
+    SelectObject(dc, old);
+    return fit;
+}
+
+float DrawText(const wchar_t* text, float x, float y, u32 argb, int px) {
+    TextEntry* e = GetText(text, FontPx(px));  // render the font at the real size
+    if (!e) return 0.f;
+    typedef HRESULT(WINAPI * SetTexFn)(void*, DWORD, void*);
+    Method<SetTexFn>(g_dev, kSetTexture)(g_dev, 0, e->texture);
+    SetTSS(TSS_COLOROP, TOP_SELECTARG2);  // colour from the vertex
+    SetTSS(TSS_COLORARG2, TA_DIFFUSE);
+    SetTSS(TSS_ALPHAOP, TOP_MODULATE);  // coverage from the texture times the vertex alpha
+    SetTSS(TSS_ALPHAARG1, TA_TEXTURE);
+    SetTSS(TSS_ALPHAARG2, TA_DIFFUSE);
+    float px0 = x * ScaleX() - 2.f, py0 = y * ScaleY() - 2.f;
+    Quad(px0, py0, px0 + (float)e->width, py0 + (float)e->height, argb, 0.f, 0.f, 1.f, 1.f);
+    return (float)(e->width - 4) / ScaleX();
+}
+
+
+// ---- Final-image passes -----------------------------------------------------------------------------------------
+namespace {
+
+void* g_sharpShader = nullptr;   // IDirect3DPixelShader9
+void* g_fxaaShader = nullptr;
+bool g_fxaaFailed = false;
+void* g_copyTex = nullptr;       // IDirect3DTexture9, render target, same size and format as the back buffer
+void* g_copySurf = nullptr;
+UINT g_copyW = 0, g_copyH = 0, g_copyFmt = 0;
+bool g_sharpFailed = false;
+
+const char kSharpenSource[] =
+    "sampler s0 : register(s0);\n"
+    "float4 c0 : register(c0);\n"  // xy = texel size, z = amount
+    "float4 main(float2 uv : TEXCOORD0) : COLOR {\n"
+    "  float3 c = tex2D(s0, uv).rgb;\n"
+    "  float3 n = tex2D(s0, uv + float2(0.0, -c0.y)).rgb;\n"
+    "  float3 s = tex2D(s0, uv + float2(0.0, c0.y)).rgb;\n"
+    "  float3 w = tex2D(s0, uv + float2(-c0.x, 0.0)).rgb;\n"
+    "  float3 e = tex2D(s0, uv + float2(c0.x, 0.0)).rgb;\n"
+    "  float3 avg = (n + s + w + e) * 0.25;\n"
+    "  return float4(saturate(c + (c - avg) * c0.z), 1.0);\n"
+    "}\n";
+
+// Edge-directional smoothing in the spirit of FXAA (our own implementation of the well-known idea): the blur direction
+// follows the luma gradient of the 2x2 neighbourhood, and the result is kept only if it stays inside the local range.
+const char kFxaaSource[] =
+    "sampler s0 : register(s0);\n"
+    "float4 c0 : register(c0);\n"  // xy = texel size, z = strength
+    "float4 main(float2 uv : TEXCOORD0) : COLOR {\n"
+    "  float2 t = c0.xy;\n"
+    "  float3 lw = float3(0.299, 0.587, 0.114);\n"
+    "  float3 rM = tex2D(s0, uv).rgb;\n"
+    "  float lNW = dot(tex2D(s0, uv + float2(-t.x, -t.y)).rgb, lw);\n"
+    "  float lNE = dot(tex2D(s0, uv + float2(t.x, -t.y)).rgb, lw);\n"
+    "  float lSW = dot(tex2D(s0, uv + float2(-t.x, t.y)).rgb, lw);\n"
+    "  float lSE = dot(tex2D(s0, uv + float2(t.x, t.y)).rgb, lw);\n"
+    "  float lM = dot(rM, lw);\n"
+    "  float lMin = min(lM, min(min(lNW, lNE), min(lSW, lSE)));\n"
+    "  float lMax = max(lM, max(max(lNW, lNE), max(lSW, lSE)));\n"
+    "  float2 dir;\n"
+    "  dir.x = -((lNW + lNE) - (lSW + lSE));\n"
+    "  dir.y = ((lNW + lSW) - (lNE + lSE));\n"
+    "  float reduce = max((lNW + lNE + lSW + lSE) * 0.03125, 0.0078125);\n"
+    "  dir = clamp(dir / (min(abs(dir.x), abs(dir.y)) + reduce), -8.0, 8.0) * t;\n"
+    "  float3 rA = 0.5 * (tex2D(s0, uv + dir * -0.16667).rgb + tex2D(s0, uv + dir * 0.16667).rgb);\n"
+    "  float3 rB = rA * 0.5 + 0.25 * (tex2D(s0, uv + dir * -0.5).rgb + tex2D(s0, uv + dir * 0.5).rgb);\n"
+    "  float lB = dot(rB, lw);\n"
+    "  float3 res = (lB < lMin || lB > lMax) ? rA : rB;\n"
+    "  return float4(lerp(rM, res, c0.z), 1.0);\n"
+    "}\n";
+
+typedef HRESULT(WINAPI* CompileFn)(const char*, UINT, const void*, void*, const char*, const char*, DWORD, void**, void**, void**);
+typedef void*(WINAPI* BufPtrFn)(void*);
+typedef HRESULT(WINAPI* GetBbFn2)(void*, UINT, UINT, UINT, void**);
+typedef HRESULT(WINAPI* GetDescFn)(void*, u32*);
+typedef HRESULT(WINAPI* CreateTexFn)(void*, UINT, UINT, UINT, DWORD, DWORD, DWORD, void**, void*);
+typedef HRESULT(WINAPI* GetLevelFn)(void*, UINT, void**);
+typedef HRESULT(WINAPI* StretchFn)(void*, void*, const RECT*, void*, const RECT*, DWORD);
+typedef HRESULT(WINAPI* CreatePsFn)(void*, const DWORD*, void**);
+typedef HRESULT(WINAPI* SetPsFn)(void*, void*);
+typedef HRESULT(WINAPI* SetTexFn2)(void*, DWORD, void*);
+typedef HRESULT(WINAPI* SetPsConstFn)(void*, UINT, const float*, UINT);
+
+bool BuildShader(void* dev, const char* source, size_t length, void** shader, const char* const* profiles) {
+    HMODULE d3dx = GetModuleHandleW(L"d3dx9_43.dll");
+    if (!d3dx) d3dx = LoadLibraryW(L"d3dx9_43.dll");
+    CompileFn compile = d3dx ? (CompileFn)(void*)GetProcAddress(d3dx, "D3DXCompileShader") : nullptr;
+    if (!compile) return false;
+    for (; *profiles; ++profiles) {
+        void *code = nullptr, *errors = nullptr, *table = nullptr;
+        HRESULT hr = compile(source, (UINT)length, nullptr, nullptr, "main", *profiles, 0, &code, &errors, &table);
+        if (errors) Method<ReleaseFn>(errors, kRelease)(errors);
+        if (table) Method<ReleaseFn>(table, kRelease)(table);
+        if (FAILED(hr) || !code) continue;
+        const DWORD* bytes = (const DWORD*)Method<BufPtrFn>(code, 3)(code);
+        hr = Method<CreatePsFn>(dev, 106)(dev, bytes, shader);
+        Method<ReleaseFn>(code, kRelease)(code);
+        if (SUCCEEDED(hr) && *shader) return true;
+    }
+    return false;
+}
+
+void ReleaseCopy() {
+    if (g_copySurf) Method<ReleaseFn>(g_copySurf, kRelease)(g_copySurf);
+    if (g_copyTex) Method<ReleaseFn>(g_copyTex, kRelease)(g_copyTex);
+    g_copySurf = g_copyTex = nullptr;
+}
+
+// Gets the back buffer and its description (width, height, format). The caller releases the surface.
+void* BackBufferInfo(void* dev, UINT* w, UINT* h, UINT* fmt) {
+    void* back = nullptr;
+    if (FAILED(Method<GetBbFn2>(dev, kGetBackBuffer)(dev, 0, 0, 0, &back)) || !back) return nullptr;
+    u32 d[8] = {};  // Format, Type, Usage, Pool, MultiSampleType, MultiSampleQuality, Width, Height
+    Method<GetDescFn>(back, 12)(back, d);
+    *fmt = d[0];
+    *w = d[6];
+    *h = d[7];
+    return back;
+}
+
+}  // namespace
+
+// ---- Performance statistics: FPS, frame time, how long Present waits (a GPU-bound game waits there) and the GPU time of our
+// own passes, measured with D3D9 timestamp queries. Switched on with [Debug] PerfOverlay or the F10 option.
+namespace {
+
+struct GpuTimer {
+    void* disjoint[3];
+    void* t0[3];
+    void* t1[3];
+    bool pending[3];
+    int slot;
+    bool failed;
+    double ms;  // the last finished measurement
+};
+// Zero-initialised aggregates: no constructor, so nothing has to run before DllEntry (this DLL has no C runtime to run one).
+GpuTimer g_timerAo = {}, g_timerPost = {};
+unsigned long long g_gpuFreq = 0;
+
+typedef HRESULT(WINAPI* CreateQueryFn)(void*, DWORD, void**);
+typedef HRESULT(WINAPI* IssueFn)(void*, DWORD);
+typedef HRESULT(WINAPI* GetDataFn)(void*, void*, DWORD, DWORD);
+
+bool TimerCreate(void* dev, GpuTimer& t) {
+    for (int i = 0; i < 3; ++i)
+        if (FAILED(Method<CreateQueryFn>(dev, 118)(dev, 11 /*TIMESTAMPDISJOINT*/, &t.disjoint[i])) || !t.disjoint[i] ||
+            FAILED(Method<CreateQueryFn>(dev, 118)(dev, 10 /*TIMESTAMP*/, &t.t0[i])) || !t.t0[i] ||
+            FAILED(Method<CreateQueryFn>(dev, 118)(dev, 10, &t.t1[i])) || !t.t1[i])
+            return false;
+    return true;
+}
+
+void TimerBegin(void* dev, GpuTimer& t) {
+    if (t.failed) return;
+    if (!t.disjoint[0] && !TimerCreate(dev, t)) { t.failed = true; return; }
+    Method<IssueFn>(t.disjoint[t.slot], 6)(t.disjoint[t.slot], 2 /*BEGIN*/);
+    Method<IssueFn>(t.t0[t.slot], 6)(t.t0[t.slot], 1 /*END*/);
+}
+
+void TimerEnd(void* dev, GpuTimer& t) {
+    (void)dev;
+    if (t.failed || !t.disjoint[0]) return;
+    Method<IssueFn>(t.t1[t.slot], 6)(t.t1[t.slot], 1);
+    Method<IssueFn>(t.disjoint[t.slot], 6)(t.disjoint[t.slot], 1);
+    t.pending[t.slot] = true;
+    t.slot = (t.slot + 1) % 3;
+    // read the oldest finished slot without waiting
+    for (int k = 0; k < 3; ++k) {
+        int i = (t.slot + k) % 3;
+        if (!t.pending[i] || i == (t.slot + 2) % 3) continue;  // not the one just issued
+        struct { u32 disjointFlag; } d = {0};
+        unsigned long long a = 0, b = 0;
+        if (Method<GetDataFn>(t.disjoint[i], 7)(t.disjoint[i], &d, 4, 0) != 0) continue;
+        if (Method<GetDataFn>(t.t0[i], 7)(t.t0[i], &a, 8, 0) != 0 || Method<GetDataFn>(t.t1[i], 7)(t.t1[i], &b, 8, 0) != 0) continue;
+        t.pending[i] = false;
+        if (!d.disjointFlag && g_gpuFreq && b >= a) t.ms = (double)(b - a) * 1000.0 / (double)g_gpuFreq;
+    }
+}
+
+void EnsureFreq(void* dev) {
+    static void* freqQuery = nullptr;
+    static bool tried = false;
+    if (g_gpuFreq || tried) return;
+    tried = true;
+    if (FAILED(Method<CreateQueryFn>(dev, 118)(dev, 12 /*TIMESTAMPFREQ*/, &freqQuery)) || !freqQuery) return;
+    Method<IssueFn>(freqQuery, 6)(freqQuery, 1);
+    unsigned long long f = 0;
+    for (int i = 0; i < 1000; ++i)
+        if (Method<GetDataFn>(freqQuery, 7)(freqQuery, &f, 8, 1) == 0) { g_gpuFreq = f; break; }
+}
+
+}  // namespace
+
+void PerfPostBegin(void* dev) {
+    if (!g_cfg.perfOverlay && !g_cfg.frameStats) return;
+    EnsureFreq(dev);
+    TimerBegin(dev, g_timerPost);
+}
+void PerfPostEnd(void* dev) {
+    if (!g_cfg.perfOverlay && !g_cfg.frameStats) return;
+    TimerEnd(dev, g_timerPost);
+}
+
+void PerfOverlayFrame(void* dev, double fps, double frameMs, double presentMs, double physicsMs) {
+    if (!g_cfg.perfOverlay) return;
+    static u64 lastUpdate = 0;
+    static wchar_t line1[96] = L"", line2[128] = L"";
+    LARGE_INTEGER now, freq;
+    QueryPerformanceCounter(&now);
+    QueryPerformanceFrequency(&freq);
+    if (!lastUpdate || (u64)(now.QuadPart - (long long)lastUpdate) > (u64)freq.QuadPart / 2) {  // the text changes twice a second
+        lastUpdate = (u64)now.QuadPart;
+        const int f10 = (int)(frameMs * 10.0) % 10, p10 = (int)(physicsMs * 10.0) % 10, w10 = (int)(presentMs * 10.0) % 10;
+        const int a10 = (int)(g_timerAo.ms * 10.0) % 10, g10 = (int)(g_timerPost.ms * 10.0) % 10;
+        static int logTick = 0;
+        if (++logTick % 10 == 0 || g_cfg.language == 1) {  // the log is always in English
+            wsprintfW(line1, L"%d FPS   %d.%d ms", (int)(fps + 0.5), (int)frameMs, f10);
+            wsprintfW(line2, L"physics %d.%d ms  Present wait %d.%d ms  mod GPU: SSAO %d.%d, post %d.%d ms", (int)physicsMs, p10,
+                      (int)presentMs, w10, (int)g_timerAo.ms, a10, (int)g_timerPost.ms, g10);
+            if (logTick % 10 == 0) Log("perf: %S | %S", line1, line2);
+        }
+        if (g_cfg.language != 1) {
+            wsprintfW(line1, L"%d FPS   %d,%d мс", (int)(fps + 0.5), (int)frameMs, f10);
+            wsprintfW(line2, L"фізика %d,%d мс  очікування Present %d,%d мс  GPU мода: SSAO %d,%d, пост %d,%d мс", (int)physicsMs, p10,
+                      (int)presentMs, w10, (int)g_timerAo.ms, a10, (int)g_timerPost.ms, g10);
+        }
+    }
+    if (!OverlayBegin(dev)) return;
+    FillRect(8, 8, 520, 44, 0xB0000000);
+    DrawText(line1, 14, 10, 0xFFFFFFFF, 16);
+    DrawText(line2, 14, 30, 0xFFC4C4CE, 13);
+    OverlayEnd();
+}
+
+namespace {
+double g_frameHist[120];
+int g_frameHistPos = 0;
+
+// "24,92" like the Windows performance overlay.
+void FmtMs(wchar_t* out, double v) {
+    if (v < 0.0) v = 0.0;
+    int whole = (int)v, frac = (int)((v - whole) * 100.0 + 0.5);
+    if (frac >= 100) { ++whole; frac = 0; }
+    if (g_cfg.language == 1) wsprintfW(out, L"%d.%02d ms", whole, frac);
+    else wsprintfW(out, L"%d,%02d мс", whole, frac);
+}
+}  // namespace
+
+void FrameStatsPush(double frameMs) {
+    g_frameHist[g_frameHistPos] = frameMs;
+    g_frameHistPos = (g_frameHistPos + 1) % 120;
+}
+
+// A separate panel (top right): where the frame time goes. Total = from one Present to the next; Game = the CPU work of the game
+// between two Presents (logic, physics and the draw calls it submits); Physics = the PhysX step inside it; Present = the time the
+// call itself took (driver, waiting for the video card and for the screen refresh); mod GPU = our own passes on the video card;
+// game thread working = the CPU time the game thread really used per frame (not waiting): about the whole frame = the processor is the
+// limit; far below it = the thread waits (for the video card inside the game, for the screen).
+void FrameStatsPanel(void* dev, double totalMs, double gameMs, double physicsMs, double presentMs, double worstMs, double busyMs) {
+    if (!g_cfg.frameStats) return;
+    static u64 lastUpdate = 0;
+    static wchar_t t[7][32];
+    static int hz = 0;
+    LARGE_INTEGER now, freq;
+    QueryPerformanceCounter(&now);
+    QueryPerformanceFrequency(&freq);
+    if (!lastUpdate || (u64)(now.QuadPart - (long long)lastUpdate) > (u64)freq.QuadPart / 2) {
+        lastUpdate = (u64)now.QuadPart;
+        FmtMs(t[0], totalMs);
+        FmtMs(t[1], gameMs);
+        FmtMs(t[2], physicsMs);
+        FmtMs(t[3], presentMs);
+        FmtMs(t[4], worstMs);
+        FmtMs(t[5], g_timerAo.ms + g_timerPost.ms);
+        FmtMs(t[6], busyMs);
+        hz = DisplayRefreshHz();  // the monitor the game window is on, cached by the frame pacer
+    }
+    if (!OverlayBegin(dev)) return;
+    const float w = 214.f, x = 1280.f - w - 8.f, y = 8.f;
+    FillRect(x, y, w, 196.f, 0xB0000000);
+    static const wchar_t* const namesUk[7] = {L"Всього:", L"Гра (CPU):", L"  з них фізика:", L"Present:", L"Найгірший:", L"Проходи мода:", L"Потік гри працює:"};
+    static const wchar_t* const namesEn[7] = {L"Total:", L"Game (CPU):", L"  of it physics:", L"Present:", L"Worst:", L"Mod passes:", L"Game thread busy:"};
+    const wchar_t* const* names = g_cfg.language == 1 ? namesEn : namesUk;
+    for (int i = 0; i < 7; ++i) {
+        DrawText(names[i], x + 8.f, y + 6.f + 17.f * (float)i, i == 2 ? 0xFFA8A8B4 : 0xFFE8E8F0, 13);
+        float tw = TextWidth(t[i], 13);
+        DrawText(t[i], x + w - 8.f - tw, y + 6.f + 17.f * (float)i, i == 0 ? 0xFFFFFFFF : 0xFFC4C4CE, 13);
+    }
+    wchar_t foot[64];
+    const bool en = g_cfg.language == 1;
+    const wchar_t* api = g_usingDxvk ? L"DXVK" : g_d3dWrapper ? (en ? L"D3D9 (wrapper)" : L"D3D9 (обгортка)") : L"D3D9";
+    wsprintfW(foot, en ? L"%d FPS   %d Hz   %s" : L"%d FPS   %d Гц   %s", totalMs > 0.0 ? (int)(1000.0 / totalMs + 0.5) : 0, hz, api);
+    DrawText(foot, x + 8.f, y + 6.f + 17.f * 7.f, 0xFFA8A8B4, 12);
+    // graph of the last 120 frames: the scale is 2 x 16.7 ms (60 frames/s) or the worst frame; a thin line marks 16.7 ms
+    double scale = 33.4;
+    for (int i = 0; i < 120; ++i)
+        if (g_frameHist[i] * 1.05 > scale) scale = g_frameHist[i] * 1.05;
+    const float gx = x + 8.f, gy = y + 186.f, gh = 38.f, bw = (w - 16.f) / 120.f;
+    FillRect(gx, gy - gh, w - 16.f, gh, 0x40000000);
+    for (int i = 0; i < 120; ++i) {
+        double v = g_frameHist[(g_frameHistPos + i) % 120];
+        float h = (float)(v / scale) * gh;
+        if (h > gh) h = gh;
+        if (h < 1.f) h = 1.f;
+        FillRect(gx + (float)i * bw, gy - h, bw > 1.f ? bw - 0.4f : bw, h, v > totalMs * 1.6 + 2.0 ? 0xFFE05050 : 0xFFB8B8C4);
+    }
+    FillRect(gx, gy - (float)(16.7 / scale) * gh, w - 16.f, 1.f, 0x90FFFFFF);
+    OverlayEnd();
+}
+
+// Before a Reset: the copy is a default-pool texture, and the reused state block holds references to the game's
+// textures, so both must go (they are made again on the next frame).
+void ReleasePostResources() {
+    ReleaseCopy();
+    ReleaseStateBlockCache();
+}
+
+namespace {
+
+// Copies the finished picture and draws it back through `shader` (c0 = texel size and the amount).
+void RunPass(void* dev, void** shader, bool* failed, const char* name, const char* source, size_t length,
+             const char* const* profiles, int percent, const float* extra = nullptr) {
+    if (percent <= 0 || *failed) return;
+    UINT w, h, fmt;
+    void* back = BackBufferInfo(dev, &w, &h, &fmt);
+    if (!back) return;
+    if (!*shader && !BuildShader(dev, source, length, shader, profiles)) {
+        *failed = true;
+        Log("%s: the shader could not be built (d3dx9_43), the pass is off", name);
+        Method<ReleaseFn>(back, kRelease)(back);
+        return;
+    }
+    if (!g_copyTex || g_copyW != w || g_copyH != h || g_copyFmt != fmt) {
+        ReleaseCopy();
+        if (FAILED(Method<CreateTexFn>(dev, kCreateTexture)(dev, w, h, 1, 1 /*RENDERTARGET*/, fmt, 0 /*DEFAULT*/, &g_copyTex,
+                                                            nullptr)) ||
+            !g_copyTex || FAILED(Method<GetLevelFn>(g_copyTex, 18)(g_copyTex, 0, &g_copySurf)) || !g_copySurf) {
+            ReleaseCopy();
+            *failed = true;
+            Log("%s: could not create the copy of the back buffer (%ux%u format %u), the pass is off", name, w, h, fmt);
+            Method<ReleaseFn>(back, kRelease)(back);
+            return;
+        }
+        g_copyW = w; g_copyH = h; g_copyFmt = fmt;
+        Log("%s: pass ready on a %ux%u back buffer", name, w, h);
+    }
+    HRESULT hr = Method<StretchFn>(dev, 34)(dev, back, nullptr, g_copySurf, nullptr, 1 /*POINT*/);
+    Method<ReleaseFn>(back, kRelease)(back);
+    if (FAILED(hr)) return;
+    if (!OverlayBegin(dev)) return;
+    Method<SetPsFn>(dev, kSetPixelShader)(dev, *shader);
+    Method<SetTexFn2>(dev, kSetTexture)(dev, 0, g_copyTex);
+    SetRS(RS_ALPHABLENDENABLE, 0);
+    SetSampler(SAMP_MINFILTER, 1);  // POINT: exact texels (the shaders do their own filtering)
+    SetSampler(SAMP_MAGFILTER, 1);
+    const float c[4] = {1.0f / (float)w, 1.0f / (float)h, (float)(percent > 100 ? 100 : percent) / 100.0f, 0.f};
+    Method<SetPsConstFn>(dev, 109)(dev, 0, c, 1);
+    if (extra) Method<SetPsConstFn>(dev, 109)(dev, 1, extra, 2);  // c1 and c2
+    Viewport vp = {0, 0, w, h, 0.f, 1.f};
+    typedef HRESULT(WINAPI * SetViewportFn2)(void*, const Viewport*);
+    Method<SetViewportFn2>(dev, kSetViewport)(dev, &vp);
+    Quad(0.f, 0.f, (float)w, (float)h, 0xFFFFFFFF, 0.f, 0.f, 1.f, 1.f);
+    Method<SetTexFn2>(dev, kSetTexture)(dev, 0, nullptr);
+    OverlayEnd();
+}
+
+void* g_colorShader = nullptr;
+bool g_colorFailed = false;
+const char kColorSource[] =
+    "sampler s0 : register(s0);\n"
+    "float4 c0 : register(c0);\n"  // z unused here: the amount is in c2 (below), xy texel size
+    "float4 c1 : register(c1);\n"  // rgb tint, w vignette
+    "float4 c2 : register(c2);\n"  // x brightness, y contrast, z saturation
+    "float4 main(float2 uv : TEXCOORD0) : COLOR {\n"
+    "  float3 c = tex2D(s0, uv).rgb;\n"
+    "  float l = dot(c, float3(0.299, 0.587, 0.114));\n"
+    "  c = lerp(float3(l, l, l), c, c2.z);\n"
+    "  c = (c - 0.5) * c2.y + 0.5 + c2.x;\n"
+    "  c = c * c1.rgb;\n"
+    "  float2 d = uv - 0.5;\n"
+    "  c = c * (1.0 - c1.w * dot(d, d) * 2.8);\n"
+    "  return float4(saturate(c), 1.0);\n"
+    "}\n";
+const char* const kProfilesColor[] = {"ps_2_0", nullptr};
+
+const char* const kProfilesSharp[] = {"ps_2_0", nullptr};
+const char* const kProfilesFxaa[] = {"ps_2_b", "ps_2_a", "ps_2_0", nullptr};
+
+}  // namespace
+
+void ColorFrame(void* dev) {
+    static const float tints[6][3] = {{1.f, 1.f, 1.f}, {1.08f, 1.0f, 0.90f}, {0.92f, 0.98f, 1.10f},
+                                      {1.f, 1.f, 1.f}, {1.04f, 1.0f, 0.94f}, {1.10f, 1.0f, 0.80f}};
+    if (!g_cfg.photoActive && !PhotoPageOpen()) return;  // the filters belong to photo mode: the camera flies, or its page is open for a preview
+    int f = g_cfg.photoFilter < 0 || g_cfg.photoFilter > 5 ? 0 : g_cfg.photoFilter;
+    if (!g_cfg.photoBright && !g_cfg.photoContrast && !g_cfg.photoSat && !g_cfg.photoVignette && f == 0) return;
+    const float extra[8] = {tints[f][0], tints[f][1], tints[f][2], (float)g_cfg.photoVignette / 100.0f,
+                            (float)g_cfg.photoBright / 200.0f, 1.0f + (float)g_cfg.photoContrast / 100.0f,
+                            1.0f + (float)g_cfg.photoSat / 100.0f, 0.f};
+    RunPass(dev, &g_colorShader, &g_colorFailed, "photo filter", kColorSource, sizeof(kColorSource) - 1, kProfilesColor, 100, extra);
+}
+
+void SharpenFrame(void* dev, int percent) {
+    RunPass(dev, &g_sharpShader, &g_sharpFailed, "sharpen", kSharpenSource, sizeof(kSharpenSource) - 1, kProfilesSharp, percent);
+}
+
+void AntialiasFrame(void* dev, int percent) {
+    RunPass(dev, &g_fxaaShader, &g_fxaaFailed, "antialias", kFxaaSource, sizeof(kFxaaSource) - 1, kProfilesFxaa, percent);
+}
+
+// ---- Ambient occlusion -----------------------------------------------------------------------------------------
+// Runs inside the game's frame, in front of the final composite draw (the one that reads the HDR scene as texture 0 and
+// the packed depth as texture 4). It darkens the HDR scene where nearby geometry is in front of a pixel: the depth of
+// every sample is compared with the plane through the pixel (slope corrected, so flat walls and floors stay clean).
+// The packed depth is the game's own G-buffer (high byte, low byte, fraction in R, G, B).
+namespace {
+
+void* g_aoShader = nullptr;
+bool g_aoFailed = false;
+bool g_aoLogged = false;
+
+const char kAoSource[] =
+    "sampler s0 : register(s0);\n"
+    "float4 c0 : register(c0);\n"  // xy = texel size, z = strength 0..1, w = radius in pixels
+    "float4 c1 : register(c1);\n"  // xy = size in pixels
+    "float Dep(float2 uv) {\n"
+    "  float3 c = tex2D(s0, uv).rgb;\n"
+    "  return floor(c.r * 256.0 + 0.5) * 256.0 + floor(c.g * 256.0 + 0.5) + c.b;\n"
+    "}\n"
+    "#define TAP(ox, oy) { float2 o = float2((ox) * r.x - (oy) * r.y, (ox) * r.y + (oy) * r.x) * c0.w;"
+    " float2 q = uv + o * c0.xy; float ds = Dep(q); float rel = max(dc + dot(g, o) - ds - 1.6, 0.0) / dc;"
+    " float2 e = abs(q - 0.5); float inside = (e.x < 0.5 && e.y < 0.5) ? 1.0 : 0.0;"
+    " occ += inside * smoothstep(0.004, 0.03, rel) * (1.0 - smoothstep(0.10, 0.30, rel)); }\n"
+    "float4 main(float2 uv : TEXCOORD0) : COLOR {\n"
+    "  float dc = max(Dep(uv), 1.0);\n"
+    "  float k = max(c0.w * 0.5, 3.0);\n"  // slope from a wide baseline: the packed depth steps by one unit, a 1-pixel difference is noise
+    "  float dr = Dep(uv + float2(c0.x * k, 0.0)); float dl = Dep(uv - float2(c0.x * k, 0.0));\n"
+    "  float dd = Dep(uv + float2(0.0, c0.y * k)); float du = Dep(uv - float2(0.0, c0.y * k));\n"
+    "  float2 g;\n"
+    "  g.x = (abs(dr - dc) < abs(dc - dl) ? (dr - dc) : (dc - dl)) / k;\n"
+    "  g.y = (abs(dd - dc) < abs(dc - du) ? (dd - dc) : (dc - du)) / k;\n"
+    "  float2 p = uv * c1.xy;\n"
+    "  float a = frac(52.9829189 * frac(dot(p, float2(0.06711056, 0.00583715)))) * 6.2831853;\n"
+    "  float2 r = float2(cos(a), sin(a));\n"
+    "  float occ = 0.0;\n"
+    "  TAP(0.35, 0.0) TAP(0.0, 0.35) TAP(-0.35, 0.0) TAP(0.0, -0.35)\n"
+    "  TAP(0.5, 0.5) TAP(-0.5, 0.5) TAP(-0.5, -0.5) TAP(0.5, -0.5)\n"
+    "  TAP(1.0, 0.0) TAP(0.0, 1.0) TAP(-1.0, 0.0) TAP(0.0, -1.0)\n"
+    "  float ao = saturate(1.0 - c0.z * occ * 0.2);\n"
+    "  ao = dc > 30000.0 ? 1.0 : ao;\n"
+    "  return float4(ao, ao, ao, 1.0);\n"
+    "}\n";
+
+const char* const kProfilesAo[] = {"ps_2_b", "ps_2_a", "ps_3_0", nullptr};
+
+}  // namespace
+
+void AmbientOcclusionPass(void* dev, int strengthPercent, int radiusPixels) {
+    if (strengthPercent <= 0 || g_aoFailed) return;
+    typedef HRESULT(WINAPI * GetTexFn)(void*, DWORD, void**);
+    typedef HRESULT(WINAPI * GetLevelDescFn)(void*, UINT, u32*);
+    typedef HRESULT(WINAPI * GetSurfFn)(void*, UINT, void**);
+    typedef HRESULT(WINAPI * GetRtFn2)(void*, DWORD, void**);
+    typedef HRESULT(WINAPI * GetDsFn)(void*, void**);
+    typedef HRESULT(WINAPI * SetDsFn)(void*, void*);
+    typedef HRESULT(WINAPI * SetRtFn2)(void*, DWORD, void*);
+
+    void *hdr = nullptr, *depth = nullptr, *target = nullptr;
+    Method<GetTexFn>(dev, 64)(dev, 0, &hdr);
+    Method<GetTexFn>(dev, 64)(dev, 4, &depth);
+    Method<GetRtFn2>(dev, kGetRenderTarget)(dev, 0, &target);
+    auto releaseAll = [&]() {
+        if (hdr) Method<ReleaseFn>(hdr, kRelease)(hdr);
+        if (depth) Method<ReleaseFn>(depth, kRelease)(depth);
+        if (target) Method<ReleaseFn>(target, kRelease)(target);
+    };
+    if (!hdr || !depth || !target) { releaseAll(); return; }
+    u32 hd[8] = {}, dd[8] = {}, td[8] = {};  // Format, Type, Usage, Pool, MultiSampleType, MultiSampleQuality, Width, Height
+    Method<GetLevelDescFn>(hdr, 17)(hdr, 0, hd);
+    Method<GetLevelDescFn>(depth, 17)(depth, 0, dd);
+    Method<GetDescFn>(target, 12)(target, td);
+    UINT bw, bh, bf;
+    void* back = BackBufferInfo(dev, &bw, &bh, &bf);
+    if (back) Method<ReleaseFn>(back, kRelease)(back);
+    // the main composite only: the target is as big as the back buffer, the scene is a 16-bit float texture, the
+    // depth an 8-bit one of the same size (other composites go into small buffers)
+    if (!back || td[6] != bw || td[7] != bh || hd[0] != 113 || dd[0] != 21 || hd[6] != dd[6] || hd[7] != dd[7] ||
+        !(hd[2] & 1)) {
+        releaseAll();
+        return;
+    }
+    if (!g_aoShader && !BuildShader(dev, kAoSource, sizeof(kAoSource) - 1, &g_aoShader, kProfilesAo)) {
+        g_aoFailed = true;
+        Log("ssao: the shader could not be built (d3dx9_43), the pass is off");
+        releaseAll();
+        return;
+    }
+    void* hdrSurf = nullptr;
+    if (FAILED(Method<GetSurfFn>(hdr, 18)(hdr, 0, &hdrSurf)) || !hdrSurf) { releaseAll(); return; }
+    void* oldDs = nullptr;
+    Method<GetDsFn>(dev, 40)(dev, &oldDs);
+    if (!BeginOverlay(dev, false)) {  // a block of its own: this pass runs inside the game's frame, outside the Present hook
+        if (oldDs) Method<ReleaseFn>(oldDs, kRelease)(oldDs);
+        Method<ReleaseFn>(hdrSurf, kRelease)(hdrSurf);
+        releaseAll();
+        return;
+    }
+    UINT w = hd[6], h = hd[7];
+    Method<SetRtFn2>(dev, kSetRenderTarget)(dev, 0, hdrSurf);
+    Method<SetDsFn>(dev, 39)(dev, nullptr);
+    Method<SetPsFn>(dev, kSetPixelShader)(dev, g_aoShader);
+    Method<SetTexFn2>(dev, kSetTexture)(dev, 0, depth);
+    SetRS(RS_ALPHABLENDENABLE, 1);
+    SetRS(RS_SRCBLEND, 9);   // DESTCOLOR: result = scene * occlusion
+    SetRS(RS_DESTBLEND, 1);  // ZERO
+    SetRS(RS_COLORWRITEENABLE, 7);
+    SetSampler(SAMP_MINFILTER, 1);  // POINT: exact depth values
+    SetSampler(SAMP_MAGFILTER, 1);
+    float radius = (float)radiusPixels * (float)h / 720.0f;
+    const float c0[4] = {1.0f / (float)w, 1.0f / (float)h, (float)(strengthPercent > 100 ? 100 : strengthPercent) / 100.0f, radius};
+    const float c1[4] = {(float)w, (float)h, 0.f, 0.f};
+    Method<SetPsConstFn>(dev, 109)(dev, 0, c0, 1);
+    Method<SetPsConstFn>(dev, 109)(dev, 1, c1, 1);
+    Viewport vp = {0, 0, w, h, 0.f, 1.f};
+    typedef HRESULT(WINAPI * SetViewportFn2)(void*, const Viewport*);
+    Method<SetViewportFn2>(dev, kSetViewport)(dev, &vp);
+    if (g_cfg.perfOverlay || g_cfg.frameStats) { EnsureFreq(dev); TimerBegin(dev, g_timerAo); }
+    Quad(0.f, 0.f, (float)w, (float)h, 0xFFFFFFFF, 0.f, 0.f, 1.f, 1.f);
+    if (g_cfg.perfOverlay || g_cfg.frameStats) TimerEnd(dev, g_timerAo);
+    OverlayEnd();  // puts the render target and the whole state back
+    Method<SetDsFn>(dev, 39)(dev, oldDs);
+    if (oldDs) Method<ReleaseFn>(oldDs, kRelease)(oldDs);
+    Method<ReleaseFn>(hdrSurf, kRelease)(hdrSurf);
+    releaseAll();
+    if (!g_aoLogged) {
+        g_aoLogged = true;
+        Log("ssao: pass running on a %ux%u scene (strength %d%%, radius %d px)", w, h, strengthPercent, radiusPixels);
+    }
+}
+
+static volatile bool g_shotRequested = false;
+void RequestScreenshot() { g_shotRequested = true; }
+
+void ScreenshotFrame(void* dev) {
+    static bool wasDown = false;
+    bool down = g_cfg.screenshotKey && (GetAsyncKeyState(g_cfg.screenshotKey) & 0x8000) != 0;
+    bool press = (down && !wasDown) || g_shotRequested;
+    g_shotRequested = false;
+    wasDown = down;
+    if (!press) return;
+    UINT w, h, fmt;
+    void* back = BackBufferInfo(dev, &w, &h, &fmt);
+    if (!back) return;
+    typedef HRESULT(WINAPI * CreatePlainFn)(void*, UINT, UINT, DWORD, DWORD, void**, void*);
+    typedef HRESULT(WINAPI * GetRtDataFn)(void*, void*, void*);
+    typedef HRESULT(WINAPI * SaveFn)(const wchar_t*, DWORD, void*, const void*, const RECT*);
+    HMODULE d3dx = GetModuleHandleW(L"d3dx9_43.dll");
+    SaveFn save = d3dx ? (SaveFn)(void*)GetProcAddress(d3dx, "D3DXSaveSurfaceToFileW") : nullptr;
+    void* sys = nullptr;
+    bool ok = false;
+    if (save && SUCCEEDED(Method<CreatePlainFn>(dev, 36)(dev, w, h, fmt, 2 /*SYSTEMMEM*/, &sys, nullptr)) && sys &&
+        SUCCEEDED(Method<GetRtDataFn>(dev, 32)(dev, back, sys))) {
+        wchar_t dir[MAX_PATH], path[MAX_PATH + 40];
+        lstrcpyW(dir, g_paths.dataDir);
+        lstrcatW(dir, L"screenshots");
+        CreateDirectoryW(dir, nullptr);
+        SYSTEMTIME t;
+        GetLocalTime(&t);
+        wsprintfW(path, L"%s\\dp_%04d%02d%02d_%02d%02d%02d.png", dir, t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
+        ok = SUCCEEDED(save(path, 3 /*D3DXIFF_PNG*/, sys, nullptr, nullptr));
+        Log("screenshot: %S %s", path, ok ? "saved" : "FAILED");
+    }
+    if (sys) Method<ReleaseFn>(sys, kRelease)(sys);
+    Method<ReleaseFn>(back, kRelease)(back);
+    if (!ok && !save) Log("screenshot: D3DXSaveSurfaceToFileW not found");
+}
+
+}  // namespace ui
+}  // namespace ufx

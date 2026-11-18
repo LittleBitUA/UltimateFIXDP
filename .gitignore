@@ -1,0 +1,5 @@
+build/
+*.dmp
+ufx.log
+UltimateFix.ini
+.DS_Store
