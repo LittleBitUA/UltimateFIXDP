@@ -132,6 +132,8 @@ struct Config {
     int waypoint;            // F7 waypoint: a cross on the pause map, the distance in yards over the place in the world
     int waypointKey;         // virtual key that sets the waypoint (F7)
     int waypointMinimap;     // the waypoint is also an objective point of the game's map: red chevrons on the minimap, icon on the pause map
+    int waypointBeacon;      // the game's own objective beacon (red arrows with the yards) over the waypoint instead of the bare label
+    int waypointObjectiveKey;  // Ctrl + this virtual key puts the waypoint on the game's current objective (F7), 0 = off
     int replaceLauncher;     // put the quick-start stub in place of DPLauncher.exe by itself (the ufx_play.exe job)
     int autoRecover;         // (experimental, not proven to help) after a long run of slow frames, hold the game clock and physics for 4 frames
     int physicsSteps;        // most fixed physics steps per frame: 0 = the game's own (up to 4), 1..3 = a cap
@@ -249,6 +251,8 @@ void EnsureLauncherStub(const wchar_t* gameDir);  // in the game: put the quick-
 void InstallCpuTweaks();
 bool InstallWaypoint();
 void WaypointFrame(void* device);  // once per frame from the Present hook: the waypoint keys and the state its drawing needs
+bool WaypointToObjective();        // the waypoint goes to the game's current objective (the next one when it stands on one already)
+int WaypointObjectives(int* yards);  // objective points on the game's map now and the yards to the first one; -1 = not known
 bool InstallByteTextFix();
 bool InstallEffectStep();
 extern int g_sceneWidth;  // width of the 3D scene after the render scale (0 = not scaled)
