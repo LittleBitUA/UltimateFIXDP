@@ -146,6 +146,8 @@ struct Config {
     int pauseInMenu;         // the game's time stands still while the F10 menu is open
     int framePacing;         // 0 off, 1 = frame limit 60 only (game keeps real time), 2 = 30 frames/s in whole steps (console), 3 = 60 in whole steps
     int surround;            // 5.1 / 7.1 as on the console: 0 off, 1 = automatic (only when the mix has more than 2 channels), 2 = the same without the left/right mirror
+    int resourceReadGuard;   // a packed resource that does not unpack is read 5 times, not forever; unpacking stops at the end of its buffer
+    int sessionReminderHours; // one hint to save and restart after this many hours of a session, 0 = never
 };
 
 struct Paths {
@@ -282,6 +284,13 @@ void ApplyGameplay();
 void ApplyDifficulty();
 void SyncDifficultyFromGame();  // reads the difficulty the game really has into g_cfg (the menu, while open)
 void ApplyGraphicsTweaks();  // writes the current settings (also called from the menu)
+bool InstallResourceGuard();
+bool ResourceGuardTakeFailure(char* name, int cap);  // main thread: the name of a resource the loading thread gave up on, once
+void ResourceGuardCounts(u32* retries, u32* givenUp, u32* overflows);
+void SessionFrame(void* device);  // once per frame from the Present hook: the long-session hint and the notice box
+void ShowNotice(const wchar_t* titleUk, const wchar_t* titleEn, const wchar_t* textUk, const wchar_t* textEn, int seconds);  // main thread
+void OpenLogFolder();          // the F10 menu: Explorer on the UltimateFix folder
+void WriteDiagnosticReport();  // the F10 menu: UltimateFix\ufx_report.txt
 
 namespace ui {
 bool Install();                      // input blocking hooks; returns true if the menu is available

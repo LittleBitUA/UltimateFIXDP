@@ -573,6 +573,54 @@ constexpr uint32_t kX3dDspVa = 0x014B02F0;     // X3DAUDIO_DSP_SETTINGS, 30h byt
 constexpr uint32_t kX3dMatrixVa = 0x014B03B8;  // its pMatrixCoefficients
 constexpr uint32_t kX3dMatrixFloats = 16;
 
+// ---- Resource read guard (resource_guard.cpp) ---------------------------------------------------------------------
+// Two readers unpack an "XZP1" record (16-byte header: magic, next, packed size, unpacked size; then a zlib stream):
+//   FUN_006B0000 (thiscall, ecx = resource index, arguments id and u32* sizeOut, `ret 8` at 006B022F) reads a record of
+//     the DPSERIAL archives; header at [ebp-120h], so the unpacked size is [ebp-114h];
+//   FUN_006AF370 (cdecl: path, u32* sizeOut, root; plain `ret` at 006AF581) reads a loose file; header at [ebp-13Ch],
+//     unpacked size [ebp-130h].
+// Both allocate the unpacked size and call FUN_006AF5B0(void* out, u32 packed, CSafeRead* file) (cdecl, returns AL,
+// `add esp,0Ch` after each call). When it returns 0 they free the buffer and jump back to read the same record again,
+// with no limit: a record that cannot be unpacked is a silent endless loop of the loading thread. The jump is led
+// through a counter; after the last attempt it goes to the function's own exit for a missing resource instead
+// (*sizeOut = 0, return 0; the caller FUN_006B33F0 then returns -1 at 006B3685 and creates no slot).
+constexpr SiteDef kSiteArchiveRetry = {"archive unpack retry jump", 0x6B0162, 5, {0xE9, 0xEC, 0xFE, 0xFF, 0xFF}};
+constexpr uint32_t kArchiveRetryTarget = 0x6B0053;
+constexpr SiteDef kSiteArchiveMissing = {"archive reader: missing exit", 0x6B003D, 16,
+    {0x83, 0x7D, 0x0C, 0x00, 0x74, 0x09, 0x8B, 0x4D, 0x0C, 0xC7, 0x01, 0x00, 0x00, 0x00, 0x00, 0x33}};
+constexpr SiteDef kSiteLooseRetry = {"loose file unpack retry jump", 0x6AF45A, 5, {0xE9, 0x4E, 0xFF, 0xFF, 0xFF}};
+constexpr uint32_t kLooseRetryTarget = 0x6AF3AD;
+constexpr SiteDef kSiteLooseMissing = {"loose file reader: missing exit", 0x6AF538, 16,
+    {0x83, 0x7D, 0x0C, 0x00, 0x74, 0x09, 0x8B, 0x4D, 0x0C, 0xC7, 0x01, 0x00, 0x00, 0x00, 0x00, 0xC7}};
+// Inside FUN_006AF5B0 (frame: ebp; z_stream at [ebp-3Ch], so avail_out is [ebp-2Ch] and total_out [ebp-28h]) the room
+// for output is set to 20000h before the loop and again whenever it reaches 0, while next_out just keeps advancing: the
+// stream may write any amount into a buffer of the unpacked size. Both `mov dword [ebp-2Ch], 20000h` are replaced by a
+// call that gives min(20000h, what is left of the caller's buffer). The caller is told by the return address (the two
+// calls below) and its buffer size is read from its frame (the two `mov ecx,[ebp-..] / push ecx / call operator new`).
+constexpr SiteDef kSiteInflateRoomFirst = {"inflate output room (first)", 0x6AF61D, 7, {0xC7, 0x45, 0xD4, 0x00, 0x00, 0x02, 0x00}};
+constexpr uint32_t kInflateRoomFirstReturn = 0x6AF624;
+constexpr SiteDef kSiteInflateRoomRefill = {"inflate output room (refill)", 0x6AF6D9, 7, {0xC7, 0x45, 0xD4, 0x00, 0x00, 0x02, 0x00}};
+constexpr uint32_t kInflateRoomRefillReturn = 0x6AF6E0;
+constexpr SiteDef kSiteArchiveInflateCall = {"archive reader: unpack call", 0x6B0138, 5, {0xE8, 0x73, 0xF4, 0xFF, 0xFF}};
+constexpr SiteDef kSiteLooseInflateCall = {"loose file reader: unpack call", 0x6AF425, 5, {0xE8, 0x86, 0x01, 0x00, 0x00}};
+constexpr SiteDef kSiteArchiveBufferSize = {"archive reader: buffer size", 0x6B00F2, 8, {0x8B, 0x8D, 0xEC, 0xFE, 0xFF, 0xFF, 0x51, 0xE8}};
+constexpr SiteDef kSiteLooseBufferSize = {"loose file reader: buffer size", 0x6AF3EF, 8, {0x8B, 0x8D, 0xD0, 0xFE, 0xFF, 0xFF, 0x51, 0xE8}};
+constexpr uint32_t kInflateRoomStep = 0x20000;      // the game's own amount
+constexpr int kArchiveUnpackedSizeOffset = -0x114;  // in the frame of FUN_006B0000
+constexpr int kLooseUnpackedSizeOffset = -0x130;    // in the frame of FUN_006AF370
+
+// ---- Sound load requests (diagnostics.cpp reads the number in use, nothing is patched) -----------------------------
+// The main tick loads the CAudio_Data singleton from 00BD9E18h and calls its update FUN_00702890, which walks the pool
+// of load requests at +1070h: a TPoolList<CAudio_Data::LOADREQUEST_ITEM,64,0> whose constructor stores the vftable
+// 00827308h at +0 and whose number of requests in use is at +4 (FUN_00703AE0). Taking a request (FUN_007039F0) pops a
+// free index without checking that one is left.
+constexpr SiteDef kSiteAudioDataLoad = {"audio data singleton load", 0x401B28, 6, {0x8B, 0x35, 0x18, 0x9E, 0xBD, 0x00}};
+constexpr SiteDef kSiteAudioPoolOffset = {"audio request pool offset", 0x7028AA, 14,
+    {0x8B, 0x4D, 0xEC, 0x81, 0xC1, 0x70, 0x10, 0x00, 0x00, 0xE8, 0x68, 0x12, 0x00, 0x00}};
+constexpr SiteDef kSiteAudioPoolVtable = {"audio request pool vftable", 0x70383B, 6, {0xC7, 0x00, 0x08, 0x73, 0x82, 0x00}};
+constexpr uint32_t kAudioDataPtrVa = 0xBD9E18, kAudioRequestPoolOffset = 0x1070, kAudioRequestPoolVtable = 0x827308;
+constexpr int kAudioRequestPoolSize = 64;
+
 // ___security_init_cookie lives here and must keep seeing the raw counter.
 constexpr uint32_t kCookieFnBegin = 0x75C4DE;
 constexpr uint32_t kCookieFnEnd = 0x75C560;
@@ -623,6 +671,10 @@ constexpr const SiteDef* kAllSites[] = {
     &kFarPlane[5], &kSiteLanguageCall, &kSiteDifficultyNewGame, &kSiteDifficultyLoadClear,
     &kSiteDifficultyDialog1, &kSiteDifficultyDialog2, &kSiteFrameClockCall, &kSiteWheelRead, &kSiteGlyphIndexCall, &kSiteEffectStepA, &kSiteEffectStepB, &kSitePhysicsStepCall, &kSiteMapDrawCall, &kSiteTextDrawEntry, &kSiteSpriteDrawEntry, &kSiteSpotAccessor, &kSiteSpotRebuild[0], &kSiteSpotRebuild[1], &kSiteSpotRebuild[2], &kAltPhaseCalls[0], &kAltPhaseCalls[1], &kAltPhaseCalls[2], &kSiteResidencyEntry, &kSiteSetTargetEntry, &kSiteResourceOfSlot, &kSiteStateEntry, &kSiteSuitChange, &kSiteStrafeTail, &kSiteFullscreenArg[0], &kSiteFullscreenArg[1], &kSiteByteText, &kGaussCalls[0], &kGaussCalls[1], &kGaussCalls[2], &kGaussCalls[3], &kGaussCalls[4], &kGaussCalls[5], &kSiteCompositeDraw, &kSiteCameraCall, &kSiteExposure85, &kSiteExposure75, &kMapZoomFloor, &kMapZoomClampCall, &kMapZoomInit, &kMapPanX, &kMapPanZ, &kMapTileLookup, &kMapTileLimit, &kMapDeleteResource, &kMapReleaseResource, &kMapFindResource, &kMapHeading[0], &kMapHeading[1], &kMapHeading[2], &kMapHeading[3], &kMapHeading[4], &kMapHeading[5], &kMapHeading[6], &kMapArrow, &kSiteNavLookup, &kSiteNavNullCheck, &kSiteTrig1, &kSiteTrig2, &kSiteTrig3, &kSiteActivation, &kSiteLodFactor, &kSiteHighDetail1, &kSiteHighDetail2, &kSiteHighDetail3, &kSiteVisibility1, &kSiteVisibility2, &kSiteInputCommit, &kSiteInputPoll, &kSiteStickEval, &kSiteAimStick[0], &kSiteAimStick[1], &kSiteAimStick[2], &kSiteAimStick[3], &kSiteWetGate, &kSiteAimH, &kSiteAimV, &kSiteFullscreenArg[2], &kSiteVisibilityTestEntry,
     &kSiteCueMatrix3d, &kSiteCueMatrix2d, &kSiteX3dMatrixClear, &kSiteX3dDspSetup, &kSiteCueUpdateDsp,
+
+    &kSiteArchiveRetry, &kSiteArchiveMissing, &kSiteLooseRetry, &kSiteLooseMissing, &kSiteInflateRoomFirst, &kSiteInflateRoomRefill,
+    &kSiteArchiveInflateCall, &kSiteLooseInflateCall, &kSiteArchiveBufferSize, &kSiteLooseBufferSize,
+    &kSiteAudioDataLoad, &kSiteAudioPoolOffset, &kSiteAudioPoolVtable,
 };
 
 constexpr TailDef kAllTails[] = {
