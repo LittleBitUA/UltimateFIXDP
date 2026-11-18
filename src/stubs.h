@@ -421,4 +421,20 @@ inline size_t BuildNavNullGuard(uint8_t* out, uint32_t va, uint32_t continueVa) 
     return (size_t)(p - out);
 }
 
+// Called in place of `fld dword [frameDelta]` (6 bytes: a 5-byte call and a nop) where the car code counts whole ticks: the next
+// instruction there is always `call _ftol2`. While a step plan is in force (`steps` >= 0) the ticks of the plan are loaded,
+// otherwise the frame delta itself, as before. One value is pushed on the x87 stack, as the fld did; no register is touched. The
+// flags change, and nothing reads them: the instruction after the call is another call.
+//     cmp dword [steps],0 / jl own / fld dword [ticks] / ret / own: fld dword [frameDelta] / ret
+inline size_t BuildCarTicksStub(uint8_t* out, uint32_t stepsVa, uint32_t ticksVa, uint32_t frameDeltaVa) {
+    uint8_t* p = out;
+    *p++ = 0x83; *p++ = 0x3D; StubPut32(p, stepsVa); *p++ = 0x00;  // cmp dword [steps], 0
+    *p++ = 0x7C; *p++ = 0x07;                                      // jl own
+    *p++ = 0xD9; *p++ = 0x05; StubPut32(p, ticksVa);               // fld dword [ticks]
+    *p++ = 0xC3;                                                   // ret
+    *p++ = 0xD9; *p++ = 0x05; StubPut32(p, frameDeltaVa);          // own: fld dword [frameDelta]
+    *p++ = 0xC3;                                                   // ret
+    return (size_t)(p - out);
+}
+
 }  // namespace ufx

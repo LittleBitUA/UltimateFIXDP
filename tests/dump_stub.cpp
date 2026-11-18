@@ -215,6 +215,22 @@ int main(int argc, char** argv) {
     Check(memcmp(th + 17, td.bytes, td.len) == 0, "text draw hook", "replayed entry bytes");
     Check(Rel32To(th, ehVa, 17 + td.len, td.va + td.len), "text draw hook", "jmp back");
 
+    // Car tick counters: the frame delta itself outside of a step plan, the plan's ticks inside one; and every site it is called
+    // from is `fld dword [frameDelta]` followed by a call (the flags the stub changes are dead there).
+    uint8_t ct[32];
+    const uint32_t ctSteps = 0xC0001000, ctTicks = 0xC0001004;
+    size_t nct = BuildCarTicksStub(ct, ctSteps, ctTicks, kFrameDeltaVa);
+    printf("car ticks stub %zu bytes\n", nct);
+    Check(nct == 23, "car ticks", "size 23");
+    Check(ct[0] == 0x83 && ct[1] == 0x3D && Rd32(ct + 2) == ctSteps && ct[6] == 0, "car ticks", "cmp dword [steps],0");
+    Check(ct[7] == 0x7C && Rel8To(ct, 7, 16), "car ticks", "jl own");
+    Check(ct[9] == 0xD9 && ct[10] == 0x05 && Rd32(ct + 11) == ctTicks && ct[15] == 0xC3, "car ticks", "fld dword [ticks] / ret");
+    Check(ct[16] == 0xD9 && ct[17] == 0x05 && Rd32(ct + 18) == kFrameDeltaVa && ct[22] == 0xC3, "car ticks", "fld dword [frameDelta] / ret");
+    for (const SiteDef& s : kSiteCarTicks) {
+        Check(memcmp(s.bytes, ct + 16, 6) == 0, s.name, "the site is the fld the stub replays");
+        Check(s.len == 11 && Rel32To(s.bytes, s.va, 6, kFtolFn), s.name, "followed by call _ftol2");
+    }
+
     printf("%s\n", g_failures ? "STUB CHECKS FAILED" : "all stub checks passed");
     return g_failures ? 1 : 0;
 }

@@ -31,6 +31,13 @@ static const char kDefaultIni[] =
     "; a spiral that ends near 20 frames/s (a guess, the real cause of the lag was found elsewhere). 1..3 = at most that many steps per frame, 0 = the game's own (default).\r\n"
     "; With 1 the physics (cars, props) runs slower than real time when the frame rate is below 60. Changes at once.\r\n"
     "PhysicsSteps=0\r\n"
+    "; Above 120 frames/s (FramePacing=0 and nothing else limits the frames) a frame is shorter than half a physics step, yet the game\r\n"
+    "; gives every frame a whole step of 1/60 s: a car drives frames/60 times too fast, burns fuel faster, and its inner timers stand\r\n"
+    "; still. 1 = such short frames share whole steps as on the console (their time is gathered, a frame gets a step when a whole one\r\n"
+    "; has passed): physics, car control, fuel, odometer, the car's timers and its tyre and engine sound ramps keep real time. Cars\r\n"
+    "; and props then move 60 times per second however many frames are drawn. Frames of a whole step or longer (60 frames/s and below,\r\n"
+    "; FramePacing=1..3) are not touched at all. 0 = as the game does it. Changes at once. Not tested in the game yet.\r\n"
+    "HighFpsPhysics=1\r\n"
     "; 1 = (experimental, not proven to help) when 60 frames in a row are slow (over 30 ms per frame, about 2 seconds; over 60 ms\r\n"
     "; in the 30 frames/s mode FramePacing=2, about 4 seconds), the game's clock and physics are held for 4 frames. It was made for a lag whose cause\r\n"
     "; turned out to be the pad poll (see ThrottleMissingPad). At most once per 20 seconds, written to the log.\r\n"
@@ -465,6 +472,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.autoRecover = (int)GetPrivateProfileIntW(L"Time", L"AutoRecover", 0, ini);
     g_cfg.physicsSteps = (int)GetPrivateProfileIntW(L"Time", L"PhysicsSteps", 0, ini);
     if (g_cfg.physicsSteps < 0 || g_cfg.physicsSteps > 3) g_cfg.physicsSteps = 0;
+    g_cfg.highFpsPhysics = (int)GetPrivateProfileIntW(L"Time", L"HighFpsPhysics", 1, ini);
     g_cfg.pauseInMenu = (int)GetPrivateProfileIntW(L"Time", L"PauseInMenu", 0, ini);
     g_cfg.framePacing = (int)GetPrivateProfileIntW(L"Time", L"FramePacing", 1, ini);
     if (g_cfg.framePacing < 0 || g_cfg.framePacing > 3) g_cfg.framePacing = 0;

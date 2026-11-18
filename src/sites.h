@@ -368,6 +368,72 @@ constexpr uint32_t kResidencyFn = 0x5F19B0, kSetTargetFn = 0x5F1790, kSlotResour
 // scene is not fetched, as the game's own pause does. NxScene::simulate(0) is not a pause: the car kept rolling.
 constexpr SiteDef kSitePhysicsStepCall = {"physics step call", 0x6C6CA7, 5, {0xE8, 0x14, 0x47, 0x02, 0x00}};
 constexpr uint32_t kPhysicsStepFn = 0x6EB3C0;
+// Whole physics steps at a high frame rate (HighFpsPhysics, stepplan.h): a frame shorter than one step of 1/60 s still gets a whole
+// PhysX step from the game, so above 120 frames/s a car is frames/60 times too fast. The plan of a frame is made where the tick
+// (FUN_00401A70) calls the world update FUN_006C5FF0 (THISCALL: ECX = the world, one float argument = the frame delta, ret 4 at
+// 006C706A; these two calls are its only callers, and the code after them uses no value left in EAX/ECX/EDX: the `push ecx` at
+// 00401B75 only makes room for a float). One call of it runs every phase in a row: message 1 (phase 2), message 5 (phase 0Ah),
+// the physics step (phase 0Eh, the call above), message 6 (phase 8).
+constexpr SiteDef kSiteWorldUpdateCalls[2] = {
+    {"world update call (event mode)", 0x401B6E, 5, {0xE8, 0x7D, 0x44, 0x2C, 0x00}},
+    {"world update call", 0x401B9F, 5, {0xE8, 0x4C, 0x44, 0x2C, 0x00}},
+};
+constexpr uint32_t kWorldUpdateFn = 0x6C5FF0;
+// A warm-up of the smaller scenes (20 steps of 0.05 s in place of the normal step, FUN_0040B850) is asked for through a byte: set
+// at 006C6C63 when `FUN_00401300() || event mode` changes (and at 00528FEA and 007262E0), passed to the two calls right after
+// the physics step (`movzx ecx, byte [01481340h]` at 006C6CAC, the same at 006C6CCC) and cleared at 006C6CE7 in the same frame,
+// whether or not a scene was stepped. In a frame without a step the request would be lost, so it is handed to the next frame
+// that has one.
+constexpr SiteDef kSiteWarmUpFlagRead = {"physics warm-up flag read", 0x6C6CAC, 7, {0x0F, 0xB6, 0x0D, 0x40, 0x13, 0x48, 0x01}};
+constexpr uint32_t kPhysicsWarmUpFlagVa = 0x1481340;
+// The car's control, message 5 of its handler FUN_00544AB0: `mov ecx,esi / call FUN_0054AAE0 / jmp` at 00546B51. FUN_0054AAE0
+// (THISCALL: ECX = the car, no stack argument, plain ret at 0054AB13; this is its only caller) jumps to FUN_00555B50 (the player
+// drives), FUN_0055AC30 or FUN_00550F00, which all end in a plain ret. They set the wheel torques as `torque * dt`, push the car
+// down, burn at least 0.1 fuel per call and count ticks with (int)dt: all of it once per call, before the physics step.
+constexpr SiteDef kSiteCarDriveCall = {"car control call", 0x546B53, 5, {0xE8, 0x88, 0x3F, 0x00, 0x00}};
+constexpr uint32_t kCarDriveFn = 0x54AAE0;
+// The car after the physics step, message 6: `mov ecx,esi / call FUN_005502C0` at 0054721E. FUN_005502C0 (THISCALL: ECX = the
+// car, no stack argument, plain ret; this is its only caller) ends in FUN_005577D0, FUN_0055ED50 or FUN_00554070, which copy the
+// position from the PhysX actor into car+58h (4 floats) and store `position - previous position` in car+127Ch (4 floats: 005579FE,
+// 0055EF73, 00554299). That movement is read in the next frame by the odometer and the fuel (00555C60), the sleep check (00557065),
+// the hit effects (0054FA4C) and by FUN_0054A700, the player states' test of whether the car moves (against 2.0).
+constexpr SiteDef kSiteCarAfterStepCall = {"car after-step call", 0x547220, 5, {0xE8, 0x9B, 0x90, 0x00, 0x00}};
+constexpr uint32_t kCarAfterStepFn = 0x5502C0;
+constexpr uint32_t kCarPositionOffset = 0x58, kCarMovementOffset = 0x127C;
+// Tick counters of the car outside its control function: `fld dword [014AFFE0h] / call _ftol2 (0074ED60)`, i.e. (int)dt, which is
+// 0 in every short frame, so they stand still above 120 frames/s. The fld (6 bytes) becomes a call of a stub that loads the steps
+// of the frame's plan, or the frame delta itself when the frame has no plan (BuildCarTicksStub). The 11 bytes are the fld and the
+// call; _ftol2 begins with a compare of its own (`cmp dword [014B26F8h],0`), so it takes nothing from the flags. These ten and the
+// four inside the control functions (00556638, 005571A1, 005571D8, 00551380, which see the delta CarDriveHook sets) are every
+// `fld [frameDelta] / call _ftol2` pair in the car code 00541000..00560000.
+constexpr uint32_t kFtolFn = 0x74ED60;
+constexpr SiteDef kSiteCarTicks[10] = {
+    {"car ticks: car+1314h down (FUN_00558820)", 0x558F11, 11, {0xD9, 0x05, 0xE0, 0xFF, 0x4A, 0x01, 0xE8, 0x44, 0x5E, 0x1F, 0x00}},
+    {"car ticks: car+1314h up (FUN_00558820)", 0x559067, 11, {0xD9, 0x05, 0xE0, 0xFF, 0x4A, 0x01, 0xE8, 0xEE, 0x5C, 0x1F, 0x00}},
+    {"car ticks: car+12F4h, limit 300 (FUN_00558820)", 0x559078, 11, {0xD9, 0x05, 0xE0, 0xFF, 0x4A, 0x01, 0xE8, 0xDD, 0x5C, 0x1F, 0x00}},
+    {"car ticks: car+131Ch after a wreck (FUN_00558820)", 0x5598D6, 11, {0xD9, 0x05, 0xE0, 0xFF, 0x4A, 0x01, 0xE8, 0x7F, 0x54, 0x1F, 0x00}},
+    {"car ticks: car+1208h, limit 50 (FUN_005577D0)", 0x557F9D, 11, {0xD9, 0x05, 0xE0, 0xFF, 0x4A, 0x01, 0xE8, 0xB8, 0x6D, 0x1F, 0x00}},
+    {"car ticks: car+1230h, limit 30 (FUN_005577D0)", 0x557FCD, 11, {0xD9, 0x05, 0xE0, 0xFF, 0x4A, 0x01, 0xE8, 0x88, 0x6D, 0x1F, 0x00}},
+    {"car ticks: car+718h (FUN_00551570)", 0x552B28, 11, {0xD9, 0x05, 0xE0, 0xFF, 0x4A, 0x01, 0xE8, 0x2D, 0xC2, 0x1F, 0x00}},
+    {"car ticks: car+11D0h (FUN_0055B230)", 0x55B400, 11, {0xD9, 0x05, 0xE0, 0xFF, 0x4A, 0x01, 0xE8, 0x55, 0x39, 0x1F, 0x00}},
+    {"car ticks: car+1318h (FUN_0055B230)", 0x55C61D, 11, {0xD9, 0x05, 0xE0, 0xFF, 0x4A, 0x01, 0xE8, 0x38, 0x27, 0x1F, 0x00}},
+    {"car ticks: car+718h (FUN_0055B230)", 0x55C88F, 11, {0xD9, 0x05, 0xE0, 0xFF, 0x4A, 0x01, 0xE8, 0xC6, 0x24, 0x1F, 0x00}},
+};
+// Sound ramps of the car in FUN_0054BFC0, moved by a constant per frame with no frame delta: the tyre squeal (brake sound) goes to
+// its target by 0.05 (`fld qword [00770310h]` at 0054C877: the one load serves the compare and the add or subtract), the engine
+// volume rises by 0.05 (`fadd qword [00770310h]`) and the idle volume falls by 0.01 (`fsub qword [007702D8h]`). The operand
+// (bytes 2..5) is pointed at a double of the mod: the game's constant times the frame's share of a step. Both constants are shared
+// with other code, so they are read, never written. The fall of the engine volume by 0.1 (0054C23B) subtracts a value that is also
+// a threshold for the triggers: it is left as it is.
+constexpr SiteDef kSiteCarRamps[3] = {
+    {"tyre squeal step", 0x54C877, 6, {0xDD, 0x05, 0x10, 0x03, 0x77, 0x00}},
+    {"engine volume rise", 0x54C35B, 6, {0xDC, 0x05, 0x10, 0x03, 0x77, 0x00}},
+    {"idle volume fall", 0x54C336, 6, {0xDC, 0x25, 0xD8, 0x02, 0x77, 0x00}},
+};
+constexpr SiteDef kSiteRampConstants[2] = {
+    {"sound ramp constant 0.05 (double)", 0x770310, 8, {0x00, 0x00, 0x00, 0xA0, 0x99, 0x99, 0xA9, 0x3F}},
+    {"sound ramp constant 0.01 (double)", 0x7702D8, 8, {0x00, 0x00, 0x00, 0x40, 0xE1, 0x7A, 0x84, 0x3F}},
+};
 // Effects with bit 2 of effect+1C0h (muzzle flashes, splashes, hits) take a constant step of 1.0 instead of the frame step:
 // half speed on the console (30 frames/s, step 2) but full speed at the PC's 60 frames/s. Writing 0.5 puts them back at the
 // console's speed. FUN_0071C190 (16 bytes at 0071C211) and its twin FUN_00674F40 (24 bytes at 00674F72, tyre effects).
@@ -468,6 +534,10 @@ constexpr const SiteDef* kAllSites[] = {
     &kSiteResetRefresh, &kSitePresentCall, &kSitePreResetCall, &kSiteAniso1, &kSiteAniso2,
     &kSiteReflectionBias, &kSiteSceneInitCall, &kSitePostInitCall,
     &kSiteStorageH1, &kSiteStorageW1, &kSiteStorageH2, &kSiteStorageW2,
+    &kSiteWorldUpdateCalls[0], &kSiteWorldUpdateCalls[1], &kSiteCarDriveCall, &kSiteCarAfterStepCall, &kSiteCarTicks[0], &kSiteCarTicks[1], &kSiteCarTicks[2],
+    &kSiteCarTicks[3], &kSiteCarTicks[4], &kSiteCarTicks[5], &kSiteCarTicks[6], &kSiteCarTicks[7], &kSiteCarTicks[8], &kSiteCarTicks[9],
+    &kSiteCarRamps[0], &kSiteCarRamps[1], &kSiteCarRamps[2],
+    &kSiteRampConstants[0], &kSiteRampConstants[1], &kSiteWarmUpFlagRead,
     &kOutPresentParams, &kOutDepthH, &kOutDepthW, &kOutFrameBegin1, &kOutFrameBegin2, &kOutPopViewport,
     &kOutHudDepthBind, &kOutViewport1, &kOutViewport2, &kOutViewport3, &kOutReset1, &kOutReset2, &kOutMap1,
     &kOutMap2, &kOutMap3, &kOutMap4, &kFarPlane[0], &kFarPlane[1], &kFarPlane[2], &kFarPlane[3], &kFarPlane[4],
