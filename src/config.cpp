@@ -200,9 +200,6 @@ static const char kDefaultIni[] =
     "ReflectionBiasFix=0\r\n"
     "\r\n"
     "[Language]\r\n"
-    "; Always use the US language slot (the game default). Translations replace the files of that slot, so this\r\n"
-    "; keeps them working whatever language config.cnf says.\r\n"
-    "ForceUsSlot=1\r\n"
     "; Text overlay for translators: put mes_all.json (the translation as the SWERY Localization Tool saves it, DPMsgTool's JSON)\r\n"
     "; and, if you changed it, the tool's glyphmap.json into UltimateFix\\text. The records whose text differs from the loaded\r\n"
     "; MES_ALL.MES are replaced in memory, the game's files stay as they are. Files *.txt with lines \"0x1234 = text\" (same\r\n"
@@ -602,7 +599,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.dpiAware = (int)GetPrivateProfileIntW(L"Display", L"DpiAware", 1, ini);
     g_cfg.scaleToWindow = (int)GetPrivateProfileIntW(L"Display", L"ScaleToWindow", 1, ini);
     g_cfg.displayDebug = (int)GetPrivateProfileIntW(L"Display", L"Debug", 0, ini);
-    g_cfg.forceUsSlot = (int)GetPrivateProfileIntW(L"Language", L"ForceUsSlot", 1, ini);
+    g_cfg.forceUsSlot = 0;  // removed: the game keeps the language of config.cnf (mods replace files whatever the slot); old ini keys are ignored
     g_cfg.textOverlay = (int)GetPrivateProfileIntW(L"Language", L"TextOverlay", 1, ini);
     g_cfg.showMessageId = (int)GetPrivateProfileIntW(L"Language", L"ShowMessageId", 0, ini);
     g_cfg.glyphLog = (int)GetPrivateProfileIntW(L"Language", L"GlyphLog", 0, ini);
