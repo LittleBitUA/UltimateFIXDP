@@ -41,6 +41,7 @@ constexpr u32 kDrawFirst = 0x0045C9F0, kDrawEnd = 0x0045EFCC;  // the drawer's c
 constexpr u32 kMaxFileBytes = 32u << 20;
 constexpr int kMaxTextFiles = 256;
 constexpr int kMaxLogLines = 3000;
+constexpr int kMaxRefusalLines = 1000;  // of them: refused texts listed one by one; the summary and the glyph log need the rest
 
 GlyphMap g_map;
 
@@ -210,6 +211,15 @@ const char* RefusalText(MesError e) {
     }
 }
 
+// Counts a refused text. True while its reason is still to be written: one mistake repeated in thousands of records (a
+// character the glyph map does not have) would otherwise use up loc.log before the summary and the glyph log get a line.
+bool ListRefusal(Build& b) {
+    if (++b.refused <= kMaxRefusalLines) return true;
+    if (b.refused == kMaxRefusalLines + 1)
+        LocLog("text: more than %d texts refused: the rest are counted in the summary below and not listed", kMaxRefusalLines);
+    return false;
+}
+
 // The text of one record, from `where` (a file and a place in it, for the log): encoded into the arena and noted for its
 // id, left out when it says what the loaded record says, or refused with the reason in loc.log.
 void ApplyText(Build& b, const char* where, u32 id, const char* text, const char* textEnd) {
@@ -219,6 +229,7 @@ void ApplyText(Build& b, const char* where, u32 id, const char* text, const char
     MesErrorInfo info = {0, 0, 0, 0};
     const MesError e = MesEncodeFor(b.file, b.spanEnd, id, text, textEnd, g_map, b.icons, g_encoded, g_normalised, &words, &same, &info);
     if (e != kMesOk || (!same && b.arenaUsed + words * 2 > b.arenaCap)) {
+        if (!ListRefusal(b)) return;
         if (e == kMesOk) lstrcpyA(reason, "out of memory for the encoded text");
         else if (e == kMesNoGlyph && info.value2)
             wsprintfA(reason, "the character U+%04X is U+%04X by the glyph map, and that has no cell (the tools' characters are U+0020..7E and U+00A0..FF; "
@@ -227,7 +238,6 @@ void ApplyText(Build& b, const char* where, u32 id, const char* text, const char
             wsprintfA(reason, "the character U+%04X has no cell: it is not in the glyph map and not one of the tools' characters (U+0020..7E, U+00A0..FF); "
                               "a line in text\\glyphmap.txt can give it one", info.value);
         else wsprintfA(reason, RefusalText(e), info.value);
-        ++b.refused;
         // the column means something for the errors of the text itself, which come first in the list
         if (e != kMesOk && e < kMesTooLong) LocLog("text: %s, record %u (0x%04X), column %u of the text: %s; the record stays as loaded", where, id, id, info.column + 1, reason);
         else LocLog("text: %s, record %u (0x%04X): %s; the record stays as loaded", where, id, id, reason);
@@ -266,11 +276,10 @@ void ApplyFile(Build& b, const wchar_t* name, const u8* data, u32 size) {
         u32 id = 0;
         const MesLine kind = MesParseLine(line, lineEnd, &id, &text, &textEnd);
         if (kind == kLineEntry) {
-            char where[MAX_PATH + 32];
+            char where[1040];  // wsprintf writes 1024 characters at most; a name can take two bytes a character in some code pages
             wsprintfA(where, "%S line %d", name, lineNo);
             ApplyText(b, where, id, text, textEnd);
-        } else if (kind == kLineBad) {
-            ++b.refused;
+        } else if (kind == kLineBad && ListRefusal(b)) {
             LocLog("text: %S line %d is not \"0x1234 = text\" (a comment starts with ;); line skipped", name, lineNo);
         }
     }
@@ -335,12 +344,12 @@ void ApplyJson(Build& b, const u8* data, u32 size) {
             if (!(r.have & kJsonText)) {
                 ++noText;
             } else if (r.textLen > kJsonTextCap) {
-                ++b.refused;
-                LocLog("text: mes_all.json, record %u (0x%04X): the text is longer than %u bytes; the record stays as loaded", index, index, kJsonTextCap);
+                if (ListRefusal(b))
+                    LocLog("text: mes_all.json, record %u (0x%04X): the text is longer than %u bytes; the record stays as loaded", index, index, kJsonTextCap);
             } else if (MesOriginalOf(b.file, b.spanEnd, index, &orig, &info) == kMesOk && !MesJsonHeaderMatches(r, orig)) {
-                ++b.refused;
-                LocLog("text: mes_all.json, record %u (0x%04X): Id1/Flag1/Flag2 (%d, %d, %d) are not the header words of the loaded record (%u, %u, %u); "
-                       "the record stays as loaded", index, index, r.id1, r.flag1, r.flag2, orig.w0, orig.w2, orig.w3);
+                if (ListRefusal(b))
+                    LocLog("text: mes_all.json, record %u (0x%04X): Id1/Flag1/Flag2 (%d, %d, %d) are not the header words of the loaded record (%u, %u, %u); "
+                           "the record stays as loaded", index, index, r.id1, r.flag1, r.flag2, orig.w0, orig.w2, orig.w3);
             } else {
                 ApplyText(b, "mes_all.json", index, text, text + r.textLen);
             }

@@ -148,6 +148,8 @@ batch: message 0x0456: more than 768 glyph quads in one draw, the rest is not dr
   it as an item name. Write a single space for a blank one.
 - An icon number the loaded file never uses; a colour above 255; a size outside 8..128.
 - A refused record stays as the game loaded it. Nothing is ever written to the game's files.
+- `loc.log` lists the first 1000 refused texts with their reasons; further ones are only counted (the summary line has the
+  number). Fix the cause the list shows (usually one character missing from the glyph map) and start again.
 
 ## Good to know
 
@@ -278,6 +280,8 @@ JSON, який DPMsgTool робить із того самого `.mes` (`Origin
   бере його як назву предмета. Для порожнього рядка напишіть один пробіл.
 - Номер піктограми, якого немає в завантаженому файлі; колір понад 255; розмір поза 8..128.
 - Відхилений запис лишається таким, яким його завантажила гра. У файли гри мод нічого не пише.
+- У `loc.log` з причинами перелічено перші 1000 відхилених текстів; решту лише пораховано (число є в підсумковому рядку).
+  Усуньте причину, яку видно зі списку (зазвичай це символ, якого немає в мапі гліфів), і запустіть гру знову.
 
 ### Варто знати
 
