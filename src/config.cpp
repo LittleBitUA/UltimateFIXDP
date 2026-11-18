@@ -610,6 +610,10 @@ void LoadConfig(const wchar_t* ini) {
     if (g_cfg.farClass3 < 5000) g_cfg.farClass3 = 5000;
     if (g_cfg.farClass4 < 1000) g_cfg.farClass4 = 1000;
     if (g_cfg.farClass5 < 500) g_cfg.farClass5 = 500;
+    // Nor above the loaded area (about 10000 around the player): more changes nothing.
+    if (g_cfg.farClass3 > 10000) g_cfg.farClass3 = 10000;
+    if (g_cfg.farClass4 > 5000) g_cfg.farClass4 = 5000;
+    if (g_cfg.farClass5 > 10000) g_cfg.farClass5 = 10000;
     g_cfg.sonyLayout = (int)GetPrivateProfileIntW(L"Input", L"SonyLayout", 1, ini);
     g_cfg.adaptiveTriggers = (int)GetPrivateProfileIntW(L"Input", L"AdaptiveTriggers", 1, ini);
     g_cfg.adaptiveStrength = (int)GetPrivateProfileIntW(L"Input", L"AdaptiveStrength", 100, ini);
