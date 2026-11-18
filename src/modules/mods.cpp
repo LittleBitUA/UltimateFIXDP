@@ -4,6 +4,8 @@
 //   text\        a translation or text fix: mes_all.json and glyphmap.json of the SWERY Localization Tool, *.txt corrections
 //                (the text overlay reads them, text_overlay.cpp)
 //   textures\    replacement textures, <hash>.dds or <hash>.png (texture_override.cpp)
+//   files\       game files by name, laid out as the game's paths (files\UPDATA\MESSAGE\FONTWIDE.XPC), or a texture of an
+//                XPC as NAME.dds (game_files.cpp)
 //
 // UltimateFix\mods\mods.txt (UTF-8, written by the F10 page) keeps the order and which mods are on: one line per mod, "+folder"
 // on, "-folder" off, the first line wins over the ones below it. A folder not listed there yet is added at the end, switched on.
@@ -92,6 +94,31 @@ int CountFiles(const wchar_t* dir, const wchar_t* mask) {
     return n;
 }
 
+int CountTree(const wchar_t* dir, int depth) {
+    wchar_t pattern[MAX_PATH + 16];
+    if (lstrlenW(dir) + 2 >= MAX_PATH) return 0;
+    lstrcpyW(pattern, dir);
+    lstrcatW(pattern, L"*");
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW(pattern, &fd);
+    if (h == INVALID_HANDLE_VALUE) return 0;
+    int n = 0;
+    do {
+        if (fd.cFileName[0] == L'.') continue;
+        if (!(fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+            ++n;
+        } else if (depth < 8 && lstrlenW(dir) + lstrlenW(fd.cFileName) + 2 < MAX_PATH) {
+            wchar_t sub[MAX_PATH + 16];
+            lstrcpyW(sub, dir);
+            lstrcatW(sub, fd.cFileName);
+            lstrcatW(sub, L"\\");
+            n += CountTree(sub, depth + 1);
+        }
+    } while (FindNextFileW(h, &fd));
+    FindClose(h);
+    return n;
+}
+
 void Describe(ModInfo& m) {
     wchar_t base[MAX_PATH], path[MAX_PATH + 16];
     ModsDir(base);
@@ -124,6 +151,9 @@ void Describe(ModInfo& m) {
     lstrcpyW(path, base);
     lstrcatW(path, L"textures\\");
     m.textures = Exists(path) ? CountFiles(path, L"*.dds") + CountFiles(path, L"*.png") : 0;
+    lstrcpyW(path, base);
+    lstrcatW(path, L"files\\");
+    m.files = Exists(path) ? CountTree(path, 0) : 0;
 }
 
 int FindMod(const wchar_t* folder) {
@@ -244,8 +274,8 @@ void ScanMods() {
     Log("mods: %d found in UltimateFix\\mods, %d on%s", g_count, on, tooMany ? " (only the first 32 are used)" : "");
     for (int i = 0; i < g_count; ++i) {
         const ModInfo& m = g_mods[i];
-        Log("mods:   %d. %s %S%s%S: text %s, %d texture files", i + 1, m.enabled ? "on " : "off", m.name, m.version[0] ? " " : "", m.version,
-            m.textJson ? "mes_all.json" : (m.textFiles ? "corrections" : "none"), m.textures);
+        Log("mods:   %d. %s %S%s%S: text %s, %d texture files, %d game files", i + 1, m.enabled ? "on " : "off", m.name, m.version[0] ? " " : "",
+            m.version, m.textJson ? "mes_all.json" : (m.textFiles ? "corrections" : "none"), m.textures, m.files);
     }
     if (tooLong) Log("mods: a folder with a name of 64 or more characters was skipped");
     if (texts > 1) Log("mods: %d mods carry text: only the first of them (%S) is used, text is not mixed from several mods", texts, g_mods[g_textMod].name);
@@ -295,6 +325,18 @@ int ModTextureDirs(wchar_t (*out)[MAX_PATH], int max) {
         ModsDir(out[n]);
         lstrcatW(out[n], g_mods[i].folder);
         lstrcatW(out[n], L"\\textures\\");
+        ++n;
+    }
+    return n;
+}
+
+int ModFileDirs(wchar_t (*out)[MAX_PATH], int max) {
+    int n = 0;
+    for (int i = 0; i < g_count && n < max; ++i) {
+        if (!g_mods[i].enabled || !g_mods[i].files) continue;
+        ModsDir(out[n]);
+        lstrcatW(out[n], g_mods[i].folder);
+        lstrcatW(out[n], L"\\files\\");
         ++n;
     }
     return n;

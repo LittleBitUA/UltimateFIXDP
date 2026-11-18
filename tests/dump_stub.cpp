@@ -311,6 +311,29 @@ int main(int argc, char** argv) {
         Check(kSiteNanTrap.bytes[4] == 0xEB && kSiteNanTrap.bytes[5] == 0xFE, "nan trap", "the replaced jmp $");
     }
 
+    // game files from mods: the loader branch after the CAddon lookup
+    {
+        uint8_t gf[64];
+        const uint32_t gfVa = 0xC0000300, gfWorker = 0xC0001300;
+        size_t ngf = BuildGameFileHook(gf, gfVa, gfWorker, kSiteGameFileAddon.va, kSiteGameFileArchive.va, kSiteGameFileHave.va);
+        printf("game file hook %zu bytes\n", ngf);
+        Check(ngf == 53, "game files", "size 53 (the module allocates 64)");
+        Check(gf[0] == 0x60 && gf[26] == 0x61, "game files", "pushad / popad");
+        Check(gf[1] == 0x8D && gf[2] == 0x45 && gf[3] == 0xEC && gf[4] == 0x50, "game files", "push &size [ebp-14h]");
+        Check(gf[5] == 0xFF && gf[7] == 0xC8 && gf[8] == 0xFF && gf[10] == 0x08 && gf[11] == 0xFF && gf[13] == 0xC0, "game files", "push final id, requested id, CAddon path");
+        Check(Rel32To(gf, gfVa, 14, gfWorker), "game files", "call worker");
+        Check(gf[19] == 0x83 && gf[21] == 0x10 && gf[22] == 0x89 && gf[25] == 0x1C, "game files", "add esp,10h / eax into the pushad frame");
+        Check(gf[27] == 0x83 && gf[28] == 0x7D && gf[29] == 0xC0 && gf[30] == 0x00, "game files", "cmp [ebp-40h],0 as the original");
+        Check(Rel32To(gf, gfVa, 31, kSiteGameFileAddon.va), "game files", "jne to the CAddon read");
+        Check(gf[37] == 0x85 && gf[38] == 0xC0 && Rel32To(gf, gfVa, 39, kSiteGameFileArchive.va), "game files", "test eax / jz to the archive branch");
+        Check(gf[45] == 0x89 && gf[46] == 0x45 && gf[47] == 0xE4, "game files", "data into [ebp-1Ch]");
+        Check(Rel32To(gf, gfVa, 48, kSiteGameFileHave.va), "game files", "jmp to the common check");
+        // the original: je goes to the archive branch, the next instruction is the CAddon read, which stores at [ebp-1Ch] and jumps to the check
+        Check(kSiteGameFileBranch.va + 6 + (int8_t)kSiteGameFileBranch.bytes[5] == kSiteGameFileArchive.va, "game files", "original je target");
+        Check(kSiteGameFileBranch.va + 6 == kSiteGameFileAddon.va, "game files", "CAddon read follows the branch");
+        Check(kSiteGameFileStore.va + 8 + Rd32(kSiteGameFileStore.bytes + 4) == kSiteGameFileHave.va, "game files", "the CAddon read goes to the common check");
+    }
+
     printf("%s\n", g_failures ? "STUB CHECKS FAILED" : "all stub checks passed");
     return g_failures ? 1 : 0;
 }

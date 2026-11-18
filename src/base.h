@@ -290,6 +290,7 @@ struct ModInfo {
     bool textJson;   // text\mes_all.json
     int textFiles;   // text\*.txt
     int textures;    // textures\*.dds and *.png
+    int files;       // files\ (game files by name, game_files.cpp), counted in all subfolders
 };
 void ScanMods();                     // once at start, before the text and texture overlays
 int ModCount();
@@ -301,6 +302,10 @@ bool ModsChanged();                  // differs from what this run started with:
 void ModTextDir(wchar_t* out);       // the text folder the overlay reads, with a trailing backslash (MAX_PATH)
 int ModTextureDirs(wchar_t (*out)[MAX_PATH], int max);  // texture folders of the mods that are on, first wins
 void OpenModsFolder();
+int ModFileDirs(wchar_t (*out)[MAX_PATH], int max);     // files\ folders of the mods that are on, first wins
+bool InstallGameFiles();                // game_files.cpp: game files from the mods' files\ folders, after ScanMods
+bool GameFileTextures();                // a mod replaces textures of an XPC by name (the texture hook is needed)
+bool GameFileNextTexture(wchar_t* path);  // the file for the next texture the loader creates, if a mod has one (MAX_PATH)
 void GameFovAfterFrame();  // freecam.cpp: gives the game its own field of view back after a frame was shown
 void WaypointFrame(void* device);  // once per frame from the Present hook: the waypoint keys and the state its drawing needs
 bool WaypointToObjective();        // the waypoint goes to the game's current objective (the next one when it stands on one already)

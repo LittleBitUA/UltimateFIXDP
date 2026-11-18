@@ -831,10 +831,24 @@ struct TailDef {
 // The NaN trap of the angle normalisation FUN_00409E90 (323 calls in 158 functions): after `call __isnan` the code is
 // test eax,eax / jz 409EA8 / jmp $ (EB FE), so a NaN angle hangs the game for good. docs/crashes/03_nan_spin_loops.md.
 constexpr SiteDef kSiteNanTrap = {"angle NaN trap", 0x409EA2, 6, {0x85, 0xC0, 0x74, 0x02, 0xEB, 0xFE}};
+
+// Game files from mods (game_files.cpp). In the loader FUN_006B33F0 (LoadThread only), right after the CAddon lookup: [ebp+8]
+// the requested id, [ebp-38h] the id after the language redirect, [ebp-40h] the CAddon path or 0, [ebp-14h] the size out,
+// [ebp-1Ch] the data. The branch `cmp [ebp-40h],0 / je 006B3502` is replaced: with no CAddon path our worker may hand over the
+// data of a file from a mod, stored where both readers store theirs, then the code goes on at the common check 006B367F.
+constexpr SiteDef kSiteGameFileBranch = {"loader: CAddon branch", 0x6B34E0, 6, {0x83, 0x7D, 0xC0, 0x00, 0x74, 0x1C}};
+constexpr SiteDef kSiteGameFileAddon = {"loader: CAddon read", 0x6B34E6, 3, {0x8B, 0x45, 0xBC}};
+constexpr SiteDef kSiteGameFileArchive = {"loader: archive or language branch", 0x6B3502, 6, {0x8B, 0x45, 0xC8, 0x3B, 0x45, 0x08}};
+constexpr SiteDef kSiteGameFileStore = {"loader: CAddon data store", 0x6B34FA, 8, {0x89, 0x45, 0xE4, 0xE9, 0x7D, 0x01, 0x00, 0x00}};
+constexpr SiteDef kSiteGameFileHave = {"loader: common data check", 0x6B367F, 6, {0x83, 0x7D, 0xE4, 0x00, 0x75, 0x08}};
+constexpr uint32_t kGameMalloc = 0x73A8DC;        // cdecl malloc(size) of the game's C runtime; the loader frees slot data with free
+constexpr uint32_t kResourceIndexVa = 0x8D8D78;   // 18340 records of 20h bytes, +1Ch the VA of the path (upper case, '/')
+constexpr int kResourceCount = 18340;
 constexpr uint32_t kNanTrapNumber = 0x409EA8;
 
 constexpr const SiteDef* kAllSites[] = {
     &kSiteNanTrap,
+    &kSiteGameFileBranch, &kSiteGameFileAddon, &kSiteGameFileArchive, &kSiteGameFileStore, &kSiteGameFileHave,
     &kSiteBeaconCall, &kSiteBeaconDraw, &kSiteBeaconMove, &kStorySites[0], &kStorySites[1], &kStorySites[2], &kStorySites[3], &kStorySites[4],
     &kStorySites[5], &kStorySites[6], &kStorySites[7], &kStorySites[8], &kStorySites[9], &kStorySites[10],
     &kSiteZeroDelta, &kSiteHouseListFormat, &kSiteExtraJoyPoll, &kSiteSkipIntro,

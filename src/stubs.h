@@ -554,4 +554,31 @@ inline size_t BuildNanTrapGuard(uint8_t* out, uint32_t va, uint32_t workerVa, ui
     return (size_t)(p - out);
 }
 
+// Replaces the 6 bytes at 006B34E0 (kSiteGameFileBranch). worker(addonPath, requestedId, finalId, &size) runs for every load;
+// with a CAddon path it returns 0 and the game reads that path as before; otherwise it may return the data of a file from a mod
+// (or 0: the archive or language branch as before).
+inline size_t BuildGameFileHook(uint8_t* out, uint32_t va, uint32_t workerVa, uint32_t addonVa, uint32_t archiveVa, uint32_t haveVa) {
+    uint8_t* p = out;
+    *p++ = 0x60;                                         // pushad
+    *p++ = 0x8D; *p++ = 0x45; *p++ = 0xEC;               // lea eax, [ebp-14h]
+    *p++ = 0x50;                                         // push eax
+    *p++ = 0xFF; *p++ = 0x75; *p++ = 0xC8;               // push dword [ebp-38h]
+    *p++ = 0xFF; *p++ = 0x75; *p++ = 0x08;               // push dword [ebp+8]
+    *p++ = 0xFF; *p++ = 0x75; *p++ = 0xC0;               // push dword [ebp-40h]
+    *p++ = 0xE8;
+    StubPut32(p, workerVa - (va + (uint32_t)(p - out) + 4));  // call worker
+    *p++ = 0x83; *p++ = 0xC4; *p++ = 0x10;               // add esp, 10h
+    *p++ = 0x89; *p++ = 0x44; *p++ = 0x24; *p++ = 0x1C;  // mov [esp+1Ch], eax (eax of the pushad frame)
+    *p++ = 0x61;                                         // popad
+    *p++ = 0x83; *p++ = 0x7D; *p++ = 0xC0; *p++ = 0x00;  // cmp dword [ebp-40h], 0
+    *p++ = 0x0F; *p++ = 0x85;                            // jne addon (rel32)
+    StubPut32(p, addonVa - (va + (uint32_t)(p - out) + 4));
+    *p++ = 0x85; *p++ = 0xC0;                            // test eax, eax
+    *p++ = 0x0F; *p++ = 0x84;                            // jz archive (rel32)
+    StubPut32(p, archiveVa - (va + (uint32_t)(p - out) + 4));
+    *p++ = 0x89; *p++ = 0x45; *p++ = 0xE4;               // mov [ebp-1Ch], eax
+    StubJmp(p, out, va, haveVa);                         // jmp have
+    return (size_t)(p - out);
+}
+
 }  // namespace ufx

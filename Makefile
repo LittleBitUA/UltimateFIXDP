@@ -20,7 +20,7 @@ LIBS     := -lkernel32 -luser32 -lgdi32 -lgcc
 SRC      += src/ui/xbox_look.cpp
 SRC      += src/modules/quick_turn.cpp
 SRC      += src/modules/npc_map.cpp src/ui/residents.cpp
-SRC      += src/modules/mods.cpp src/ui/mods_page.cpp
+SRC      += src/modules/mods.cpp src/ui/mods_page.cpp src/modules/game_files.cpp
 SRC      += src/modules/stability.cpp
 
 all: $(OUT)/X3DAudio1_7.dll $(OUT)/ufx_laa.exe $(OUT)/ufx_play.exe

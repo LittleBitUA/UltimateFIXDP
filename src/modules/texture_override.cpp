@@ -151,6 +151,18 @@ void NoteAtlas(void* tex) {
 HRESULT WINAPI H_FromMemoryEx(void* dev, const void* data, UINT size, UINT w, UINT h, UINT mips, DWORD usage, DWORD fmt,
                               DWORD pool, DWORD filter, DWORD mipFilter, DWORD colorKey, void* info, void* palette,
                               void** out) {
+    if (data && size != 0x7FFFFFFFu) {  // a texture of an XPC by name from a mod (game_files.cpp), exact size from the file
+        wchar_t named[MAX_PATH + 16];
+        if (GameFileNextTexture(named)) {
+            HRESULT hr = g_fromFile(dev, named, 0xFFFFFFFEu /*D3DX_DEFAULT_NONPOW2*/, 0xFFFFFFFEu, mips, usage, fmt, pool, filter,
+                                    mipFilter, colorKey, info, palette, out);
+            if (hr >= 0) {
+                Log("textures: %S used by name", named);
+                return hr;
+            }
+            Log("textures: %S could not be loaded (%08X), the original kept", named, (u32)hr);
+        }
+    }
     UINT hashed = size == 0x7FFFFFFFu ? (w * h / 2) : size;
     const bool dump = g_cfg.dumpTextures && size != 0x7FFFFFFFu;
     // one pass over the data, and only when something needs the hash (a pack or the dump)
@@ -221,7 +233,7 @@ bool InstallTextureOverride() {
     } else {
         Log("textures: TextureOverride=0, replacement packs are not used");
     }
-    if (g_count == 0 && !g_cfg.dumpTextures && !g_cfg.glyphTheme) {
+    if (g_count == 0 && !g_cfg.dumpTextures && !g_cfg.glyphTheme && !GameFileTextures()) {
         if (g_cfg.textureOverride)
             Log("textures: no replacement pack found (UltimateFix\\textures\\override, dpfix\\tex_override), not hooked");
         return false;

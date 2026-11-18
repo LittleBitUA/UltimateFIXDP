@@ -38,7 +38,7 @@ void Fitted(const wchar_t* text, float x, float y, u32 color, int px, float maxW
 
 // What a mod brings, in one line.
 void Contents(const ModInfo& m, int index, wchar_t* out) {
-    wchar_t text[120] = L"", tex[60] = L"";
+    wchar_t text[120] = L"", tex[60] = L"", files[60] = L"";
     if (m.textJson || m.textFiles) {
         const int source = ModTextSource();
         const wchar_t* what = m.textJson ? T(L"текст (mes_all.json)", L"text (mes_all.json)") : T(L"виправлення тексту", L"text corrections");
@@ -47,11 +47,12 @@ void Contents(const ModInfo& m, int index, wchar_t* out) {
         else wsprintfW(text, T(L"%s, не діє: текст береться з першого мода з текстом", L"%s, not used: text comes from the first mod with text"), what);
     }
     if (m.textures) wsprintfW(tex, T(L"текстури: %d", L"textures: %d"), m.textures);
-    if (!text[0] && !tex[0]) {
-        lstrcpyW(out, T(L"немає ні text\\, ні textures\\ (нічого не підміняє)", L"no text\\ or textures\\ (replaces nothing)"));
+    if (m.files) wsprintfW(files, T(L"файли гри: %d", L"game files: %d"), m.files);
+    if (!text[0] && !tex[0] && !files[0]) {
+        lstrcpyW(out, T(L"немає ні text\\, ні textures\\, ні files\\ (нічого не підміняє)", L"no text\\, textures\\ or files\\ (replaces nothing)"));
         return;
     }
-    wsprintfW(out, L"%s%s%s", text, text[0] && tex[0] ? L" · " : L"", tex);
+    wsprintfW(out, L"%s%s%s%s%s", text, text[0] && tex[0] ? L" · " : L"", tex, (text[0] || tex[0]) && files[0] ? L" · " : L"", files);
 }
 
 void Switch(float x, float y, bool on) {
@@ -129,12 +130,14 @@ void ModsPage(float left, float top, float right, float bottom) {
         Fitted(T(L"  text\\       mes_all.json і glyphmap.json із SWERY Localization Tool (переклад)", L"  text\\       mes_all.json and glyphmap.json from the SWERY Localization Tool (a translation)"),
                left, y + 24, kSoft, 15, right - left);
         Fitted(T(L"  textures\\   заміни текстур <хеш>.dds або .png", L"  textures\\   texture replacements <hash>.dds or .png"), left, y + 46, kSoft, 15, right - left);
-        Fitted(T(L"  mod.ini     Name=, Author=, Version=, Description= (необов'язково, UTF-8)", L"  mod.ini     Name=, Author=, Version=, Description= (optional, UTF-8)"),
+        Fitted(T(L"  files\\      файли гри за іменем: FONTWIDE.XPC або FONTWIDE.DDS, або повний шлях UPDATA\\...", L"  files\\      game files by name: FONTWIDE.XPC or FONTWIDE.DDS, or the full path UPDATA\\..."),
                left, y + 68, kSoft, 15, right - left);
+        Fitted(T(L"  mod.ini     Name=, Author=, Version=, Description= (необов'язково, UTF-8)", L"  mod.ini     Name=, Author=, Version=, Description= (optional, UTF-8)"),
+               left, y + 90, kSoft, 15, right - left);
         Fitted(T(L"Хеші текстур: DumpTextures=1 у [Debug] UltimateFix.ini, гра скине всі текстури в UltimateFix\\textures\\dump\\ з готовими назвами",
                  L"Texture hashes: DumpTextures=1 in [Debug] of UltimateFix.ini dumps every texture to UltimateFix\\textures\\dump\\ named by its hash"),
-               left, y + 96, kDim, 13, right - left);
-        y += 124;
+               left, y + 118, kDim, 13, right - left);
+        y += 146;
     }
     FillRect(left, y - 6, right - left, 1, kLine);
 
