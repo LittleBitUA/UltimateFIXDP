@@ -905,7 +905,10 @@ const char kHbaoSource[] =
     "    for (int j = 1; j <= 4; ++j) {\n"
     "      float t = (j - jit) * 0.25 * c0.w;\n"
     "      float2 o = dir * t;\n"
-    "      float ds = Dep(uv + o * c0.xy);\n"
+    "      float2 q = uv + o * c0.xy;\n"
+    // beyond the frame the texture clamps to its edge row: those samples are not geometry and drew lines along the edges
+    "      if (q.x < 0.0 || q.x > 1.0 || q.y < 0.0 || q.y > 1.0) continue;\n"
+    "      float ds = Dep(q);\n"
     "      float dz = dc + dot(g, o) - ds - (1.0 + dc * 0.002);\n"   // above the tangent plane; 1 unit for the packing's steps
     "      float lat = t * dc * c1.z;\n"
     "      float len2 = dz * dz + lat * lat;\n"
@@ -933,6 +936,7 @@ const char kAoBlurSource[] =
     "  float sum = 0.0, wsum = 0.0;\n"
     "  for (int k = -4; k <= 4; ++k) {\n"
     "    float2 q = uv + c2.xy * (k * 1.5);\n"
+    "    if (q.x < 0.0 || q.x > 1.0 || q.y < 0.0 || q.y > 1.0) continue;\n"
     "    float a = tex2Dlod(s0, float4(q, 0, 0)).r;\n"
     "    float d = Dep(q);\n"
     "    float w = exp(-k * k * 0.125) * saturate(1.0 - abs(d - dc) / (dc * 0.03 + 2.0));\n"

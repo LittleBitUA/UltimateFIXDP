@@ -112,6 +112,48 @@ const ActionName kActions[] = {
     {"front", L"на робочому місці", L"at the front desk"},   // the hotel's and the hospital's front rooms
     {"bring", L"несе обід", L"bringing lunch"},             // "bring.lunch"
     {"fusagikomu", L"сумує", L"brooding"},                  // Japanese: to mope, to be downcast
+    // every other first word the timetables of DPSERIAL use (a few are typos of idling in the data)
+    {"iding", L"без діла", L"idling"}, {"idring", L"без діла", L"idling"}, {"idirng", L"без діла", L"idling"}, {"ilding", L"без діла", L"idling"},
+    {"pc", L"за комп'ютером", L"at the computer"},
+    {"waiting", L"чекає", L"waiting"},
+    {"bike", L"на велосипеді", L"cycling"},
+    {"bar", L"у барі", L"at the bar"},
+    {"tv", L"дивиться телевізор", L"watching TV"},
+    {"tvoff", L"вимикає телевізор", L"turning the TV off"},
+    {"talk", L"розмовляє", L"talking"},
+    {"drinktalk", L"п'є й розмовляє", L"drinking and talking"},
+    {"byebye", L"прощається", L"saying goodbye"},
+    {"moptoru", L"бере швабру", L"taking the mop"},          // Japanese: mop wo toru
+    {"mopoku", L"ставить швабру", L"putting the mop away"},  // mop wo oku
+    {"drink", L"п'є", L"drinking"},
+    {"absent", L"відсутній", L"away"},
+    {"darts", L"дартс", L"darts"},
+    {"milk", L"молоко", L"milk"},
+    {"pay", L"розраховується", L"paying"},
+    {"meet", L"зустріч", L"meeting someone"},
+    {"meeting", L"нарада", L"a meeting"},
+    {"care", L"доглядає", L"caring"},
+    {"cry", L"плаче", L"crying"},
+    {"wakeup", L"прокидається", L"waking up"},
+    {"kaiten", L"відкриває заклад", L"opening up"},          // Japanese: opening the shop
+    {"watching", L"дивиться", L"watching"},
+    {"geki", L"вистава", L"a play"},                         // Japanese: drama, a play
+    {"leave", L"іде", L"leaving"},
+    {"teaching", L"навчає", L"teaching"},
+    {"dress", L"одягається", L"dressing"},
+    {"makeup", L"макіяж", L"make-up"},
+    {"sit", L"сидить", L"sitting"},
+    {"miokuri", L"проводжає", L"seeing someone off"},        // Japanese
+    {"smoking", L"курить", L"smoking"},
+    {"kabemotare", L"спирається на стіну", L"leaning on the wall"},  // Japanese
+    {"dance", L"танцює", L"dancing"},
+    {"sekkyaku", L"обслуговує відвідувачів", L"serving customers"},  // Japanese
+    {"kyuuji", L"обслуговує столики", L"waiting tables"},           // Japanese
+    {"play", L"грає", L"playing"},
+    {"piano", L"грає на піаніно", L"playing the piano"},
+    {"coffee", L"п'є каву", L"having coffee"},
+    {"carry", L"несе", L"carrying"},
+    {"relaxr", L"відпочиває", L"relaxing"},
 };
 
 // Room names of the timetables (the word between the room number and the node), as a player would say them.
@@ -135,6 +177,40 @@ const RoomName kRooms[] = {
     {"garage", L"гараж", L"garage"},
     {"yard", L"двір", L"yard"},
     {"prison", L"камера", L"cell"},
+    {"livingdining", L"вітальня", L"living and dining room"},
+    {"dining", L"їдальня", L"dining room"},
+    {"syokudou", L"їдальня", L"dining room"},   // Japanese
+    {"parking", L"стоянка", L"car park"},
+    {"praking", L"стоянка", L"car park"},       // so in the data
+    {"partyroom", L"зала прийомів", L"party room"},
+    {"meetingroom", L"зала нарад", L"meeting room"},
+    {"secretroom", L"таємна кімната", L"secret room"},
+    {"entrance", L"вхід", L"entrance"},
+    {"robby", L"вестибюль", L"lobby"},           // so in the data
+    {"fishingspot", L"місце риболовлі", L"fishing spot"},
+    {"backyard", L"задній двір", L"back yard"},
+    {"bathroom", L"ванна", L"bathroom"},
+    {"workarea", L"робоче місце", L"work area"},
+    {"private", L"приватна кімната", L"private room"},
+    {"morgue", L"морг", L"morgue"},
+    {"treatmentroom", L"процедурна", L"treatment room"},
+    {"computerroom", L"комп'ютерна", L"computer room"},
+    {"walkingtrail", L"стежка", L"walking trail"},
+    {"forest", L"ліс", L"forest"},
+    {"park", L"парк", L"park"},
+    {"tento", L"намет", L"tent"},               // Japanese
+    {"gakuya", L"гримерка", L"dressing room"},  // Japanese
+    {"parlor", L"салон", L"parlour"},
+    {"diner", L"закусочна", L"diner"},
+    {"sheriff", L"відділок шерифа", L"sheriff's office"},
+    {"police", L"поліція", L"police"},
+    {"georgesroom", L"кімната George", L"George's room"},
+    {"george", L"у George", L"at George's"},
+    {"carrollsroom", L"кімната Carol", L"Carol's room"},
+    {"michelsroom", L"кімната Michael", L"Michael's room"},
+    {"beckysroom", L"кімната Becky", L"Becky's room"},
+    {"harrysroom", L"кімната Harry", L"Harry's room"},
+    {"sigourney", L"місце Sigourney", L"Sigourney's spot"},
 };
 
 bool English() { return g_cfg.language == 1; }
@@ -157,6 +233,10 @@ void Widen(const char* from, wchar_t* to, int capacity) {
 }
 
 void ActionText(const char* action, wchar_t* out, int capacity) {
+    if (FirstWordIs(action, "get") && action[3] == '.' && action[4] == 'l') {  // get.lunch, get.lunch2
+        lstrcpynW(out, English() ? L"fetching lunch" : L"бере обід", capacity);
+        return;
+    }
     for (const ActionName& a : kActions) {
         if (!FirstWordIs(action, a.word)) continue;
         lstrcpynW(out, English() ? a.en : a.uk, capacity);
