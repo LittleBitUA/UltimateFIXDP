@@ -338,9 +338,6 @@ Item g_pageMapItems[] = {
      {L"З яким масштабом відкривається мапа.", L"The zoom the map opens with."}, NOTR},
     {{L"Усі плитки мапи", L"All map tiles"}, &g_cfg.mapFix, kBool, 0, 1, 1, true, L"Map", L"Enabled", nullptr, nullptr,
      {L"Малює всі 64 плитки одразу й тримає їх у пам'яті (близько 100 МБ). Вимкнення повертає мапу гри.", L"Draws all 64 tiles at once and keeps them in memory (about 100 MB). Turning it off restores the game's map."}, NOTR},
-    {{L"Жителі на мапі паузи", L"Residents on the pause map"}, &g_cfg.showResidents, kBool, 0, 1, 1, false, L"Map", L"ShowResidents", nullptr, nullptr,
-     {L"Жителів міста, які зараз є поруч у грі, позначено на мапі паузи кружечком «o» з іменем (шрифтом гри). Мод лише читає дані гри й нічого в ній не змінює. Працює надворі в місті, коли ввімкнено «Мітка (F7)» і «Усі плитки мапи», а мапа не обертається (північ або південь угорі). Типово вимкнено: це показує більше, ніж мапа самої гри. Де хто має бути за розкладом, видно в розділі «Жителі». Змінюється одразу.",
-      L"The residents of the town the game has around you are marked on the pause map with an 'o' and their name (in the game's font). The mod only reads the game's data and changes nothing in it. Works outdoors in the town, with 'Waypoint (F7)' and 'All map tiles' on and a map that does not turn (north or south up). Off by default: it shows more than the game's own map. Where everyone should be by the timetable is on the 'Residents' page. Changes at once."}, NOTR},
     RESET_ITEM
 };
 Item g_pageInput[] = {

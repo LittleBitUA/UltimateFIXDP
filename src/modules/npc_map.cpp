@@ -20,8 +20,6 @@
 #include "../sites.h"
 
 extern "C" {
-extern volatile int g_mapOrient;  // map_fix.cpp: 1 north up, 2 south up
-extern volatile int g_mapFixInstalled;
 }
 
 namespace ufx {
@@ -77,16 +75,6 @@ T Rd(u32 address) { return *(volatile T*)(uintptr_t)address; }
 
 int S8(u32 address) { return Rd<signed char>(address); }
 
-// True for a resident (CNpcNormal or a class made from it). The game asks the object through the virtual function at +A4h
-// (FUN_004AC010); here the function's bytes are compared instead of calling it.
-bool IsResident(u32 npc) {
-    const u32 vtable = Rd<u32>(npc);
-    if (vtable < kRdataStart || vtable + 0xA8 > kRdataEnd) return false;
-    const u32 fn = Rd<u32>(vtable + 0xA4);
-    if (fn < kTextStart || fn + 3 > kRdataStart) return false;
-    return Rd<u8>(fn) == 0xB0 && Rd<u8>(fn + 1) == 0x01 && Rd<u8>(fn + 2) == 0xC3;
-}
-
 // The resident's name as NPC_LIST has it, first letter in upper case: the second name where there is one ("carol", "ushah",
 // "kaysen", "lilly": the names the player knows), otherwise the first ("carroll", "usher", "forest", "lily"). Only letters, digits
 // and spaces get through: the text goes to the game's print function as its format string.
@@ -109,48 +97,6 @@ void ResidentName(u32 list, int id, char* out, int capacity) {
     if (n == 0) wsprintfA(out, "No %d", id);
 }
 
-// The area in the place of a timetable entry the NPC object points at, -1 when there is no entry.
-int EntryArea(Probe& probe, u32 entry) {
-    if (!Readable(probe, entry, kSchedRecord)) return -1;
-    return SchedPlaceArea((const signed char*)(uintptr_t)entry + kSchedPlace);
-}
-
-// The area a resident is in, as the pause map asks for its own icons (FUN_004C18D0 with argument 0): mode 0 = not placed; mode 2 =
-// waiting to appear, the area comes from the timetable entry the saved byte points at; any other mode = where the player is. Two
-// cases are left out: the dog (id 29h) and a resident whose entry has +46h == 2 get the answer of the resident they follow in the
-// game (FUN_004BA380, FUN_004BD4F0, not reproduced); here they are judged by their own mode.
-int ResidentArea(Probe& probe, u32 npc, int id, u32 game) {
-    const int mode = S8(npc + 0x622);
-    if (mode == 0) return -1;
-    if (mode != 2) return S8(game + kAreaOff);
-    switch (S8(game + kSavedOff + (u32)id * kSavedSize + 3)) {  // the table at 004C19A8, indexed by this byte plus one
-        case -1:
-        case 0: return EntryArea(probe, Rd<u32>(npc + 0xD34));
-        case 1:
-        case 2:
-        case 3: return 0;
-        case 4: return EntryArea(probe, Rd<u32>(npc + 0xD38));
-    }
-    return -1;
-}
-
-// What the overlay last did, for the log: one line when the map is opened and one when the answer changes.
-enum { kMapDrawn, kMapNeedsFixedMap, kMapNoWorld, kMapIndoors };
-
-void Report(int state, int shown, int residents) {
-    static int lastState = -1;
-    static DWORD lastCall = 0;
-    const DWORD now = GetTickCount();
-    const bool reopened = now - lastCall > 2000;
-    lastCall = now;
-    if (state == lastState && !reopened) return;
-    lastState = state;
-    if (state == kMapDrawn) Log("npc map: %d residents marked on the pause map (%d residents among the live NPCs)", shown, residents);
-    else if (state == kMapNeedsFixedMap) Log("npc map: residents are not marked: the map must not turn ([Map] Enabled=1 and Orientation 1 or 2)");
-    else if (state == kMapIndoors) Log("npc map: residents are not marked indoors (only on the map of the town)");
-    else Log("npc map: residents are not marked: no game world to read");
-}
-
 // The schedule viewer's state (the Present hook only): the index of the twelve tables and the probe its table walk reads through.
 SchedTable g_tables[kSchedSlots];
 Probe g_tableProbe;
@@ -169,57 +115,6 @@ u32 Pointer(u32 va) {
 }
 
 }  // namespace
-
-// Runs in the waypoint's pass right after the game has drawn its pause map, on the game's own thread: the game walks the same
-// registry for its resident icons inside that draw (0065B757).
-void NpcMapOverlay(u32 mapObject, float cx, float cy, float w, float h, MapPrintFn print) {
-    if (!g_cfg.showResidents || !g_factsOk || !mapObject || !print) return;
-    // placed like the waypoint's X: the turn of the stock map is not reproduced, so only north or south up
-    if (!g_mapFixInstalled || (g_mapOrient != 1 && g_mapOrient != 2)) {
-        Report(kMapNeedsFixedMap, 0, 0);
-        return;
-    }
-    Probe probe;
-    const u32 game = Pointer(kGameManagerPtrVa), main = Pointer(kNpcMainPtrVa);
-    if (!game || !main || !Readable(probe, main, kNpcMainSize) || !Readable(probe, game + kAreaOff, 4) ||
-        !Readable(probe, game + kSavedOff, kResidentCount * kSavedSize)) {
-        Report(kMapNoWorld, 0, 0);
-        return;
-    }
-    // indoors the registry holds the people of that building, in its own coordinates, and the map shows a floor plan
-    if (Rd<int>(game + kAreaOff) != 0) {
-        Report(kMapIndoors, 0, 0);
-        return;
-    }
-    const float zoom = Rd<float>(mapObject + 0x8EE0);
-    if (!(zoom > 0.f)) return;
-    const float k = zoom * 1024.f / 10000.f * (g_mapOrient == 2 ? -1.f : 1.f);
-    const float centreX = Rd<float>(mapObject + 0x8ED0), centreZ = Rd<float>(mapObject + 0x8ED8);
-    u32 list = Rd<u32>(main + kListOff);
-    if (!Readable(probe, list, kResidentCount * kListRecord)) list = 0;
-    static const float kColour[4] = {1.f, 0.85f, 0.2f, 1.f};
-    const float margin = 30.f;
-    int shown = 0, residents = 0;
-    for (int i = 0; i < kRegistrySize; ++i) {
-        const u32 npc = Rd<u32>(main + kRegistryOff + (u32)i * 4);
-        if (!npc || !Readable(probe, npc, 4) || !IsResident(npc) || !Readable(probe, npc, kNpcSpan)) continue;
-        ++residents;
-        const int id = S8(npc + 0xD54);
-        if (id < 1 || id >= kResidentCount) continue;
-        // the three tests of the game's own icon pass: not switched off, not hidden, in the area that is on the map
-        if (Rd<u8>(npc + 0x38) != 0 || (Rd<u32>(npc + 0x1C) & 0x200u) || ResidentArea(probe, npc, id, game) != 0) continue;
-        const float x = Rd<float>(npc + 0x58), z = Rd<float>(npc + 0x60);
-        if (!(x > -1.0e6f && x < 1.0e6f && z > -1.0e6f && z < 1.0e6f)) continue;  // also drops a NaN
-        const float sx = cx + (x - centreX) * k, sy = cy + (z - centreZ) * k;
-        if (sx < margin || sx > w - margin || sy < margin || sy > h - margin) continue;
-        char name[20];
-        ResidentName(list, id, name, (int)sizeof(name));
-        print(sx, sy - 8.f, kColour, "o", 0);
-        print(sx, sy + 10.f, kColour, name, 0);
-        ++shown;
-    }
-    Report(kMapDrawn, shown, residents);
-}
 
 int ReadResidentSchedules(ResidentRow* rows, int max, int* hour, int* minute, int* rainy) {
     if (!g_factsOk) return kScheduleOff;
@@ -285,16 +180,11 @@ int ReadResidentSchedules(ResidentRow* rows, int max, int* hour, int* minute, in
 bool InstallNpcMap() {
     for (const SiteDef& f : kNpcFacts) {
         if (BytesMatch(f.va, f.bytes, f.len)) continue;
-        Log("npc map: \"%s\" at %08X differs from DP.exe 1.01b: residents on the map and the schedule viewer stay off", f.name, f.va);
+        Log("npc map: \"%s\" at %08X differs from DP.exe 1.01b: the schedule viewer stays off", f.name, f.va);
         return false;
     }
     g_factsOk = true;
-    // The marks are drawn from the waypoint's hook on the map draw call: with the hook in, the call's own bytes are gone.
-    const SiteDef& call = kSiteMapDrawCall;
-    const bool hooked = !BytesMatch(call.va, call.bytes, call.len);
-    Log("npc map: ready, read-only (%d facts checked, nothing patched); residents on the pause map: %s%s; schedule viewer on the F10 page",
-        kNpcFactCount, g_cfg.showResidents ? "on" : "off ([Map] ShowResidents)",
-        hooked ? "" : ", but the waypoint's map hook is not in ([Waypoint] Enabled=1, no SafeMode), so none can be drawn");
+    Log("npc map: ready, read-only (%d facts checked, nothing patched): the schedule viewer on the F10 page", kNpcFactCount);
     return true;
 }
 

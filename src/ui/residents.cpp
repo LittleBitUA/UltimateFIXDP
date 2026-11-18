@@ -229,8 +229,8 @@ void ResidentsPage(float left, float top, float right, float bottom) {
     wsprintfW(line, en ? L"Game time %02d:%02d. Timetables for %s." : L"Час у грі %02d:%02d. Розклади для %s.", g_hour, g_minute,
               g_rainy ? (en ? L"rain" : L"дощу") : (en ? L"dry weather" : L"сухої погоди"));
     Fitted(line, left, top, kText, 15, right - left);
-    Fitted(en ? L"By the game's timetable: a person may still be on the way. Marks on the pause map: 'Game and world', 'Residents on the pause map'."
-              : L"За розкладом гри: людина може бути ще в дорозі. Позначки на мапі паузи: «Гра і світ», «Жителі на мапі паузи».",
+    Fitted(en ? L"By the game's timetable: a person may still be on the way."
+              : L"За розкладом гри: людина може бути ще в дорозі.",
            left, top + 22, kDim, 13, right - left);
 
     const float nameW = 112, width = right - left;

@@ -120,7 +120,6 @@ struct Config {
     int mapOrientation;      // 0 rotating (game), 1 north up, 2 south up
     int mapMinZoom;          // percent, 10..100
     int mapDefaultZoom;      // percent
-    int showResidents;       // the town's residents as named marks on the pause map (read-only, off by default: it tells more than the game's map)
     int crashDump;           // write a report and a minidump when the game crashes
     int traceCamera;         // log player state changes, camera jumps and the car input once a second (diagnostic, off by default)
     int byteTextCyrillic;    // byte-string text with characters of 80h and above (a single-byte Cyrillic code page) draws right
@@ -278,11 +277,7 @@ void WaypointFrame(void* device);  // once per frame from the Present hook: the 
 bool WaypointToObjective();        // the waypoint goes to the game's current objective (the next one when it stands on one already)
 int WaypointObjectives(int* yards);  // objective points on the game's map now and the yards to the first one; -1 = not known
 // npc_map.cpp: the town's residents, read-only (no patches, no calls into the game)
-bool InstallNpcMap();  // checks the facts the module relies on (kNpcFacts); false = the overlay and the viewer stay off
-typedef void (*MapPrintFn)(float x, float y, const float* rgba, const char* format, int value);  // the waypoint's centred print in the game's font
-// From the waypoint's pass over the pause map: a mark and the name for every resident the game has around the player. cx, cy = the
-// middle of the map on the screen, w, h = the size of the 2D space.
-void NpcMapOverlay(u32 mapObject, float cx, float cy, float w, float h, MapPrintFn print);
+bool InstallNpcMap();  // checks the facts the module relies on (kNpcFacts); false = the schedule viewer stays off
 // One row of the schedule viewer: where a resident is now by the game's own timetable, and where next.
 struct ResidentRow {
     char name[20];
