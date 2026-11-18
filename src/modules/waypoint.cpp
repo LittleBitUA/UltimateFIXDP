@@ -589,7 +589,11 @@ void WaypointFrame(void* dev) {
     if (g_wpMapDraws != lastDraws) { lastDraws = g_wpMapDraws; sinceDraw = 0; } else if (sinceDraw < 100) ++sinceDraw;
     const bool mapOpen = sinceDraw < 4 && g_wpMapObj;
     const bool inWorld = WorldActive() && !mapOpen && !ui::IsOpen();
-    g_showWorld = inWorld;
+    // the label and the beacon only in the area the waypoint belongs to: a shop or a house has coordinates of its own, where the
+    // town's point would hang in a random place (the minimap point is gated the same way, WaypointSpotUpkeep)
+    const u32 gm = GameManager();
+    const bool sameArea = gm && *(volatile int*)(uintptr_t)(gm + kAreaOff) == g_area;
+    g_showWorld = inWorld && sameArea;
     u32 player = PlayerObjectNow();
     if (player) {
         g_lastPx = F(player, 0x58);
