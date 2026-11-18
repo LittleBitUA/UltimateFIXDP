@@ -721,6 +721,8 @@ bool g_dragging = false;
 volatile int g_wheel = 0;  // wheel steps since the last frame (taken from the game's wheel word)
 int g_chipSel = 0;          // the highlighted button on a row of action buttons (the arrows move it, Enter presses it)
 int g_chipRow = -1;         // the item that highlight belongs to
+int g_hoverRow = -1;        // the item whose button the mouse is over this frame, -1 = none
+int g_hoverChip = 0;        // that button
 bool g_swallowEsc = false;  // the Esc that closed the menu is still held: the game must not see it as a new press
 
 // ---- layout (1280x720 coordinates) -----------------------------------------------------------------------
@@ -1173,6 +1175,7 @@ void HandleInput(bool foreground) {
     float mx, my;
     bool click = Pressed(VK_LBUTTON);
     bool held = Down(VK_LBUTTON);
+    g_hoverRow = -1;  // found again below while the mouse is over a button
     if (!held) {
         g_dragging = false;
         FlushUnsaved();
@@ -1246,6 +1249,16 @@ void HandleInput(bool foreground) {
             if (idx >= 0 && my >= y && my < y + h && mx >= kCx - 8 && mx <= kCr + 8) {
                 Item& it = pg.items[idx];
                 bool slider = it.kind == kInt && !it.names && !it.presets;
+                if (it.presets) {  // the button under the mouse lights up, like a row does
+                    float hx[8], hw[8];
+                    int hn;
+                    ChipLayout(it, hx, hw, &hn);
+                    for (int i = 0; i < hn; ++i)
+                        if (mx >= hx[i] && mx < hx[i] + hw[i]) {
+                            g_hoverRow = idx;
+                            g_hoverChip = i;
+                        }
+                }
                 if (click || (held && g_dragging && idx == g_sel)) {
                     g_sel = idx;
                     if (it.kind == kBool) {
@@ -1450,8 +1463,12 @@ void DrawItemRow(Item& it, float y, bool sel) {
                 FillRect(cx[i] - 2, cy - kChipH / 2 - 2, cw[i] + 4, kChipH + 4, kText);
                 active = true;
             }
-            FillRect(cx[i], cy - kChipH / 2, cw[i], kChipH, action ? kOn : (active ? kAccent : 0xFF23232C));
-            if (action) active = true;  // white text
+            // the mouse is over this button (hover selects its row, so the hovered row is the selected one): a light frame,
+            // and a lighter fill when it is not the chosen one
+            const bool hover = sel && g_hoverRow == g_sel && i == g_hoverChip;
+            if (hover) FillRect(cx[i] - 2, cy - kChipH / 2 - 2, cw[i] + 4, kChipH + 4, kText);
+            FillRect(cx[i], cy - kChipH / 2, cw[i], kChipH, action ? kOn : (active ? kAccent : (hover ? 0xFF3A3A48 : 0xFF23232C)));
+            if (action || hover) active = true;  // white text
             wchar_t label[32];
             if (i < it.presetCount) lstrcpyW(label, Tx(it.presetNames[i]));
             else it.format(*it.value, label);
