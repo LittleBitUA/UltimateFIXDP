@@ -20,10 +20,12 @@ struct Entry {
 };
 
 constexpr int kMaxEntries = 120000;
-constexpr int kDirCount = 3;
-const wchar_t* const kDirNames[kDirCount] = {L"UltimateFix\\textures\\override\\", L"dpfix\\tex_override\\",
-                                             L"ZachFix\\textures\\override\\"};
-wchar_t g_dirs[kDirCount][MAX_PATH];
+constexpr int kOwnDirs = 3;
+const wchar_t* const kDirNames[kOwnDirs] = {L"UltimateFix\\textures\\override\\", L"dpfix\\tex_override\\",
+                                            L"ZachFix\\textures\\override\\"};
+// the textures folders of the mods that are on (mods.cpp, in their order), then the three folders above
+wchar_t g_dirs[kMaxMods + kOwnDirs][MAX_PATH];
+int g_dirCount = 0;
 Entry* g_index = nullptr;
 int g_count = 0;
 u32 g_applied = 0;
@@ -200,16 +202,17 @@ void* GlyphAtlasForImpl(void* dev, void* tex) {
 }  // namespace
 
 bool InstallTextureOverride() {
-    for (int i = 0; i < kDirCount; ++i) {
-        lstrcpyW(g_dirs[i], g_paths.gameDir);
-        lstrcatW(g_dirs[i], kDirNames[i]);
+    g_dirCount = ModTextureDirs(g_dirs, kMaxMods);
+    for (int i = 0; i < kOwnDirs; ++i) {
+        lstrcpyW(g_dirs[g_dirCount], g_paths.gameDir);
+        lstrcatW(g_dirs[g_dirCount++], kDirNames[i]);
     }
     // TextureOverride=0 must switch the packs off even when GlyphTheme or DumpTextures keep this hook installed: the folders are
     // then not indexed at all, g_count stays 0 and the hook never replaces anything
     if (g_cfg.textureOverride) {
         g_index = (Entry*)VirtualAlloc(nullptr, sizeof(Entry) * kMaxEntries, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
         if (g_index) {
-            for (int i = 0; i < kDirCount; ++i) ScanDir(i);
+            for (int i = 0; i < g_dirCount; ++i) ScanDir(i);
             if (g_count == 0) {  // no pack: give the index memory back
                 VirtualFree(g_index, 0, MEM_RELEASE);
                 g_index = nullptr;

@@ -272,6 +272,29 @@ unsigned PadButtons();  // buttons of the last pad data handed to the game (0 = 
 void EnsureLauncherStub(const wchar_t* gameDir);  // in the game: put the quick-start stub in place of DPLauncher.exe
 void InstallCpuTweaks();
 bool InstallWaypoint();
+// mods.cpp: the mod manager (UltimateFix\mods\<folder>\ with mod.ini, text\ and textures\; order and switches in mods.txt)
+constexpr int kMaxMods = 32;
+struct ModInfo {
+    wchar_t folder[64];
+    wchar_t name[64];
+    wchar_t author[48];
+    wchar_t version[24];
+    wchar_t description[200];
+    bool enabled;
+    bool textJson;   // text\mes_all.json
+    int textFiles;   // text\*.txt
+    int textures;    // textures\*.dds and *.png
+};
+void ScanMods();                     // once at start, before the text and texture overlays
+int ModCount();
+ModInfo* ModAt(int index);           // in order: 0 wins over the ones after it
+int ModTextSource();                 // the mod the text overlay reads, -1 = UltimateFix\text\ (as before mods)
+void ModToggle(int index);           // saved at once, used from the next start
+void ModMove(int index, int direction);
+bool ModsChanged();                  // differs from what this run started with: a restart is needed
+void ModTextDir(wchar_t* out);       // the text folder the overlay reads, with a trailing backslash (MAX_PATH)
+int ModTextureDirs(wchar_t (*out)[MAX_PATH], int max);  // texture folders of the mods that are on, first wins
+void OpenModsFolder();
 void GameFovAfterFrame();  // freecam.cpp: gives the game its own field of view back after a frame was shown
 void WaypointFrame(void* device);  // once per frame from the Present hook: the waypoint keys and the state its drawing needs
 bool WaypointToObjective();        // the waypoint goes to the game's current objective (the next one when it stands on one already)

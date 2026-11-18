@@ -48,6 +48,8 @@ void FrameStatsPanel(void* device, double totalMs, double gameMs, double physics
 bool PhotoPageOpen();                           // the menu is open on that page
 void ResidentsPage(float left, float top, float right, float bottom);  // the schedule viewer, drawn into the menu's content area (residents.cpp)
 void ResidentsScroll(int rows);                 // its list: positive = down
+void ModsPage(float left, float top, float right, float bottom);  // the mod manager page (mods_page.cpp)
+void ModsPageInput(bool up, bool down, bool toggle, bool raise, bool lower, bool click, float mx, float my);
 void ScreenshotFrame(void* device);              // saves a PNG when the screenshot key is pressed
 void ReleasePostResources();                     // before the device is reset (also frees the reused state block)
 

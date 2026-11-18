@@ -219,7 +219,7 @@ Item g_pageGraphics[] = {
     {{L"Затінення в кутках (SSAO), %", L"Ambient occlusion (SSAO), %"}, &g_cfg.ambientOcclusion, kInt, 0, 100, 10, false, L"Graphics", L"AmbientOcclusion", nullptr, nullptr,
      {L"Притемнює щілини й місця, де предмети стикаються. Рахується з буфера глибини гри. Змінюється одразу. Починайте з 40–60.", L"Darkens creases and contact areas. Computed from the game's depth buffer. Changes at once. Start with 40–60."},
      {L"Чіткість і вигляд", L"Sharpness and look"}},
-    {{L"Радіус затінення, пікселів", L"Occlusion radius, pixels"}, &g_cfg.aoRadius, kInt, 2, 40, 2, false, L"Graphics", L"AoRadius", nullptr, nullptr,
+    {{L"Радіус затінення, пікселів", L"Occlusion radius, pixels"}, &g_cfg.aoRadius, kInt, 2, 20, 2, false, L"Graphics", L"AoRadius", nullptr, nullptr,
      {L"Наскільки далеко від кута шукається перекриття (при 720p; на більших роздільностях росте пропорційно).", L"How far from a corner occlusion is searched (at 720p; scales up with the resolution)."}, NOTR},
     {{L"Згладжування країв, %", L"Edge smoothing, %"}, &g_cfg.antialias, kInt, 0, 100, 10, false, L"Graphics", L"Antialias", nullptr, nullptr,
      {L"Прибирає «драбинки» на краях. Гра не має власного згладжування. Змінюється одразу. Спосіб обирається рядком нижче: з FXAA поєднуйте з різкістю 20–30, бо воно трохи розмиває; зі SMAA ставте 100.", L"Removes jagged edges. The game has no antialiasing of its own. Changes at once. The method is chosen in the row below: with FXAA combine it with sharpening 20–30, since it blurs slightly; with SMAA set 100."},
@@ -635,6 +635,7 @@ struct Page {
     bool about;  // the "About" page has no settings
     void (*custom)() = nullptr;  // what draws a page without settings (null: the About text)
     bool residents = false;  // a page without settings that shows the residents' timetable instead (residents.cpp)
+    bool mods = false;       // the mod manager (mods_page.cpp)
 };
 void DrawStory();
 constexpr int kPhotoPage = 3;  // the photo mode section (the camera keys and the preview of the filters know it)
@@ -647,6 +648,7 @@ Page g_pages[] = {
     {{L"Виправлення", L"Fixes"}, {L"Час, помилки гри, мова, захист dp.sav, діагностика", L"Time, game bugs, language, protection of dp.sav, diagnostics"}, nullptr, 0, false},
     {{L"Сюжет", L"Story"}, {L"Епізод, побічні завдання, поточна ціль (лише перегляд)", L"Episode, side quests, current destination (read-only)"}, nullptr, 0, true, DrawStory},
     {{L"Жителі", L"Residents"}, {L"Де хто зараз за розкладом гри і куди піде далі", L"Where everyone is now by the game's timetable, and where next"}, nullptr, 0, true, nullptr, true},
+    {{L"Моди", L"Mods"}, {L"Переклади, текстури й інші моди з теки UltimateFix\\mods", L"Translations, textures and other mods from UltimateFix\\mods"}, nullptr, 0, true, nullptr, false, true},
     {{L"Про мод", L"About"}, {L"Автор і подяки", L"Author and credits"}, nullptr, 0, true},
 };
 constexpr int kPageCount = (int)(sizeof(g_pages) / sizeof(Page));
@@ -1107,9 +1109,15 @@ void HandleInput(bool foreground) {
         if (Pressed(VK_NEXT)) SelectPage(g_page + 1);
         if (Pressed(VK_PRIOR)) SelectPage(g_page - 1);
         if (pg.residents) ResidentsScroll(-g_wheel * 2 + (Pressed(VK_DOWN) ? 1 : 0) - (Pressed(VK_UP) ? 1 : 0));
+        float mx = 0, my = 0;
+        const bool click = Pressed(VK_LBUTTON) && MousePosition(&mx, &my);
+        if (pg.mods) {
+            ModsPageInput(Pressed(VK_UP) || g_wheel > 0, Pressed(VK_DOWN) || g_wheel < 0, Pressed(VK_RETURN) || Pressed(VK_SPACE),
+                          Pressed(VK_LEFT), Pressed(VK_RIGHT), click && !SidebarClick(mx, my), mx, my);
+        } else if (click) {
+            SidebarClick(mx, my);
+        }
         g_wheel = 0;
-        float mx, my;
-        if (Pressed(VK_LBUTTON) && MousePosition(&mx, &my)) SidebarClick(mx, my);
         return;
     }
     if (g_editing) {
@@ -1697,6 +1705,7 @@ void Draw() {
     if (pg.about) {
         if (pg.custom) pg.custom();
         else if (pg.residents) ResidentsPage(kCx, kListTop, kCr, kPy + kPh - 44);
+        else if (pg.mods) ModsPage(kCx, kListTop, kCr, kPy + kPh - 44);
         else DrawAbout();
         return;
     }

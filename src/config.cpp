@@ -654,7 +654,7 @@ void LoadConfig(const wchar_t* ini) {
     if (g_cfg.ambientOcclusion > 100) g_cfg.ambientOcclusion = 100;
     g_cfg.aoRadius = (int)GetPrivateProfileIntW(L"Graphics", L"AoRadius", 10, ini);
     if (g_cfg.aoRadius < 2) g_cfg.aoRadius = 2;
-    if (g_cfg.aoRadius > 40) g_cfg.aoRadius = 40;
+    if (g_cfg.aoRadius > 20) g_cfg.aoRadius = 20;  // 12 taps and no blur: a wider ring shows the tap pattern as stripes
     g_cfg.antialias = (int)GetPrivateProfileIntW(L"Graphics", L"Antialias", 0, ini);
     if (g_cfg.antialias < 0) g_cfg.antialias = 0;
     if (g_cfg.antialias > 100) g_cfg.antialias = 100;

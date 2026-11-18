@@ -149,6 +149,7 @@ static void Startup() {
     if (g_cfg.crashGuards && InstallCrashGuards()) ++on;
     if (g_cfg.resourceReadGuard && !g_cfg.safeMode && InstallResourceGuard()) ++on;
     if (g_cfg.mapFix && InstallMapFix()) ++on;
+    ScanMods();  // before the overlays that read the mods' folders
     if ((g_cfg.textureOverride || g_cfg.dumpTextures || g_cfg.glyphTheme) && InstallTextureOverride()) ++on;
     if (g_cfg.nativeDualSense && InstallDualSense()) ++on;
     // The writer also carries SynthHaptics and the menu's trigger test, which work with AdaptiveTriggers and Vibration off.

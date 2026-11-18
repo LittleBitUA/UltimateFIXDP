@@ -78,8 +78,7 @@ void LocLog(const char* fmt, ...) {
 
 // ---- files ----------------------------------------------------------------------------------------------------------
 void TextPath(wchar_t* out, const wchar_t* name) {  // out: MAX_PATH * 2 characters
-    lstrcpyW(out, g_paths.dataDir);
-    lstrcatW(out, L"text\\");
+    ModTextDir(out);  // the text folder of the first mod that is on and carries text, else UltimateFix\text\ (mods.cpp)
     lstrcatW(out, name);
 }
 
