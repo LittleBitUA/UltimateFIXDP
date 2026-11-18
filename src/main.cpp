@@ -150,6 +150,7 @@ static void Startup() {
     if (!g_cfg.safeMode && InstallFreeCam()) ++on;
     if (!g_cfg.safeMode && InstallAlternate3D()) ++on;
     if (!g_cfg.safeMode && InstallPhysicsFreeze()) ++on;
+    if (!g_cfg.safeMode && InstallHighFpsPhysics()) ++on;
     if (!g_cfg.safeMode && InstallCombatStrafe()) ++on;
     if (!g_cfg.safeMode && g_cfg.waypoint && InstallWaypoint()) ++on;
     if (!g_cfg.safeMode && InstallGlyphIndexFix()) ++on;

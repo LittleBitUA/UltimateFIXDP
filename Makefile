@@ -54,6 +54,15 @@ $(OUT)/test_pacer: tests/test_pacer.cpp src/pacer.h
 	@mkdir -p $(OUT)
 	$(HOSTCXX) -std=c++17 -Isrc -o $@ tests/test_pacer.cpp
 
+$(OUT)/test_stepplan: tests/test_stepplan.cpp src/stepplan.h
+	@mkdir -p $(OUT)
+	$(HOSTCXX) -std=c++17 -Isrc -o $@ tests/test_stepplan.cpp
+
+# Part of `make test`, kept as a target of its own so that the list of the main rule does not grow by one more name per test.
+test: test-stepplan
+test-stepplan: $(OUT)/test_stepplan
+	$(OUT)/test_stepplan
+
 $(OUT)/dump_stub: tests/dump_stub.cpp src/stubs.h src/sites.h
 	@mkdir -p $(OUT)
 	$(HOSTCXX) -std=c++17 -Isrc -o $@ tests/dump_stub.cpp
@@ -68,4 +77,4 @@ test: $(OUT)/verify_sites $(OUT)/dump_stub $(OUT)/test_pacer $(OUT)/test_hash $(
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all test clean
+.PHONY: all test test-stepplan clean

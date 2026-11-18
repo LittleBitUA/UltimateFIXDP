@@ -135,6 +135,7 @@ struct Config {
     int replaceLauncher;     // put the quick-start stub in place of DPLauncher.exe by itself (the ufx_play.exe job)
     int autoRecover;         // (experimental, not proven to help) after a long run of slow frames, hold the game clock and physics for 4 frames
     int physicsSteps;        // most fixed physics steps per frame: 0 = the game's own (up to 4), 1..3 = a cap
+    int highFpsPhysics;      // frames shorter than one step of 1/60 s (above 120 frames/s) share whole physics steps instead of taking one each
     int pauseInMenu;         // the game's time stands still while the F10 menu is open
     int framePacing;         // 0 off, 1 = frame limit 60 only (game keeps real time), 2 = 30 frames/s in whole steps (console), 3 = 60 in whole steps
 };
@@ -234,6 +235,7 @@ void CheatYorkToCamera();
 int WeaponClassNow();
 bool InstallAlternate3D();
 bool InstallPhysicsFreeze();
+bool InstallHighFpsPhysics();  // needs the physics step hook of InstallPhysicsFreeze
 extern bool g_usingDxvk;   // the Direct3D 9 in use is DXVK, recognised by its texts in the d3d9.dll image or its export (d3d/trace.cpp)
 extern bool g_d3dWrapper;  // another d3d9.dll that is not the Windows one (DPfix, ReShade, dgVoodoo...)
 void HangBeat(bool windowThread);  // every Present: the hang watchdog (crash_handler.cpp)
