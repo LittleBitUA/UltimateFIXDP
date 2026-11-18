@@ -333,6 +333,36 @@ constexpr SiteDef kSiteFullscreenArg[3] = {
 // questions, FUN_00528F40 (thiscall, 1 argument) changes the player state.
 constexpr SiteDef kSiteStrafeTail = {"player update tail", 0x504497, 7, {0x83, 0xBE, 0x54, 0x06, 0x00, 0x00, 0x00}};
 constexpr uint32_t kStrafeReturn = 0x50449E, kCapabilityFn = 0x4FEE60, kStateChangeFn = 0x528F40;
+// Quick turn (player state 0Bh: FUN_00524BF0 turns the heading +7Ch to the target +6Ch and goes back to the state kept in
+// +0A11h). FUN_00503C60 (thiscall, `mov esi,ecx` at 00503C64: esi = the player for the whole function) starts it from two
+// branches. The idle branch (state 0) at 00503FA7 asks for flag 4 of the game manager (low word, manager+8C5C8h), the
+// capability 100h and a press of the raw button 100h (L3), then writes heading + pi into +6Ch and calls FUN_00528F40(0Bh)
+// at 00504040. The console asked for the logical X there and set flag 4 in the idle code from the stick pulled back; on PC
+// the only place that sets the flag is the weapon branch (0050439F), and in the idle handler the flag means "walk
+// backwards" (00523176). The weapon branch (states 14h, 16h, 18h, 24h, 26h) at 005042CD is left alone. The gate replaces
+// the flag test of the idle branch: its 11 bytes are `push 0 / push 4 / mov ecx,esi / call 4FD860` (the flag test: ret 8,
+// answer in edx:eax, ecx not read). The exit is the epilogue behind the game's own quick-turn call (pop edi / pop esi /
+// add esp,8 / ret), which undoes the frame of the entry (sub esp,8 / push esi / ... / push edi).
+constexpr SiteDef kSiteQuickTurnGate = {"idle quick-turn flag test", 0x503FA7, 11,
+    {0x6A, 0x00, 0x6A, 0x04, 0x8B, 0xCE, 0xE8, 0xAE, 0x98, 0xFF, 0xFF}};
+constexpr uint32_t kQuickTurnResume = 0x503FB2, kQuickTurnExit = 0x504045, kFlagTestFn = 0x4FD860;
+// What the gate and its worker rely on without patching it: the frame of FUN_00503C60, the epilogue, the handler slot of
+// state 0Bh in the table at 008A9758h, and the entries of the three input getters the worker calls:
+// FUN_004547B0 (thiscall, ecx = game manager, one argument = logical mask, ret 4: 1 on the rising edge of the button the
+// game's control options give to that action), FUN_00708910 (thiscall, ecx = CInput, pad, kind 0 held / 1 pressed, mask,
+// ret 0Ch) and FUN_00708A30 (kStickGetterFn; thiscall, ecx = CInput, pad, stick, axis, ret 0Ch, float in st0, Y up = plus).
+constexpr SiteDef kQuickTurnChecks[] = {
+    {"player transitions entry", 0x503C60, 13, {0x83, 0xEC, 0x08, 0x56, 0x8B, 0xF1, 0x8B, 0x86, 0x54, 0x06, 0x00, 0x00, 0x57}},
+    {"quick-turn exit epilogue", 0x504045, 6, {0x5F, 0x5E, 0x83, 0xC4, 0x08, 0xC3}},
+    {"state 0Bh handler slot", 0x8A9784, 4, {0xF0, 0x4B, 0x52, 0x00}},
+    {"logical press getter", 0x4547B0, 15, {0x56, 0x57, 0x8B, 0xF1, 0xE8, 0x77, 0xD3, 0x28, 0x00, 0x8B, 0x3D, 0x10, 0x9E, 0xBD, 0x00}},
+    {"button mask getter", 0x708910, 16, {0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x0F, 0xB6, 0x45, 0x08, 0x69, 0xC0, 0xCC, 0x00, 0x00}},
+    {"stick getter", 0x708A30, 16, {0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0x89, 0x4D, 0xF4, 0xC6, 0x45, 0xF8, 0x00, 0xC6, 0x45, 0xF9}},
+};
+constexpr uint32_t kLogicalPressFn = 0x4547B0, kInputMaskFn = 0x708910;
+constexpr uint32_t kInputPtrVa = 0xBD9E10;   // CInput*
+constexpr uint32_t kPadIndexVa = 0xBD77B4;   // byte: the pad slot gameplay reads (always 0)
+constexpr uint32_t kCameraPtrVa = 0xBE1EA4;  // CCamera*: yaw +70h, mode +154h (2 = the aiming camera)
 // Costume change. FUN_0044E730(suit, variant) (thiscall with ecx = game manager, two stack arguments, ret 8) is the
 // engine's own "York changes clothes" path used by the cutscene scripts. The manager keeps the current suit digit at
 // +8C5E4h, the variant 1..10 at +8C5E5h and the kind of the playable character at +8CA12h / +8CA13h (0 = York). While the
@@ -553,6 +583,7 @@ constexpr const SiteDef* kAllSites[] = {
     &kSiteCarRamps[0], &kSiteCarRamps[1], &kSiteCarRamps[2],
     &kSiteRampConstants[0], &kSiteRampConstants[1], &kSiteWarmUpFlagRead,
     &kOutPresentParams, &kOutDepthH, &kOutDepthW, &kOutFrameBegin1, &kOutFrameBegin2, &kOutPopViewport,
+    &kSiteQuickTurnGate, &kQuickTurnChecks[0], &kQuickTurnChecks[1], &kQuickTurnChecks[2], &kQuickTurnChecks[3], &kQuickTurnChecks[4], &kQuickTurnChecks[5],
     &kOutHudDepthBind, &kOutViewport1, &kOutViewport2, &kOutViewport3, &kOutReset1, &kOutReset2, &kOutMap1,
     &kOutMap2, &kOutMap3, &kOutMap4, &kFarPlane[0], &kFarPlane[1], &kFarPlane[2], &kFarPlane[3], &kFarPlane[4],
     &kFarPlane[5], &kSiteLanguageCall, &kSiteDifficultyNewGame, &kSiteDifficultyLoadClear,

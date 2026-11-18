@@ -197,6 +197,22 @@ int main(int argc, char** argv) {
     Check(memcmp(sb + 13, kSiteStrafeTail.bytes, 7) == 0, "strafe bridge", "replayed compare");
     Check(Rel32To(sb, sbVa, 20, kStrafeReturn), "strafe bridge", "jmp back");
 
+    // Quick-turn gate: the worker call, the six replayed bytes, the relocated flag test and both exits.
+    uint8_t qt[48];
+    const uint32_t qtVa = 0xA8000000, qtWorker = 0xA8001000;
+    size_t nqt = BuildQuickTurnGate(qt, qtVa, qtWorker, kFlagTestFn, kQuickTurnResume, kQuickTurnExit);
+    printf("quick-turn gate %zu bytes\n", nqt);
+    Check(nqt == 34, "quick-turn gate", "size 34");
+    Check(Rel32To(qt, qtVa, 1, qtWorker), "quick-turn gate", "call worker");
+    Check(Rel8To(qt, 11, 29), "quick-turn gate", "jnz started");
+    Check(memcmp(qt + 13, kSiteQuickTurnGate.bytes, 6) == 0, "quick-turn gate", "replayed push 0 / push 4 / mov ecx,esi");
+    Check(Rel32To(qt, qtVa, 19, kFlagTestFn), "quick-turn gate", "call flag test");
+    Check(kSiteQuickTurnGate.va + 11 + Rd32(kSiteQuickTurnGate.bytes + 7) == kFlagTestFn, "quick-turn gate", "the replaced call was the flag test");
+    Check(Rel32To(qt, qtVa, 24, kQuickTurnResume), "quick-turn gate", "jmp resume");
+    Check(kQuickTurnResume == kSiteQuickTurnGate.va + kSiteQuickTurnGate.len, "quick-turn gate", "resume right behind the site");
+    Check(Rel32To(qt, qtVa, 29, kQuickTurnExit), "quick-turn gate", "jmp exit");
+    Check(kQuickTurnExit == kQuickTurnChecks[1].va, "quick-turn gate", "exit is the verified epilogue");
+
     uint8_t eh[64];
     const uint32_t ehVa = 0xB0000000, ehWorker = 0xB0001000;
     size_t neh = BuildEntryHook(eh, ehVa, ehWorker, kSiteStateEntry.bytes, kSiteStateEntry.len, kStateEntryReturn);

@@ -14,6 +14,7 @@ LDFLAGS  := -shared -nostdlib -nostartfiles -Wl,-e,_DllEntry@12 -Wl,--kill-at -W
             -Wl,--nxcompat -s
 LIBS     := -lkernel32 -luser32 -lgdi32 -lgcc
 SRC      += src/ui/xbox_look.cpp
+SRC      += src/modules/quick_turn.cpp
 
 all: $(OUT)/X3DAudio1_7.dll $(OUT)/ufx_laa.exe $(OUT)/ufx_play.exe
 
