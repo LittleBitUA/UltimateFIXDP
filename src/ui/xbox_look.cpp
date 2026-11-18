@@ -11,6 +11,13 @@
 //    dump we have). ZachFix describes it as contrast, then a mix with the luma (weights 0.30 0.59 0.11) by the chroma
 //    value, then the colour offset added; the order and the luma weights are taken from that description, and the two
 //    formulas that can be read in more than one way are settings (XboxContrastFormula, XboxChromaFormula).
+//    The values are authored in hundredths. The table is loaded from a file, but FUN_005D8720 (a second writer of the
+//    same ENV block) has two literal sets in its code; the formulas differ a lot there, so these are scenes to compare in:
+//    - a flash the game starts at random intervals (FUN_005DF740 sets the factor at 1437514h to 1, it then decays; most
+//      likely lightning): contrast blends towards 0.40 (5DA3C8h, double 40.0 at 7733F0h) and the exposure key towards
+//      0.70 (5DA0A4h). With k = 0.40: formula 1 gives (x - 0.4) * 0.2, formula 2 x * 0.2 + 0.4, formula 3 (x - 0.4) * 5;
+//    - one hard-coded state (5D8D18h..5D8E20h): contrast 0.30, chroma 0.80, colour offset +0.04 -0.04 -0.04, exposure
+//      key 0.28. A chroma of 0.80 is nearly grey with chroma formula 1 and a mild fade with formula 2.
 // 2. The TV gamma of the console on the finished picture (XboxGamma): sRGB decoded, BT.709 encoded. A general property of
 //    the console's video output, not confirmed for this game.
 // 3. Soft highlights (XboxShoulder): not a console feature, it only shares the shader.
