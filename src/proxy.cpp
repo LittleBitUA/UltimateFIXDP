@@ -6,9 +6,9 @@
 //
 // 1. The guard, always on in the game. X3DAudioCalculate gets the game's static listener and emitter unchecked (FUN_0072CB00,
 //    FUN_0072DB80): a position that is not a number would come back as a distance and a matrix that are not numbers, and the
-//    game multiplies that distance into the volume of the cue. And the matrix buffer the game passes holds 16 floats
-//    (2 sources x 8 speakers) and ends 8 bytes before the static CSdCore object: on a mix of more than 9 channels the
-//    matrix would run over that object's vtable pointer.
+//    game multiplies that distance into the volume of the cue. What comes back is checked the same way. And the matrix
+//    buffer the game passes holds 16 floats (2 sources x 8 speakers) and ends 8 bytes before the static CSdCore object: on
+//    a mix of more than 9 channels the matrix would run over that object's vtable pointer.
 //
 // 2. Surround ([Audio] Surround), only when the mix has more than two channels. The game positions a 3D cue once, when it
 //    starts (FUN_0072DCB0, the XACT3DApply of the SDK: the full X3DAudio matrix). Every tick after that FUN_0072CB00 gives
@@ -26,6 +26,11 @@
 //    push 1), so what X3DAudio, left-handed, takes for the right side is the left side of the picture. The Xbox code negates
 //    the emitter's X (Function_82566D60). Here the X of every listener and emitter vector is negated in copies while
 //    surround is live, which mirrors the whole scene and so swaps the sides; Surround=2 leaves them as the game has them.
+//
+//    Left as the game has it, on any device: the XACT variables Distance, DopplerPitchScalar and OrientationAngle are set
+//    once, when a cue starts (FUN_0072DCB0), where the Xbox code sets them every tick (whether the sound banks use them
+//    is not known); the emitter keeps its two channels (the Xbox one has one); the distance fade stays the game's own
+//    linear one (the X3DAudio curve the game installs, 00BD5B48, is flat).
 //
 // Nothing here has run in the game yet: the helpers log the first matrix XACT accepts or refuses of each kind.
 #include "base.h"
@@ -125,7 +130,7 @@ bool g_haveGoodListener = false;
 float g_wide[kWideFloats];          // where a matrix too big for the game's buffer is calculated
 
 // One log line per kind of event: these run for every voice every tick.
-bool g_saidListener = false, g_saidEmitter = false, g_saidWide = false, g_saidTooWide = false;
+bool g_saidListener = false, g_saidEmitter = false, g_saidWide = false, g_saidTooWide = false, g_saidResult = false;
 bool g_said3d = false, g_said3dMono = false, g_said3dRejected = false;
 bool g_said2d = false, g_said2dRejected = false, g_saidSix = false, g_saidSixRejected = false;
 
@@ -228,7 +233,8 @@ void __stdcall Cue3dMatrix(void* cue, const float* params, const float* game2x2)
 // count (2 gives 1, 6 gives 2, anything else 0), the music player FUN_0046BF70 always stores 2, the scene music 1. As the
 // Xbox code does for the same two fields:
 //   kinds 0 and 1: two sources, left = |1 - pan| / 2, right = |-1 - pan| / 2, each to its front speaker at 1.0 and to its
-//                  rear speakers at 0.8 (centre and subwoofer silent);
+//                  rear speakers at 0.8 (centre and subwoofer silent). With the pan in the middle a front speaker gets
+//                  0.5 of the volume where the game's 2x2 matrix has 1.0: the level of the console code, kept as it is;
 //   kinds 2 and 3: six sources, one per speaker. If XACT refuses that, the stereo pan is tried: the refusal most likely
 //                  means the wave of the PC sound bank is not a six-channel one (a guess, the banks were not examined).
 // A kind the Xbox code leaves alone, a layout without the speakers a 5.1 wave needs, or a refusal of the pan matrix end in
@@ -355,7 +361,7 @@ bool InstallAudioGuard() {
     HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
     g_wine = ntdll && GetProcAddress(ntdll, "wine_get_version") != nullptr;
     UfxAudioHost = 1;
-    Log("audio: guard on X3DAudioCalculate (non-finite listener or emitter, a matrix larger than the game's %u-float buffer)%s",
+    Log("audio: guard on X3DAudioCalculate (non-finite listener, emitter or result, a matrix larger than the game's %u-float buffer)%s",
         kX3dMatrixFloats, g_wine ? "; running under Wine" : "");
     return true;
 }
@@ -428,23 +434,39 @@ extern "C" __attribute__((used)) void __cdecl UfxCalculate(const void* instance,
 
     if (!wide) {
         real(instance, listener, emitter, flags, dsp);
-        return;
+    } else {
+        // More coefficients than the game's buffer holds: calculate into ours and hand the game the part that fits (the
+        // first 8 speakers). When a cue starts, the game still reads the full count from its own buffer for XACT; that
+        // reads past the buffer but writes nothing.
+        if (!g_saidWide) {
+            g_saidWide = true;
+            Log("audio: guard: a %ux%u matrix does not fit the game's %u-float buffer, it is calculated outside it (logged once)",
+                sources, speakers, kX3dMatrixFloats);
+        }
+        for (u32 i = 0; i < kWideFloats; ++i) g_wide[i] = 0.0f;
+        X3dDsp local = *dsp;
+        local.matrix = g_wide;
+        real(instance, listener, emitter, flags, &local);
+        local.matrix = gameMatrix;
+        *dsp = local;
+        for (u32 i = 0; i < kX3dMatrixFloats; ++i) gameMatrix[i] = g_wide[i];
     }
-    // More coefficients than the game's buffer holds: calculate into ours and hand the game the part that fits (the first
-    // 8 speakers). When a cue starts, the game still reads the full count from its own buffer for XACT; that reads past the
-    // buffer but writes nothing.
-    if (!g_saidWide) {
-        g_saidWide = true;
-        Log("audio: guard: a %ux%u matrix does not fit the game's %u-float buffer, it is calculated outside it (logged once)",
-            sources, speakers, kX3dMatrixFloats);
+
+    // Finite numbers in do not promise finite numbers out (an orientation that is not a proper pair of axes, say). The game
+    // gives this matrix to XACT when a cue starts, the surround helper gives it every tick, and the distance goes into the
+    // volume of the voice: a result that is not a number is replaced by silence like an emitter that is not one.
+    bool finite = Finite(Word(&dsp->distance, 0));
+    if (finite && (flags & kCalcMatrix) && gameMatrix == (float*)(uintptr_t)kX3dMatrixVa) {
+        u32 written = sources * speakers < kX3dMatrixFloats ? sources * speakers : kX3dMatrixFloats;
+        finite = AllFinite(gameMatrix, 0, written);
     }
-    for (u32 i = 0; i < kWideFloats; ++i) g_wide[i] = 0.0f;
-    X3dDsp local = *dsp;
-    local.matrix = g_wide;
-    real(instance, listener, emitter, flags, &local);
-    local.matrix = gameMatrix;
-    *dsp = local;
-    for (u32 i = 0; i < kX3dMatrixFloats; ++i) gameMatrix[i] = g_wide[i];
+    if (!finite) {
+        if (!g_saidResult) {
+            g_saidResult = true;
+            Log("audio: guard: X3DAudioCalculate returned a result that is not finite, that voice is muted meanwhile (logged once)");
+        }
+        SilentResult(dsp, flags);
+    }
 }
 
 // X3DAudioInitialize as DP.exe calls it (FUN_0072DA80, 0072DB0B): cdecl, three arguments; the game ignores eax (the
