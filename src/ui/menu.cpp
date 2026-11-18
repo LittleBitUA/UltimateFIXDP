@@ -1618,6 +1618,44 @@ int ReadStory(StoryState* out) {
 }
 
 // The Story page: what the game itself keeps about the progress, shown and nothing more.
+// The town's story destinations by number (docs/engine/14_destinations.md: named by the event names and the dialogue around
+// every script command 0xAC that raises them; numbers no text names are left out and stay numbers).
+struct DestinationName {
+    int index;
+    const wchar_t* uk;
+    const wchar_t* en;
+};
+const DestinationName kDestinations[] = {
+    {1, L"відділок шерифа", L"the sheriff's department"},
+    {2, L"лікарня", L"the hospital"},
+    {3, L"лісовий парк", L"the Forest Park"},
+    {4, L"лісопилка", L"the lumbermill"},
+    {5, L"театр", L"the playhouse"},
+    {6, L"готель", L"the hotel"},
+    {7, L"галерея", L"the gallery"},
+    {8, L"закусочна A&G", L"the A&G Diner"},
+    {10, L"бар зі сценою (Carol)", L"Carol's bar"},
+    {11, L"ферма White Spruce", L"White Spruce Farm"},
+    {12, L"бар (Richard)", L"Richard's bar"},
+    {13, L"маєток (Harry)", L"Harry's mansion"},
+    {15, L"кладовище", L"the graveyard"},
+    {17, L"лісовий парк", L"the Forest Park"},
+    {20, L"дім (George)", L"George's house"},
+    {31, L"дім (Thomas, Carol)", L"Thomas and Carol's house"},
+    {33, L"дім (Becky)", L"Becky's house"},
+    {67, L"театр", L"the playhouse"},
+    {71, L"закусочна A&G, задній двір", L"the A&G Diner, back yard"},
+};
+
+// The name of a destination, or null. The finale's zone 49 writes the same group: there number 1 is the clock tower.
+const wchar_t* DestinationText(int index, bool en) {
+    const u8* game = *(const u8* volatile*)(uintptr_t)kGameManagerPtrVa;
+    if (index == 1 && Readable(game + 0x834FE0, 4) && *(const volatile int*)(game + 0x834FE0) == 49) return en ? L"the clock tower" : L"годинникова вежа";
+    for (const DestinationName& d : kDestinations)
+        if (d.index == index) return en ? d.en : d.uk;
+    return nullptr;
+}
+
 void DrawStory() {
     const bool en = g_cfg.language == 1;
     const float w = kCr - kCx;
@@ -1668,7 +1706,9 @@ void DrawStory() {
         lstrcpyW(line, en ? L"No story destination in the town right now." : L"Зараз у місті немає сюжетного місця призначення.");
     } else {
         const u8* t = st.destWindow;
-        int n = wsprintfW(line, en ? L"Story destination %d" : L"Сюжетне місце призначення № %d", st.destIndex);
+        const wchar_t* place = DestinationText(st.destIndex, en);
+        int n = place ? wsprintfW(line, en ? L"Go to %s" : L"Іти: %s", place)
+                      : wsprintfW(line, en ? L"Story destination %d" : L"Сюжетне місце призначення № %d", st.destIndex);
         if (t[0] | t[1] | t[2] | t[3]) n += wsprintfW(line + n, en ? L", open from %02d:%02d to %02d:%02d" : L", час: з %02d:%02d до %02d:%02d", t[0], t[1], t[2], t[3]);
         else n += wsprintfW(line + n, en ? L", at any time" : L", у будь-який час");
         if (st.destActive > 1) wsprintfW(line + n, en ? L"  (%d active in all)" : L"  (усього активних: %d)", st.destActive);
