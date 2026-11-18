@@ -225,18 +225,22 @@ bool InstallHighFpsPhysics() {
         return false;
     }
     g_planReady = true;
-    int ticks = 0, ramps = 0;
+    int ticks = 0, gameTicks = 0, ramps = 0;
     if (u8* stub = AllocStub(32)) {
         BuildCarTicksStub(stub, (u32)(uintptr_t)&g_frame.steps, (u32)(uintptr_t)&g_tickDt, kFrameDeltaVa);
         for (const SiteDef& s : kSiteCarTicks)
             if (PatchCall(s.va, s.bytes, 6, stub)) ++ticks;  // the fld alone; the call of _ftol2 behind it stays
+        // the rest of the game's (int)dt counters: each one on its own (one that another mod changed is just left out)
+        for (const SiteDef& s : kSiteGameTicks)
+            if (PatchCall(s.va, s.bytes, 6, stub)) ++gameTicks;
     }
     if (PointOperand(kSiteCarRamps[0], &g_ramp[0])) ++ramps;
     if (PointOperand(kSiteCarRamps[1], &g_ramp[0])) ++ramps;
     if (PointOperand(kSiteCarRamps[2], &g_ramp[1])) ++ramps;
     Log("physics steps: frames shorter than one step of 1/60 s share whole steps (HighFpsPhysics=%d): world update, car control and "
-        "car movement hooked, %d of %d car tick counters, %d of 3 car sound ramps",
-        g_cfg.highFpsPhysics, ticks, (int)(sizeof(kSiteCarTicks) / sizeof(kSiteCarTicks[0])), ramps);
+        "car movement hooked, %d of %d car tick counters, %d of %d other tick counters of the game, %d of 3 car sound ramps",
+        g_cfg.highFpsPhysics, ticks, (int)(sizeof(kSiteCarTicks) / sizeof(kSiteCarTicks[0])), gameTicks,
+        (int)(sizeof(kSiteGameTicks) / sizeof(kSiteGameTicks[0])), ramps);
     return true;
 }
 

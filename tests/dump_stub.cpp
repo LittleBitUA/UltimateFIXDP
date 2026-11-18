@@ -242,6 +242,10 @@ int main(int argc, char** argv) {
     Check(ct[7] == 0x7C && Rel8To(ct, 7, 16), "car ticks", "jl own");
     Check(ct[9] == 0xD9 && ct[10] == 0x05 && Rd32(ct + 11) == ctTicks && ct[15] == 0xC3, "car ticks", "fld dword [ticks] / ret");
     Check(ct[16] == 0xD9 && ct[17] == 0x05 && Rd32(ct + 18) == kFrameDeltaVa && ct[22] == 0xC3, "car ticks", "fld dword [frameDelta] / ret");
+    for (const SiteDef& s : kSiteGameTicks) {
+        Check(memcmp(s.bytes, ct + 16, 6) == 0, s.name, "the site is the fld the stub replays");
+        Check(s.len == 11 && Rel32To(s.bytes, s.va, 6, kFtolFn), s.name, "followed by call _ftol2");
+    }
     for (const SiteDef& s : kSiteCarTicks) {
         Check(memcmp(s.bytes, ct + 16, 6) == 0, s.name, "the site is the fld the stub replays");
         Check(s.len == 11 && Rel32To(s.bytes, s.va, 6, kFtolFn), s.name, "followed by call _ftol2");
