@@ -131,7 +131,10 @@ void ModsPage(float left, float top, float right, float bottom) {
         Fitted(T(L"  textures\\   заміни текстур <хеш>.dds або .png", L"  textures\\   texture replacements <hash>.dds or .png"), left, y + 46, kSoft, 15, right - left);
         Fitted(T(L"  mod.ini     Name=, Author=, Version=, Description= (необов'язково, UTF-8)", L"  mod.ini     Name=, Author=, Version=, Description= (optional, UTF-8)"),
                left, y + 68, kSoft, 15, right - left);
-        y += 100;
+        Fitted(T(L"Хеші текстур: DumpTextures=1 у [Debug] UltimateFix.ini, гра скине всі текстури в UltimateFix\\textures\\dump\\ з готовими назвами",
+                 L"Texture hashes: DumpTextures=1 in [Debug] of UltimateFix.ini dumps every texture to UltimateFix\\textures\\dump\\ named by its hash"),
+               left, y + 96, kDim, 13, right - left);
+        y += 124;
     }
     FillRect(left, y - 6, right - left, 1, kLine);
 
