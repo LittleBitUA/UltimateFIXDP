@@ -291,6 +291,34 @@ inline size_t BuildStrafeBridge(uint8_t* out, uint32_t stubVa, uint32_t workerVa
     return (size_t)(p - out);
 }
 
+// Gate in place of the idle branch's quick-turn flag test at 00503FA7 (`push 0 / push 4 / mov ecx,esi / call flagTest`):
+// the worker (cdecl, one argument: the player in esi) answers whether it has started the turn itself. If it has, execution
+// leaves through the function's own epilogue behind its quick-turn call (`exitVa`), as the game's path does; otherwise the
+// replaced instructions run here and the game goes on at `resumeVa` with edx:eax as the flag test left them.
+// Nothing is saved around the worker: EAX, ECX, EDX and the flags are dead at the site (the replaced call overwrites all of
+// them before anything reads them), EBX/ESI/EDI/EBP survive a cdecl call, and the stack is level again on both exits.
+//     push esi / call worker / add esp,4 / test eax,eax / jnz started
+//     push 0 / push 4 / mov ecx,esi / call flagTest / jmp resume
+//   started: jmp exit
+inline size_t BuildQuickTurnGate(uint8_t* out, uint32_t stubVa, uint32_t workerVa, uint32_t flagTestVa, uint32_t resumeVa,
+                                 uint32_t exitVa) {
+    uint8_t* p = out;
+    *p++ = 0x56;  // push esi
+    *p++ = 0xE8;
+    StubPut32(p, workerVa - (stubVa + (uint32_t)(p - out) + 4));  // call worker
+    *p++ = 0x83; *p++ = 0xC4; *p++ = 0x04;  // add esp, 4
+    *p++ = 0x85; *p++ = 0xC0;               // test eax, eax
+    *p++ = 0x75; *p++ = 0x10;               // jnz started (skips the 16 bytes below)
+    *p++ = 0x6A; *p++ = 0x00;               // push 0
+    *p++ = 0x6A; *p++ = 0x04;               // push 4
+    *p++ = 0x8B; *p++ = 0xCE;               // mov ecx, esi
+    *p++ = 0xE8;
+    StubPut32(p, flagTestVa - (stubVa + (uint32_t)(p - out) + 4));  // call flagTest
+    StubJmp(p, out, stubVa, resumeVa);
+    StubJmp(p, out, stubVa, exitVa);        // started:
+    return (size_t)(p - out);
+}
+
 // Entry hook of a thiscall function with one stack argument: worker(thisPtr, arg) (cdecl) runs first with everything saved,
 // then the first `len` original bytes (position independent) are replayed and execution continues after them.
 inline size_t BuildEntryHook(uint8_t* out, uint32_t stubVa, uint32_t workerVa, const uint8_t* orig, size_t len, uint32_t returnVa) {

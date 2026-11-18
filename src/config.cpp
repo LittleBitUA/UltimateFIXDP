@@ -254,6 +254,13 @@ static const char kDefaultIni[] =
     "; Strafe with LB / RB in combat while locked on (the console had it, the PC code lost it). Both buttons are also bound (LB aim,\r\n"
     "; RB fire; with TriggerFire=1 L1 run, R1 hold breath and lock-on), so pressing either while locked on also sidesteps. Changes at once.\r\n"
     "CombatStrafe=0\r\n"
+    "; Quick turn as on the Xbox 360 (the PC code kept the turn itself, player state 0Bh, but nothing can start it). On foot, with\r\n"
+    "; York's back to the camera: pull the left stick straight back (within 30 degrees) and press Run within 0.3 s, and he turns\r\n"
+    "; around on the spot. Run is the button the game runs with (the console's X): L1 with TriggerFire=1, the left trigger with the\r\n"
+    "; game's layout; on the keyboard it is S and then the run key (Left Shift). Holding Run before the stick does nothing new: York\r\n"
+    "; turns by himself as before. Not while aiming or in a weapon stance, not in a car, a cutscene or with the F10 menu open. Not\r\n"
+    "; installed with [Debug] SafeMode=1. Changes at once.\r\n"
+    "QuickTurn=1\r\n"
     "\r\n"
     "[Waypoint]\r\n"
     "; A waypoint: F7 on the pause map sets it at the middle of the map (the +), F7 in the world sets it where you stand (or where the\r\n"
@@ -453,6 +460,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.safeMode = (int)GetPrivateProfileIntW(L"Debug", L"SafeMode", 0, ini);
     g_cfg.traceStates = (int)GetPrivateProfileIntW(L"Debug", L"TraceStates", 0, ini);
     g_cfg.combatStrafe = (int)GetPrivateProfileIntW(L"Input", L"CombatStrafe", 0, ini);
+    g_cfg.quickTurn = (int)GetPrivateProfileIntW(L"Input", L"QuickTurn", 1, ini);
     g_cfg.synthHaptics = (int)GetPrivateProfileIntW(L"Input", L"SynthHaptics", 1, ini);
     g_cfg.noPowerThrottling = (int)GetPrivateProfileIntW(L"General", L"NoPowerThrottling", 1, ini);
     g_cfg.performanceCoresOnly = (int)GetPrivateProfileIntW(L"General", L"PerformanceCoresOnly", 0, ini);

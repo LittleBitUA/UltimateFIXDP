@@ -123,6 +123,7 @@ struct Config {
                              // SSAO, blur look) and zeroes the newest settings in LoadConfig; the rest stays on (see the ini text)
     int traceStates;         // log every change of the player state
     int combatStrafe;        // LB / RB strafe in combat while locked on, as on the console
+    int quickTurn;           // stick back + the run button turns York around on the spot (player state 0Bh), as on the console
     int synthHaptics;        // DualSense: engine hum in a car and a kick for each shot (made from the game state)
     int noPowerThrottling;   // exempt the game from Windows efficiency mode (EcoQoS)
     int performanceCoresOnly; // hybrid CPUs: run the game on the performance cores only
@@ -224,6 +225,7 @@ bool InstallFreeCam();
 bool InstallAmbientOcclusion();
 bool InstallBlurLook();
 bool InstallCombatStrafe();
+bool InstallQuickTurn();
 bool InstallGlyphIndexFix();
 void CheatsTick(void* player);
 void CheatMoney(int amount);
