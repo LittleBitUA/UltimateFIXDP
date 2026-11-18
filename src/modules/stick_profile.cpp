@@ -44,8 +44,30 @@ float Curve(u32 raw) {
     return v;
 }
 
+// Mouse look speed (keyboard mode, where the right stick values carry the mouse): the game clamps them to +-2 and slews them by
+// 0.5 a poll, so a faster mouse must be applied after that. The evaluator slews from its last result, so it gets back the
+// unscaled value before each run and the scaled one is left only for the reads that follow (the camera).
+float g_mouseRaw[2];
+bool g_mouseScaled = false;
+
 void __fastcall StickHook(void* self, void* edx, int slot, void* rec) {
+    float* acc = (float*)((u8*)self + kInputStickOffset);  // slot 0
+    if (slot == 0 && g_mouseScaled) {
+        acc[2] = g_mouseRaw[0];
+        acc[3] = g_mouseRaw[1];
+        g_mouseScaled = false;
+    }
     g_orig(self, edx, slot, rec);
+    if (slot == 0 && !*(volatile u8*)(uintptr_t)kUseJoyVa) {
+        const float speed = MouseLookSpeed();
+        if (speed != 1.0f) {
+            g_mouseRaw[0] = acc[2];
+            g_mouseRaw[1] = acc[3];
+            acc[2] *= speed;
+            acc[3] *= speed;
+            g_mouseScaled = true;
+        }
+    }
     g_profileFlag = g_cfg.stickProfile ? 1 : 0;
     if (!g_cfg.stickProfile || slot != 0 || !g_pad.valid) return;
     if (!*(volatile u8*)(uintptr_t)kUseJoyVa) return;

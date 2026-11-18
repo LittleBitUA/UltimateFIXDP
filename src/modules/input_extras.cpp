@@ -23,14 +23,17 @@ bool PatchMouse(const SiteDef& s, u32 movementVa, volatile float* scale) {
 // Both calls change together; the two writes happen between ticks (on the game thread, from the menu code that
 // runs inside the frame's Present), never in the middle of the tick.
 void ApplyInputExtras() {
-    const float speed = (float)g_cfg.mouseSensitivity / 100.0f;
-    g_mouseScale[0] = g_cfg.invertMouseX ? -speed : speed;
-    g_mouseScale[1] = g_cfg.invertMouseY ? -speed : speed;
+    // Only the direction here: the speed is applied after the game's clamp of the stick value (MouseLookSpeed, stick_profile.cpp),
+    // or 400 % would only reach that clamp sooner and the camera would not turn any faster.
+    g_mouseScale[0] = g_cfg.invertMouseX ? -1.0f : 1.0f;
+    g_mouseScale[1] = g_cfg.invertMouseY ? -1.0f : 1.0f;
     if (!g_latencyReady) return;
     const bool on = g_cfg.lowLatencyInput != 0;
     WriteCode(kSiteInputCommit.va, on ? kInputCommitSwapped : kSiteInputCommit.bytes, 5);
     WriteCode(kSiteInputPoll.va, on ? kInputPollSwapped : kSiteInputPoll.bytes, 5);
 }
+
+float MouseLookSpeed() { return (float)g_cfg.mouseSensitivity / 100.0f; }
 
 bool InstallInputExtras() {
     ApplyInputExtras();

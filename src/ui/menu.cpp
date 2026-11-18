@@ -378,7 +378,7 @@ Item g_pageInput[] = {
     {{L"Триґери як аналоговий вхід авто (експеримент)", L"Triggers as analog car input (experiment)"}, &g_cfg.analogTriggers, kBool, 0, 1, 1, false, L"Input", L"AnalogTriggers", nullptr, nullptr,
      {L"Ідея ZachFix. У Director's Cut гальмо й прискорення авто на плечових кнопках; вмикайте лише для досліду.", L"A ZachFix idea. In the Director's Cut the car's brake and boost are on the shoulder buttons; turn on only to try."}, NOTR},
     {{L"Чутливість миші, %", L"Mouse sensitivity, %"}, &g_cfg.mouseSensitivity, kInt, 25, 400, 25, false, L"Input", L"MouseSensitivity", ApplyInputExtras, nullptr,
-     {L"Швидкість огляду мишею понад налаштування самої гри. 100 = як у грі; менше повільніше, більше швидше. Діє одразу.", L"Mouse look speed over the game's own setting. 100 = as the game; less is slower, more is faster. Changes at once."},
+     {L"Швидкість огляду мишею понад налаштування самої гри. 100 = як у грі; 400 = вчетверо швидше, і найбільша швидкість повороту теж. Діє одразу.", L"Mouse look speed over the game's own setting. 100 = as the game; less is slower, more is faster. Changes at once."},
      {L"Миша", L"Mouse"}},
     {{L"Інвертувати мишу по горизонталі", L"Invert the mouse horizontally"}, &g_cfg.invertMouseX, kBool, 0, 1, 1, false, L"Input", L"InvertMouseX", ApplyInputExtras, nullptr,
      {L"Рух миші вліво повертає камеру вправо і навпаки.", L"Moving the mouse left turns the camera right and back."}, NOTR},

@@ -337,6 +337,7 @@ bool InstallEffectStep();
 extern int g_sceneWidth;  // width of the 3D scene after the render scale (0 = not scaled)
 bool FreeCamBlocksInput();  // true while the camera flies and the game must see no input
 void ApplyWorldExtra();  // writes the current settings (also called from the menu)
+float MouseLookSpeed();   // input_extras.cpp: the mouse look speed, 1 = the game's
 void ApplyInputExtras();  // writes the current input settings (also called from the menu)
 void PadCapture(const void* joyInfoEx);  // pad 0 data as the game is about to receive it, null = none
 void AutoInputTick(unsigned id, const void* joyInfoEx, unsigned result, SHORT(WINAPI* getKey)(int));  // called by the joyGetPosEx hook
