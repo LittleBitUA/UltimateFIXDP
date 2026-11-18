@@ -107,8 +107,15 @@ Layout: `src/` the mod (`modules/` one file per feature, `sites.h` every patched
 
 ### Credits
 
-The code is our own. Ideas and research came from earlier community work: **ZachFix**, **DPfix**, **DPStabilityFix**, **CrashFix**, **MapFix** and **FreeCam**. Thank you to their authors.
-The gamepad icons come from [Kenney Input Prompts](https://kenney.nl/assets/input-prompts) (CC0). DXVK is bundled as an optional extra under its own license (`dxvk/LICENSE-DXVK.txt`).
+The code is our own. Ideas and research came from earlier community work. Thank you to their authors:
+
+- [ZachFix](https://github.com/h714je/ZachFix) by h714je
+- [DPfix](https://github.com/PeterTh/dpfix) by Durante (Peter Thoman)
+- [DPStabilityFix](https://github.com/Cesario67/DeadlyPremonitionFix) by Cesario67
+- [CrashFix](https://github.com/Behelit09/DeadlyPremonition-CrashFix), [MapFix](https://github.com/Behelit09/Deadly-Premonition-The-Director-s-Cut-MapFix) and [FreeCam](https://github.com/Behelit09/DeadlyPremonition-FreeCam) by Behelit09
+- [DPRecomp](https://github.com/LittleBitUA/DPRecomp), our Xbox 360 recompilation project, for comparing the PC code with the original
+
+Gamepad icons: [Kenney Input Prompts](https://kenney.nl/assets/input-prompts) (CC0). [DXVK](https://github.com/doitsujin/dxvk) is bundled as an optional extra under its own license (`dxvk/LICENSE-DXVK.txt`).
 
 Deadly Premonition belongs to its owners. This project ships no game files.
 
@@ -218,8 +225,15 @@ make test DPEXE=/шлях/до/DP.exe       # звіряє кожне місце
 
 ### Подяки
 
-Код наш власний. Ідеї та дослідження взято з попередніх робіт спільноти: **ZachFix**, **DPfix**, **DPStabilityFix**, **CrashFix**, **MapFix** і **FreeCam**. Дякуємо їхнім авторам.
-Іконки ґеймпадів — [Kenney Input Prompts](https://kenney.nl/assets/input-prompts) (CC0). DXVK додано як необов'язковий додаток під його власною ліцензією (`dxvk/LICENSE-DXVK.txt`).
+Код наш власний. Ідеї та дослідження взято з попередніх робіт спільноти. Дякуємо їхнім авторам:
+
+- [ZachFix](https://github.com/h714je/ZachFix), автор h714je
+- [DPfix](https://github.com/PeterTh/dpfix), автор Durante (Peter Thoman)
+- [DPStabilityFix](https://github.com/Cesario67/DeadlyPremonitionFix), автор Cesario67
+- [CrashFix](https://github.com/Behelit09/DeadlyPremonition-CrashFix), [MapFix](https://github.com/Behelit09/Deadly-Premonition-The-Director-s-Cut-MapFix) і [FreeCam](https://github.com/Behelit09/DeadlyPremonition-FreeCam), автор Behelit09
+- [DPRecomp](https://github.com/LittleBitUA/DPRecomp), наш проєкт рекомпіляції версії для Xbox 360, з яким ми порівнювали код PC-версії
+
+Іконки ґеймпадів — [Kenney Input Prompts](https://kenney.nl/assets/input-prompts) (CC0). [DXVK](https://github.com/doitsujin/dxvk) додано як необов'язковий додаток під його власною ліцензією (`dxvk/LICENSE-DXVK.txt`).
 
 Deadly Premonition належить своїм правовласникам. Проєкт не містить файлів гри.
 

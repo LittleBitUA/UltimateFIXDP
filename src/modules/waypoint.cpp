@@ -98,6 +98,18 @@ void RememberArea() {
     g_floor = g ? (int)(signed char)*(volatile int*)(uintptr_t)(g + kFloorOff) : 0;
 }
 
+// The game's own "free play" test FUN_0042D010 (with ECX = CEvent, [00BD9E58h]): no script cutscene (CEvent+44h bit 40000h,
+// CEvent+34h a running P-demo) and no SCENE demo ([008A6074h] < 0). The last alone misses script cutscenes and videos.
+bool GameIdle() {
+    if (*(volatile int*)(uintptr_t)kEventModeVa < 0) return false;
+    u32 ev = *(volatile u32*)(uintptr_t)0x00BD9E58;
+    if (ev < 0x10000 || ev >= 0x7FFE0000u) return true;  // not created yet: no event can run
+    if (*(volatile u32*)(uintptr_t)(ev + 0x44) & 0x40000u) return false;
+    return *(volatile u32*)(uintptr_t)(ev + 0x34) == 0;
+}
+
+bool g_spriteHooked = false;
+
 // True when the game is drawing into the back buffer right now (not into one of its textures, such as a map tile or a reflection).
 bool DrawingToScreen() {
     void* dev = g_dev;
@@ -124,7 +136,7 @@ void __cdecl TextDrawWorker(void* self, u32 arg) {
     if (!DrawingToScreen()) return;
     // not in cutscenes: the player update (and so WorldActive) keeps running there, and the game's own label (FUN_0043C200)
     // is drawn only while the event mode is not negative
-    if (*(volatile int*)(uintptr_t)kEventModeVa < 0) return;
+    if (!GameIdle()) return;
     // only while the 2D area is the whole screen: FUN_0044AD00 sets it (x 0148097Ch, y 01480978h, width, height) to the minimap's
     // rectangle while the minimap is drawn (sprites go through 00459520 there too) and FUN_005F8430 puts it back. Projected into the
     // minimap's rectangle the label slid around with the minimap. Checked before the frame is marked as drawn, so a later call
@@ -157,6 +169,14 @@ void __cdecl TextDrawWorker(void* self, u32 arg) {
         if (right >= 0.f) Print(W - margin, H * 0.5f, colour, "%d Yards >", yards);
         else Print(margin, H * 0.5f, colour, "< %d Yards", yards);
     }
+}
+
+// The entry of the text draw FUN_0045B820: only a fallback when the sprite draw could not be hooked. Mes_Draw calls 0045B820
+// in the middle of its own glyph batch (a "**" number: 0045D77C -> 0045C720 -> 0045B820), and a print from there would reset that
+// batch's counter ([CMessage+12070h], 0045B90C) and drop the glyphs before the number for that frame.
+void __cdecl TextEntryWorker(void* self, u32 arg) {
+    if (g_spriteHooked) return;
+    TextDrawWorker(self, arg);
 }
 
 }  // namespace
@@ -248,14 +268,15 @@ bool InstallWaypoint() {
     }
     u8* hook = AllocStub(64);
     if (!hook) return false;
-    BuildEntryHook(hook, (u32)(uintptr_t)hook, (u32)(uintptr_t)TextDrawWorker, t.bytes, t.len, t.va + t.len);
+    BuildEntryHook(hook, (u32)(uintptr_t)hook, (u32)(uintptr_t)TextEntryWorker, t.bytes, t.len, t.va + t.len);
     if (!PatchJump(t.va, t.bytes, t.len, hook)) return false;
     const SiteDef& p = kSiteSpriteDrawEntry;  // the HUD draws sprites every frame: the label no longer needs a text draw in the frame
     if (BytesMatch(p.va, p.bytes, p.len)) {
         u8* hook2 = AllocStub(64);
         if (hook2) {
             BuildEntryHook(hook2, (u32)(uintptr_t)hook2, (u32)(uintptr_t)TextDrawWorker, p.bytes, p.len, p.va + p.len);
-            if (!PatchJump(p.va, p.bytes, p.len, hook2)) Log("waypoint: could not hook the sprite draw, the label follows text draws only");
+            if (PatchJump(p.va, p.bytes, p.len, hook2)) g_spriteHooked = true;
+            else Log("waypoint: could not hook the sprite draw, the label follows text draws only");
         }
     } else {
         Log("waypoint: the sprite draw at %08X differs from DP.exe 1.01b, the label follows text draws only", p.va);
