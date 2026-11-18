@@ -121,8 +121,16 @@ static const char kDefaultIni[] =
     "; Strength in percent 0..100 (0 = off), radius in pixels at 720p. Changes at once.\r\n"
     "AmbientOcclusion=0\r\n"
     "AoRadius=10\r\n"
-    "; Edge smoothing of the final picture (FXAA-like), percent 0..100. 0 = off. Changes at once.\r\n"
+    "; Edge smoothing of the final picture, percent 0..100. 0 = off. Changes at once.\r\n"
     "Antialias=0\r\n"
+    "; How the edges are smoothed while Antialias is above 0. 0 (or FXAA) = the fast FXAA-like pass. 1 (or SMAA) = SMAA 1x,\r\n"
+    "; our own implementation: it finds the jagged borders and straightens only them, so textures and text stay sharper\r\n"
+    "; (use Antialias=100 with it); a little heavier for the video card. When SMAA cannot start, the log says why and the\r\n"
+    "; FXAA-like pass is used. Changes at once.\r\n"
+    "AntialiasMode=0\r\n"
+    "; SMAA only: how far along an edge its end is looked for. 0 = low (about 8 pixels), 1 = medium (16), 2 = high (32:\r\n"
+    "; the smoothest nearly horizontal and nearly vertical lines). Changes at once.\r\n"
+    "SmaaQuality=2\r\n"
     "; Sharpen the final picture (unsharp mask), percent 0..100. 0 = off, 50 by default. Changes at once.\r\n"
     "Sharpen=50\r\n"
     "; PNG screenshot of the picture without the menu into UltimateFix\\screenshots. Virtual key code, 122 = F11, 0 = off.\r\n"
@@ -652,6 +660,16 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.antialias = (int)GetPrivateProfileIntW(L"Graphics", L"Antialias", 0, ini);
     if (g_cfg.antialias < 0) g_cfg.antialias = 0;
     if (g_cfg.antialias > 100) g_cfg.antialias = 100;
+    {   // a number as the menu writes it (read like every other number here, so text after it does no harm), or the
+        // name of the method
+        wchar_t mode[16];
+        GetPrivateProfileStringW(L"Graphics", L"AntialiasMode", L"", mode, 16, ini);
+        mode[4] = 0;  // "SMAA" and whatever follows it on the line
+        g_cfg.antialiasMode =
+            (GetPrivateProfileIntW(L"Graphics", L"AntialiasMode", 0, ini) == 1 || lstrcmpiW(mode, L"SMAA") == 0) ? 1 : 0;
+    }
+    g_cfg.smaaQuality = (int)GetPrivateProfileIntW(L"Graphics", L"SmaaQuality", 2, ini);
+    if (g_cfg.smaaQuality < 0 || g_cfg.smaaQuality > 2) g_cfg.smaaQuality = 2;
     g_cfg.sharpen = (int)GetPrivateProfileIntW(L"Graphics", L"Sharpen", 50, ini);
     if (g_cfg.sharpen < 0) g_cfg.sharpen = 0;
     if (g_cfg.sharpen > 100) g_cfg.sharpen = 100;

@@ -659,6 +659,7 @@ void FrameStatsPanel(void* dev, double totalMs, double gameMs, double physicsMs,
 // textures, so both must go (they are made again on the next frame).
 void ReleasePostResources() {
     ReleaseCopy();
+    ReleaseSmaaTargets();
     ReleaseStateBlockCache();
 }
 
@@ -761,8 +762,37 @@ void SharpenFrame(void* dev, int percent) {
 }
 
 void AntialiasFrame(void* dev, int percent) {
+    if (g_cfg.antialiasMode == 1) {
+        if (SmaaFrame(dev, percent)) return;
+        // SMAA cannot run (its one log line says why) and the pass below takes over. The setting goes back in memory
+        // only: the menu row then shows what really smooths the picture, and the ini keeps the player's choice for
+        // the next start.
+        g_cfg.antialiasMode = 0;
+    }
+    ReleaseSmaaTargets();  // two textures of the back buffer's size are not kept while the other method works
     RunPass(dev, &g_fxaaShader, &g_fxaaFailed, "antialias", kFxaaSource, sizeof(kFxaaSource) - 1, kProfilesFxaa, percent);
 }
+
+// ---- The same building blocks for a final-image pass that lives in its own file (smaa.cpp) ------------------------
+void* PostBackBuffer(void* dev, UINT* w, UINT* h, UINT* fmt) { return BackBufferInfo(dev, w, h, fmt); }
+
+bool PostCopyTarget(void* dev, UINT w, UINT h, UINT fmt, void** texture, void** surface) {
+    if (!g_copyTex || g_copyW != w || g_copyH != h || g_copyFmt != fmt) {
+        ReleaseCopy();
+        if (FAILED(Method<CreateTexFn>(dev, kCreateTexture)(dev, w, h, 1, 1 /*RENDERTARGET*/, fmt, 0 /*DEFAULT*/, &g_copyTex,
+                                                            nullptr)) ||
+            !g_copyTex || FAILED(Method<GetLevelFn>(g_copyTex, 18)(g_copyTex, 0, &g_copySurf)) || !g_copySurf) {
+            ReleaseCopy();
+            return false;
+        }
+        g_copyW = w; g_copyH = h; g_copyFmt = fmt;
+    }
+    *texture = g_copyTex;
+    *surface = g_copySurf;
+    return true;
+}
+
+void PostFullQuad(UINT w, UINT h) { Quad(0.f, 0.f, (float)w, (float)h, 0xFFFFFFFF, 0.f, 0.f, 1.f, 1.f); }
 
 // ---- Ambient occlusion -----------------------------------------------------------------------------------------
 // Runs inside the game's frame, in front of the final composite draw (the one that reads the HDR scene as texture 0 and

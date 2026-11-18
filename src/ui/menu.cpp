@@ -47,6 +47,8 @@ struct Item {
 };
 
 const Tr kGlyphTr[4] = {{L"Вимк.", L"Off"}, {L"Авто", L"Auto"}, {L"Xbox", L"Xbox"}, {L"PlayStation", L"PlayStation"}};
+const Tr kAntialiasModeTr[2] = {{L"FXAA", L"FXAA"}, {L"SMAA", L"SMAA"}};
+const Tr kSmaaQualityTr[3] = {{L"Низька", L"Low"}, {L"Середня", L"Medium"}, {L"Висока", L"High"}};
 const Tr kMapOrientTr[3] = {{L"Обертається", L"Rotates"}, {L"Північ угорі", L"North up"}, {L"Південь угорі", L"South up"}};
 const Tr kDifficultyTr[3] = {{L"Легка", L"Easy"}, {L"Звичайна", L"Normal"}, {L"Важка", L"Hard"}};
 const Tr kSurroundTr[3] = {{L"Вимк.", L"Off"}, {L"Авто", L"Auto"}, {L"Авто, боки навпаки", L"Auto, sides swapped"}};
@@ -219,9 +221,13 @@ Item g_pageGraphics[] = {
      {L"Чіткість і вигляд", L"Sharpness and look"}},
     {{L"Радіус затінення, пікселів", L"Occlusion radius, pixels"}, &g_cfg.aoRadius, kInt, 2, 40, 2, false, L"Graphics", L"AoRadius", nullptr, nullptr,
      {L"Наскільки далеко від кута шукається перекриття (при 720p; на більших роздільностях росте пропорційно).", L"How far from a corner occlusion is searched (at 720p; scales up with the resolution)."}, NOTR},
-    {{L"Згладжування країв (FXAA), %", L"Edge smoothing (FXAA), %"}, &g_cfg.antialias, kInt, 0, 100, 10, false, L"Graphics", L"Antialias", nullptr, nullptr,
-     {L"Прибирає «драбинки» на краях. Гра не має власного згладжування. Змінюється одразу; поєднуйте з різкістю 20–30, бо згладжування трохи розмиває.", L"Removes jagged edges. The game has no antialiasing of its own. Changes at once; combine with sharpening 20–30, since smoothing blurs slightly."},
+    {{L"Згладжування країв, %", L"Edge smoothing, %"}, &g_cfg.antialias, kInt, 0, 100, 10, false, L"Graphics", L"Antialias", nullptr, nullptr,
+     {L"Прибирає «драбинки» на краях. Гра не має власного згладжування. Змінюється одразу. Спосіб обирається рядком нижче: з FXAA поєднуйте з різкістю 20–30, бо воно трохи розмиває; зі SMAA ставте 100.", L"Removes jagged edges. The game has no antialiasing of its own. Changes at once. The method is chosen in the row below: with FXAA combine it with sharpening 20–30, since it blurs slightly; with SMAA set 100."},
      {L"Чіткість і вигляд", L"Sharpness and look"}},
+    {{L"Спосіб згладжування", L"Smoothing method"}, &g_cfg.antialiasMode, kInt, 0, 1, 1, false, L"Graphics", L"AntialiasMode", nullptr, kAntialiasModeTr,
+     {L"FXAA: швидке, але трохи розмиває всю картинку. SMAA: знаходить самі «драбинки» на межах предметів і вирівнює лише їх, тож текстури й текст лишаються чіткішими; трохи важче для відеокарти. Діє, коли «Згладжування країв» більше 0. Якщо SMAA не запуститься на вашій відеокарті, мод сам повернеться до FXAA (цей рядок теж перемкнеться на FXAA) і запише причину в журнал. Змінюється одразу. У грі ще не перевірено.", L"FXAA: fast, but blurs the whole picture slightly. SMAA: finds the jagged steps on the borders of objects and straightens only them, so textures and text stay sharper; a little heavier for the video card. Works while 'Edge smoothing' is above 0. If SMAA cannot start on your video card, the mod goes back to FXAA by itself (this row switches to FXAA too) and writes the reason to the log. Changes at once. Not yet verified in the game."}, NOTR},
+    {{L"Якість SMAA", L"SMAA quality"}, &g_cfg.smaaQuality, kInt, 0, 2, 1, false, L"Graphics", L"SmaaQuality", nullptr, kSmaaQualityTr,
+     {L"Наскільки далеко вздовж межі шукається її кінець: низька близько 8 пікселів, середня 16, висока 32. Що далі, то рівніші майже горизонтальні й майже вертикальні лінії (дахи, дроти, край дороги). Діє лише зі способом SMAA. Змінюється одразу; під час перемикання гра може на мить пригальмувати.", L"How far along a border its end is looked for: low about 8 pixels, medium 16, high 32. The farther, the smoother nearly horizontal and nearly vertical lines get (roofs, wires, the edge of the road). Only with the SMAA method. Changes at once; the game may hitch for a moment when you switch."}, NOTR},
     {{L"Різкість фінальної картинки, %", L"Sharpening of the final picture, %"}, &g_cfg.sharpen, kInt, 0, 100, 10, false, L"Graphics", L"Sharpen", nullptr, nullptr,
      {L"Підвищення різкості готового кадру. Починайте з 30–50, більше дає ореоли. Змінюється одразу.", L"Sharpens the finished frame. Start with 30–50, more gives halos. Changes at once."},
      {L"Чіткість і вигляд", L"Sharpness and look"}},

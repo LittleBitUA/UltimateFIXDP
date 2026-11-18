@@ -9,6 +9,8 @@ SRC      := src/main.cpp src/proxy.cpp src/log.cpp src/config.cpp src/pe.cpp src
             src/modules/qpc_time.cpp src/modules/zero_delta.cpp src/modules/saves.cpp src/modules/small_fixes.cpp src/modules/display.cpp src/modules/output_resolution.cpp src/modules/render_scale.cpp src/modules/world_distance.cpp src/modules/sony_layout.cpp src/d3d/trace.cpp src/modules/graphics_tweaks.cpp src/modules/gameplay.cpp src/modules/frame_pacer.cpp src/modules/camera_trace.cpp src/modules/input_auto.cpp src/modules/stick_profile.cpp src/modules/input_extras.cpp src/modules/crash_handler.cpp src/modules/world_extra.cpp src/modules/vehicle_triggers.cpp src/modules/vibration.cpp src/modules/xinput_input.cpp src/modules/dualsense.cpp src/modules/dualsense_out.cpp src/modules/adaptive_triggers.cpp src/modules/crash_guards.cpp src/modules/map_fix.cpp src/modules/freecam.cpp src/modules/ssao.cpp src/modules/blur_look.cpp src/modules/combat_strafe.cpp src/modules/world_alt3d.cpp src/modules/phys_freeze.cpp src/modules/cheats.cpp src/modules/launcher_install.cpp src/modules/cpu_tweaks.cpp src/modules/waypoint.cpp src/modules/texture_override.cpp src/ui/overlay.cpp src/ui/menu.cpp
 SRC      += src/modules/resource_guard.cpp src/modules/diagnostics.cpp
 SRC      += src/modules/text_overlay.cpp
+# SMAA 1x: the pass, its shader texts (src/ui/smaa_shaders.h) and its lookup tables (src/smaa_lut.h)
+SRC      += src/ui/smaa.cpp
 CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -ffreestanding -fno-builtin -fno-exceptions -fno-rtti \
             -fno-threadsafe-statics -fno-asynchronous-unwind-tables -fno-unwind-tables \
             -fno-stack-protector -fno-tree-loop-distribute-patterns -fno-ident
@@ -78,12 +80,31 @@ $(OUT)/test_mes: tests/test_mes.cpp src/mes.h
 
 test: $(OUT)/test_mes
 
+# The SMAA shader bodies are written out as files and compiled into the test as C++ (tests/hlsl_host.h), so the test runs
+# the very texts the DLL hands to the HLSL compiler.
+$(OUT)/smaa_dump: tests/smaa_dump.cpp src/ui/smaa_shaders.h
+	@mkdir -p $(OUT)
+	$(HOSTCXX) -std=c++17 -Isrc -o $@ tests/smaa_dump.cpp
+
+$(OUT)/smaa_edge_body.inc: $(OUT)/smaa_dump
+	$(OUT)/smaa_dump $(OUT)
+
+$(OUT)/test_smaa: tests/test_smaa.cpp tests/hlsl_host.h src/smaa_lut.h $(OUT)/smaa_edge_body.inc
+	$(HOSTCXX) -std=c++17 -O2 -Isrc -I$(OUT) -o $@ tests/test_smaa.cpp
+
+# Optional second opinion on the syntax of the SMAA shaders: glslang's HLSL front end (not the compiler of d3dx9_43 that the
+# game machine uses, and not part of "make test"):  make hlslcheck GLSLANG=/path/to/glslang
+hlslcheck: $(OUT)/smaa_edge_body.inc
+	for f in edge weight blend; do "$(GLSLANG)" -D -S frag -e main --hlsl-dx9-compatible -V -o $(OUT)/smaa_$$f.spv $(OUT)/smaa_$$f.hlsl || exit 1; done
+
 $(OUT)/dump_stub: tests/dump_stub.cpp src/stubs.h src/sites.h
 	@mkdir -p $(OUT)
 	$(HOSTCXX) -std=c++17 -Isrc -o $@ tests/dump_stub.cpp
 
+test: $(OUT)/test_smaa
 test: $(OUT)/verify_sites $(OUT)/dump_stub $(OUT)/test_pacer $(OUT)/test_hash $(OUT)/test_dsreport $(OUT)/test_surround
 	$(OUT)/test_surround
+	$(OUT)/test_smaa
 	$(OUT)/test_pacer
 	$(OUT)/test_hash
 	$(OUT)/test_dsreport
@@ -105,4 +126,4 @@ test: test_resguard
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all test test-stepplan clean
+.PHONY: all test test-stepplan clean hlslcheck

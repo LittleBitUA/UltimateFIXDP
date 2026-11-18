@@ -67,6 +67,8 @@ struct Config {
     int ambientOcclusion;    // strength of the ambient occlusion in percent (0 = off)
     int aoRadius;            // radius in pixels at 720p
     int antialias;           // edge smoothing of the final picture in percent (0 = off)
+    int antialiasMode;       // how the edges are smoothed: 0 the FXAA-like pass, 1 SMAA 1x (falls back to 0 when it cannot run)
+    int smaaQuality;         // SMAA: 0 low, 1 medium, 2 high (how far along an edge its end is looked for)
     int sharpen;             // sharpening of the final picture in percent (0 = off)
     int screenshotKey;       // virtual key code for a PNG screenshot, 0 = off
     int glyphTheme;          // interface icons for the pad: 0 off, 1 auto (PlayStation for a DualSense), 2 Xbox, 3 PlayStation
