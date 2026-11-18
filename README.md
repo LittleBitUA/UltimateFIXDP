@@ -21,8 +21,8 @@ _Універсальний фікс для_ **Deadly Premonition: The Director'
 
 ## 🇬🇧 In English
 
-One DLL in the game folder instead of DPfix, a 4 GB patch, a stability fix, a map fix and a crash fix.
-No exe patching, no installer: press **F10** in game and everything is there.
+One DLL in the game folder instead of DPfix, a stability fix, a map fix and a crash fix.
+No installer: press **F10** in game and everything is there. The 4 GB patch is a separate optional step (`ufx_laa.exe`, included).
 
 > **Public test build.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
 
@@ -148,8 +148,8 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 
 ## 🇺🇦 Українською
 
-Одна DLL у теці гри замість DPfix, 4GB-патча, фіксу стабільності, фіксу мапи й фіксу вильотів.
-Без правок exe, без інсталятора: натисніть **F10** у грі, і все там.
+Одна DLL у теці гри замість DPfix, фіксу стабільності, фіксу мапи й фіксу вильотів.
+Без інсталятора: натисніть **F10** у грі, і все там. 4GB-патч — окремий необов'язковий крок (`ufx_laa.exe`, є в архіві).
 
 > **Тестова збірка.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
 

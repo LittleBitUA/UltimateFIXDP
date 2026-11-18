@@ -33,10 +33,11 @@ bool SwapImport(void** slot, void* replacement, void** previousOut) {
     return true;
 }
 
-// One executable page is enough for every trampoline we emit.
+// The executable arena for every trampoline we emit: four pages. One page was half full at 0.6.8, and a full arena makes
+// AllocStub return nullptr, which callers take as "skip this fix".
 static u8* g_arena = nullptr;
 static size_t g_arenaUsed = 0;
-static const size_t kArenaSize = 4096;
+static const size_t kArenaSize = 0x4000;
 
 u8* AllocStub(size_t size) {
     if (!g_arena) {
@@ -44,7 +45,16 @@ u8* AllocStub(size_t size) {
         if (!g_arena) return nullptr;
     }
     size = (size + 15) & ~(size_t)15;
-    if (g_arenaUsed + size > kArenaSize) return nullptr;
+    if (g_arenaUsed + size > kArenaSize) {
+        // every caller treats nullptr as "this fix is not installed": say so once, or fixes vanish without a trace
+        static bool said = false;
+        if (!said) {
+            said = true;
+            Log("patch: the stub arena is full (%u of %u bytes used, %u more asked): fixes installed after this point are skipped",
+                (unsigned)g_arenaUsed, (unsigned)kArenaSize, (unsigned)size);
+        }
+        return nullptr;
+    }
     u8* p = g_arena + g_arenaUsed;
     g_arenaUsed += size;
     return p;
