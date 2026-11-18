@@ -463,8 +463,62 @@ Item g_pageSave[] = {
 };
 
 // ---- Photo mode page: the free camera, frozen time, filters, a screenshot button.
-const Tr kFilterTr[6] = {{L"Без", L"None"}, {L"Тепла", L"Warm"}, {L"Холодна", L"Cold"}, {L"Чорно-біла", L"B&W"}, {L"Кіно", L"Cinema"}, {L"Вінтаж", L"Vintage"}};
-const int kFilterValues[6] = {0, 1, 2, 3, 4, 5};
+constexpr int kBuiltinFilters = 14, kOwnPresets = 4, kFilterCount = kBuiltinFilters + kOwnPresets;
+const Tr kFilterTr[kFilterCount] = {{L"Без", L"None"}, {L"Тепла", L"Warm"}, {L"Холодна", L"Cold"}, {L"Чорно-біла", L"B&W"},
+                                    {L"Кіно", L"Cinema"}, {L"Вінтаж", L"Vintage"}, {L"Сепія", L"Sepia"}, {L"Нуар", L"Noir"},
+                                    {L"Плівка", L"Film"}, {L"Знебарвлена", L"Bleach bypass"}, {L"Сон", L"Dream"},
+                                    {L"Відеокасета", L"VHS"}, {L"Ніч", L"Night"}, {L"Туман", L"Fog"},
+                                    {L"Мій 1", L"Mine 1"}, {L"Мій 2", L"Mine 2"}, {L"Мій 3", L"Mine 3"}, {L"Мій 4", L"Mine 4"}};
+// The sliders of the look, in the order of the presets below and of the [PhotoPresets] lines.
+constexpr int kLookCount = 11;
+int* const kLook[kLookCount] = {&g_cfg.photoBright, &g_cfg.photoContrast, &g_cfg.photoSat, &g_cfg.photoVignette, &g_cfg.photoTemp,
+                                &g_cfg.photoTint, &g_cfg.photoSepia, &g_cfg.photoFade, &g_cfg.photoGrain, &g_cfg.photoAberration,
+                                &g_cfg.photoBars};
+const int kLookLo[kLookCount] = {-100, -100, -100, 0, -100, -100, 0, 0, 0, 0, 0};
+//                                        bright contr  sat  vign  temp  tint sepia fade grain  ca  bars
+const signed char kFilterLook[kBuiltinFilters][kLookCount] = {{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},           // none
+                                                              {0, 0, 10, 0, 70, 0, 0, 0, 0, 0, 0},         // warm
+                                                              {0, 0, 5, 0, -75, 20, 0, 0, 0, 0, 0},        // cold
+                                                              {0, 10, -100, 20, 0, 0, 0, 0, 0, 0, 0},      // black and white
+                                                              {-5, 20, -20, 45, 35, 0, 0, 0, 10, 0, 60},   // cinema
+                                                              {5, 10, -40, 50, 80, 0, 25, 25, 25, 0, 0},   // vintage
+                                                              {0, 5, -100, 35, 0, 0, 100, 10, 15, 0, 0},   // sepia
+                                                              {-10, 45, -100, 60, 0, 0, 0, 0, 35, 0, 30},  // noir
+                                                              {0, 5, -10, 30, 30, -5, 0, 30, 40, 10, 0},   // film
+                                                              {0, 35, -55, 30, -10, 0, 0, 0, 10, 0, 0},    // bleach bypass
+                                                              {10, -25, -10, 40, 10, 35, 0, 35, 0, 0, 0},  // dream
+                                                              {0, -10, 20, 25, 10, -10, 0, 15, 45, 60, 0}, // VHS
+                                                              {-15, 15, -30, 55, -60, -10, 0, 0, 15, 0, 0}, // night
+                                                              {10, -35, -35, 20, -15, 0, 0, 45, 5, 0, 0}};  // fog
+int g_savePick = 0;
+const int kSaveValues[kOwnPresets] = {1, 2, 3, 4};
+const Tr kSaveNames[kOwnPresets] = {{L"Мій 1", L"Mine 1"}, {L"Мій 2", L"Mine 2"}, {L"Мій 3", L"Mine 3"}, {L"Мій 4", L"Mine 4"}};
+
+int Clamp(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
+
+// [PhotoPresets] MineN = 11 numbers separated by commas; false when the line is not there (an empty slot).
+bool ReadOwnPreset(int slot, int* out) {
+    wchar_t key[16], text[200];
+    wsprintfW(key, L"Mine%d", slot);
+    if (GetPrivateProfileStringW(L"PhotoPresets", key, L"", text, 200, g_paths.iniFile) == 0) return false;
+    const wchar_t* p = text;
+    for (int i = 0; i < kLookCount; ++i) {
+        while (*p == L' ' || *p == L',') ++p;
+        bool neg = *p == L'-';
+        if (neg) ++p;
+        if (*p < L'0' || *p > L'9') return false;
+        int v = 0;
+        while (*p >= L'0' && *p <= L'9') v = v * 10 + (*p++ - L'0');
+        out[i] = Clamp(neg ? -v : v, kLookLo[i], 100);
+    }
+    return true;
+}
+
+void ResetLook() {
+    g_cfg.photoFilter = 0;
+    for (int i = 0; i < kLookCount; ++i) *kLook[i] = 0;
+}
+
 int g_shotPick = 0;
 const int kShotValues[1] = {1};
 const Tr kShotNames[1] = {{L"Зробити знімок", L"Take a picture"}};
@@ -473,14 +527,36 @@ const Tr kShotNames[1] = {{L"Зробити знімок", L"Take a picture"}};
 void ApplyFov() { g_cfg.photoFovOn = 1; }  // touching the slider means: use my value
 
 void ApplyFilter() {
-    // each filter is a set of the sliders below plus a tint (chosen in the pass by the filter number)
-    static const int bright[6] = {0, 0, 0, 0, -5, 5}, contrast[6] = {0, 0, 0, 10, 20, 10};
-    static const int sat[6] = {0, 10, 5, -100, -20, -40}, vignette[6] = {0, 0, 0, 20, 45, 50};
-    int f = g_cfg.photoFilter < 0 || g_cfg.photoFilter > 5 ? 0 : g_cfg.photoFilter;
-    g_cfg.photoBright = bright[f];
-    g_cfg.photoContrast = contrast[f];
-    g_cfg.photoSat = sat[f];
-    g_cfg.photoVignette = vignette[f];
+    // a filter is a set of the sliders below; the own presets come from [PhotoPresets] in the ini (an empty one changes nothing)
+    const int f = Clamp(g_cfg.photoFilter, 0, kFilterCount - 1);
+    if (f < kBuiltinFilters) {
+        for (int i = 0; i < kLookCount; ++i) *kLook[i] = kFilterLook[f][i];
+        return;
+    }
+    int v[kLookCount];
+    if (!ReadOwnPreset(f - kBuiltinFilters + 1, v)) return;
+    for (int i = 0; i < kLookCount; ++i) *kLook[i] = v[i];
+}
+
+void SaveOwnPreset() {
+    const int slot = g_savePick;
+    g_savePick = 0;
+    if (slot < 1 || slot > kOwnPresets) return;
+    wchar_t key[16], text[200];
+    wsprintfW(key, L"Mine%d", slot);
+    wsprintfW(text, L"%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d", *kLook[0], *kLook[1], *kLook[2], *kLook[3], *kLook[4], *kLook[5], *kLook[6],
+              *kLook[7], *kLook[8], *kLook[9], *kLook[10]);
+    WritePrivateProfileStringW(L"PhotoPresets", key, text, g_paths.iniFile);
+    g_cfg.photoFilter = kBuiltinFilters + slot - 1;
+    Log("photo mode: own preset %d saved (%S)", slot, text);
+}
+
+void FormatFilter(int v, wchar_t* out) {
+    const int f = Clamp(v, 0, kFilterCount - 1);
+    lstrcpyW(out, Tx(kFilterTr[f]));
+    int dummy[kLookCount];
+    if (f >= kBuiltinFilters && !ReadOwnPreset(f - kBuiltinFilters + 1, dummy))
+        lstrcatW(out, g_cfg.language == 1 ? L" (empty)" : L" (порожній)");
 }
 
 void FormatSet(int v, wchar_t* out) { wsprintfW(out, g_cfg.language == 1 ? L"Set %d" : L"Набір %d", v); }
@@ -540,13 +616,28 @@ Item g_pagePhoto[] = {
      {L"Від 30° (вузький, як телеоб'єктив) до 120° (широкий). Працює, коли ввімкнено «Свій кут огляду». Діє, поки ввімкнена вільна камера (F5 або фоторежим): коли її вимкнути, «Свій кут огляду» теж вимикається. Меню значення у файл не пише; [FreeCam] Fov в UltimateFix.ini задає кут від запуску гри до першого вимкнення вільної камери.", L"From 30° (narrow, like a telephoto) to 120° (wide). Works when \"Own field of view\" is on. Lasts while the free camera is on (F5 or the photo mode): switching it off also turns \"Own field of view\" off. The menu does not write the value to the file; [FreeCam] Fov in UltimateFix.ini sets it from the start of the game until the free camera is first switched off."}, NOTR},
     {{L"Нахил камери", L"Camera tilt"}, &g_cfg.photoRoll, kInt, -45, 45, 1, false, nullptr, nullptr, nullptr, nullptr,
      {L"Нахиляє горизонт на кут у градусах.", L"Tilts the horizon by an angle in degrees."}, NOTR},
-    {{L"Фільтр", L"Filter"}, &g_cfg.photoFilter, kInt, 0, 5, 1, false, nullptr, nullptr, ApplyFilter, nullptr,
-     {L"Готовий вигляд кадру. Нижче його можна підправити вручну.", L"A ready look for the picture. Fine-tune it by hand below."},
-     {L"Вигляд кадру", L"Look of the picture"}, kFilterValues, 6, kFilterTr, nullptr, false},
+    {{L"Фільтр", L"Filter"}, &g_cfg.photoFilter, kInt, 0, kFilterCount - 1, 1, false, nullptr, nullptr, ApplyFilter, nullptr,
+     {L"Готовий вигляд кадру (← → гортати). Нижче його можна підправити вручну. «Мій 1..4» це ваші пресети: зберігаються кнопками нижче.",
+      L"A ready look for the picture (← → to browse). Fine-tune it by hand below. \"Mine 1..4\" are your own presets, saved with the buttons below."},
+     {L"Вигляд кадру", L"Look of the picture"}, nullptr, 0, nullptr, FormatFilter, false},
     {{L"Яскравість", L"Brightness"}, &g_cfg.photoBright, kInt, -100, 100, 5, false, nullptr, nullptr, nullptr, nullptr, {nullptr, nullptr}, NOTR},
     {{L"Контраст", L"Contrast"}, &g_cfg.photoContrast, kInt, -100, 100, 5, false, nullptr, nullptr, nullptr, nullptr, {nullptr, nullptr}, NOTR},
     {{L"Насиченість", L"Saturation"}, &g_cfg.photoSat, kInt, -100, 100, 5, false, nullptr, nullptr, nullptr, nullptr, {nullptr, nullptr}, NOTR},
     {{L"Віньєтка", L"Vignette"}, &g_cfg.photoVignette, kInt, 0, 100, 5, false, nullptr, nullptr, nullptr, nullptr, {nullptr, nullptr}, NOTR},
+    {{L"Температура (холодніше / тепліше)", L"Temperature (colder / warmer)"}, &g_cfg.photoTemp, kInt, -100, 100, 5, false, nullptr, nullptr, nullptr, nullptr, {nullptr, nullptr}, NOTR},
+    {{L"Відтінок (зелений / пурпуровий)", L"Tint (green / magenta)"}, &g_cfg.photoTint, kInt, -100, 100, 5, false, nullptr, nullptr, nullptr, nullptr, {nullptr, nullptr}, NOTR},
+    {{L"Сепія", L"Sepia"}, &g_cfg.photoSepia, kInt, 0, 100, 5, false, nullptr, nullptr, nullptr, nullptr, {nullptr, nullptr}, NOTR},
+    {{L"Вицвітання", L"Fade"}, &g_cfg.photoFade, kInt, 0, 100, 5, false, nullptr, nullptr, nullptr, nullptr,
+     {L"Світліші тіні й тьмяніші світла, як на старій плівці.", L"Lighter shadows and dimmer highlights, as on old film."}, NOTR},
+    {{L"Зерно плівки", L"Film grain"}, &g_cfg.photoGrain, kInt, 0, 100, 5, false, nullptr, nullptr, nullptr, nullptr, {nullptr, nullptr}, NOTR},
+    {{L"Хроматична аберація", L"Chromatic aberration"}, &g_cfg.photoAberration, kInt, 0, 100, 5, false, nullptr, nullptr, nullptr, nullptr,
+     {L"Кольорові облямівки, що ростуть до країв кадру, як у дешевого об'єктива.", L"Colour fringes growing towards the edges, as with a cheap lens."}, NOTR},
+    {{L"Кінорамка", L"Letterbox"}, &g_cfg.photoBars, kInt, 0, 100, 5, false, nullptr, nullptr, nullptr, nullptr,
+     {L"Чорні смуги згори й знизу, як у широкоекранному кіно.", L"Black bars at the top and the bottom, as in widescreen cinema."}, NOTR},
+    {{L"Зберегти як мій пресет", L"Save as my preset"}, &g_savePick, kInt, 0, kOwnPresets, 1, false, nullptr, nullptr, SaveOwnPreset, nullptr,
+     {L"Записує всі повзунки вигляду вище в UltimateFix.ini ([PhotoPresets]). Потім пресет вибирається у «Фільтр» як «Мій 1..4».",
+      L"Writes every slider of the look above to UltimateFix.ini ([PhotoPresets]). Then pick it in \"Filter\" as \"Mine 1..4\"."},
+     {nullptr, nullptr}, kSaveValues, kOwnPresets, kSaveNames, nullptr, false},
     {{L"Різкість, %", L"Sharpening, %"}, &g_cfg.sharpen, kInt, 0, 100, 10, false, L"Graphics", L"Sharpen", nullptr, nullptr, {nullptr, nullptr}, NOTR},
     {{L"Згладжування країв, %", L"Edge smoothing, %"}, &g_cfg.antialias, kInt, 0, 100, 10, false, L"Graphics", L"Antialias", nullptr, nullptr, {nullptr, nullptr}, NOTR},
     {{L"Затінення в кутках, %", L"Ambient occlusion, %"}, &g_cfg.ambientOcclusion, kInt, 0, 100, 10, false, L"Graphics", L"AmbientOcclusion", nullptr, nullptr, {nullptr, nullptr}, NOTR},
@@ -2085,6 +2176,8 @@ void OnFrame(void* device) {
     Draw();
     OverlayEnd();
 }
+
+void PhotoLookReset() { ResetLook(); }
 
 }  // namespace ui
 }  // namespace ufx

@@ -120,7 +120,7 @@ void __attribute__((cdecl)) CameraWorker() {
         g_cfg.photoFreeze = enter;
         if (!enter) {  // leaving: the interface, the filter, the tilt and the pose go back to normal
             g_cfg.photoHud = 0;
-            g_cfg.photoFilter = g_cfg.photoBright = g_cfg.photoContrast = g_cfg.photoSat = g_cfg.photoVignette = 0;
+            ui::PhotoLookReset();
             g_cfg.photoRoll = 0;
             g_cfg.photoFovOn = 0;
             if (g_cfg.photoAnim) RequestPose(1);  // state 0: calm
@@ -135,7 +135,7 @@ void __attribute__((cdecl)) CameraWorker() {
         g_active = g_cfg.photoActive != 0;
         g_init = false;
         if (!g_active) {  // the camera went back to the game: the look of the picture goes back too
-            g_cfg.photoFilter = g_cfg.photoBright = g_cfg.photoContrast = g_cfg.photoSat = g_cfg.photoVignette = 0;
+            ui::PhotoLookReset();
             g_cfg.photoRoll = 0;
             g_cfg.photoFovOn = 0;
         }

@@ -113,6 +113,8 @@ struct Config {
     int photoRoll;           // camera tilt in degrees
     int photoFilter;         // 0 none, 1 warm, 2 cold, 3 black and white, 4 cinema, 5 vintage
     int photoBright, photoContrast, photoSat, photoVignette;  // -100..100, vignette 0..100
+    int photoTemp, photoTint;              // -100..100: cold..warm, green..magenta
+    int photoSepia, photoFade, photoGrain, photoAberration, photoBars;  // 0..100
     int photoSuitSet;        // costume set: York 1..2, Zach 1..3
     int photoCostume;        // costume choice, 0 = untouched
     int photoAnim;           // animation choice, 0 = untouched
@@ -374,6 +376,7 @@ void PerfOverlayFrame(void* device, double fps, double frameMs, double presentMs
 void FrameStatsPush(double frameMs);  // one finished frame for the graph
 void FrameStatsPanel(void* device, double totalMs, double gameMs, double physicsMs, double presentMs, double worstMs, double busyMs);
 bool PhotoPageOpen();  // the menu is open on the photo mode page
+void PhotoLookReset();  // menu.cpp: the filter and every slider of the look back to none (own presets stay in the ini)
 void ScreenshotFrame(void* device);
 void ReleasePostResources();
 }  // namespace ui

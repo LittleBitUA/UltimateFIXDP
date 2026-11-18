@@ -672,7 +672,7 @@ namespace {
 
 // Copies the finished picture and draws it back through `shader` (c0 = texel size and the amount).
 void RunPass(void* dev, void** shader, bool* failed, const char* name, const char* source, size_t length,
-             const char* const* profiles, int percent, const float* extra = nullptr) {
+             const char* const* profiles, int percent, const float* extra = nullptr, int extraRegs = 2) {
     if (percent <= 0 || *failed) return;
     UINT w, h, fmt;
     void* back = BackBufferInfo(dev, &w, &h, &fmt);
@@ -708,7 +708,7 @@ void RunPass(void* dev, void** shader, bool* failed, const char* name, const cha
     SetSampler(SAMP_MAGFILTER, 1);
     const float c[4] = {1.0f / (float)w, 1.0f / (float)h, (float)(percent > 100 ? 100 : percent) / 100.0f, 0.f};
     Method<SetPsConstFn>(dev, 109)(dev, 0, c, 1);
-    if (extra) Method<SetPsConstFn>(dev, 109)(dev, 1, extra, 2);  // c1 and c2
+    if (extra) Method<SetPsConstFn>(dev, 109)(dev, 1, extra, extraRegs);  // c1, c2, ...
     Viewport vp = {0, 0, w, h, 0.f, 1.f};
     typedef HRESULT(WINAPI * SetViewportFn2)(void*, const Viewport*);
     Method<SetViewportFn2>(dev, kSetViewport)(dev, &vp);
@@ -721,20 +721,33 @@ void* g_colorShader = nullptr;
 bool g_colorFailed = false;
 const char kColorSource[] =
     "sampler s0 : register(s0);\n"
-    "float4 c0 : register(c0);\n"  // z unused here: the amount is in c2 (below), xy texel size
-    "float4 c1 : register(c1);\n"  // rgb tint, w vignette
-    "float4 c2 : register(c2);\n"  // x brightness, y contrast, z saturation
+    "float4 c0 : register(c0);\n"  // xy texel size
+    "float4 c1 : register(c1);\n"  // rgb white balance (temperature and tint), w vignette
+    "float4 c2 : register(c2);\n"  // x brightness, y contrast, z saturation, w sepia 0..1
+    "float4 c3 : register(c3);\n"  // x fade 0..1, y grain 0..1, z chromatic aberration in texels, w letterbox bar height 0..0.5
+    "float4 c4 : register(c4);\n"  // x a seed that changes every frame (grain)
     "float4 main(float2 uv : TEXCOORD0) : COLOR {\n"
-    "  float3 c = tex2D(s0, uv).rgb;\n"
+    "  float2 d = uv - 0.5;\n"
+    "  float2 ca = d * c3.z * c0.xy * 2.0;\n"   // colour fringes grow towards the corners
+    "  float3 c;\n"
+    "  c.r = tex2D(s0, uv + ca).r;\n"
+    "  c.g = tex2D(s0, uv).g;\n"
+    "  c.b = tex2D(s0, uv - ca).b;\n"
     "  float l = dot(c, float3(0.299, 0.587, 0.114));\n"
     "  c = lerp(float3(l, l, l), c, c2.z);\n"
     "  c = (c - 0.5) * c2.y + 0.5 + c2.x;\n"
     "  c = c * c1.rgb;\n"
-    "  float2 d = uv - 0.5;\n"
+    "  float3 sep = float3(dot(c, float3(0.393, 0.769, 0.189)), dot(c, float3(0.349, 0.686, 0.168)), dot(c, float3(0.272, 0.534, 0.131)));\n"
+    "  c = lerp(c, sep, c2.w);\n"
+    "  c = lerp(c, c * 0.82 + 0.1, c3.x);\n"    // faded film: lifted blacks, dimmer whites
+    "  float n = frac(sin(dot(uv * 1000.0 + c4.x, float2(12.9898, 78.233))) * 43758.5453);\n"
+    "  c += (n - 0.5) * c3.y * 0.22;\n"
     "  c = c * (1.0 - c1.w * dot(d, d) * 2.8);\n"
+    "  float bar = step(0.5 - c3.w, abs(d.y));\n"
+    "  c = lerp(c, float3(0, 0, 0), bar);\n"
     "  return float4(saturate(c), 1.0);\n"
     "}\n";
-const char* const kProfilesColor[] = {"ps_2_0", nullptr};
+const char* const kProfilesColor[] = {"ps_2_b", "ps_2_a", "ps_3_0", "ps_2_0", nullptr};
 
 const char* const kProfilesSharp[] = {"ps_2_0", nullptr};
 const char* const kProfilesFxaa[] = {"ps_2_b", "ps_2_a", "ps_2_0", nullptr};
@@ -751,15 +764,20 @@ void FinalImagePass(void* dev, void** shader, bool* failed, const char* name, co
 }
 
 void ColorFrame(void* dev) {
-    static const float tints[6][3] = {{1.f, 1.f, 1.f}, {1.08f, 1.0f, 0.90f}, {0.92f, 0.98f, 1.10f},
-                                      {1.f, 1.f, 1.f}, {1.04f, 1.0f, 0.94f}, {1.10f, 1.0f, 0.80f}};
     if (!g_cfg.photoActive && !PhotoPageOpen()) return;  // the filters belong to photo mode: the camera flies, or its page is open for a preview
-    int f = g_cfg.photoFilter < 0 || g_cfg.photoFilter > 5 ? 0 : g_cfg.photoFilter;
-    if (!g_cfg.photoBright && !g_cfg.photoContrast && !g_cfg.photoSat && !g_cfg.photoVignette && f == 0) return;
-    const float extra[8] = {tints[f][0], tints[f][1], tints[f][2], (float)g_cfg.photoVignette / 100.0f,
-                            (float)g_cfg.photoBright / 200.0f, 1.0f + (float)g_cfg.photoContrast / 100.0f,
-                            1.0f + (float)g_cfg.photoSat / 100.0f, 0.f};
-    RunPass(dev, &g_colorShader, &g_colorFailed, "photo filter", kColorSource, sizeof(kColorSource) - 1, kProfilesColor, 100, extra);
+    if (!g_cfg.photoBright && !g_cfg.photoContrast && !g_cfg.photoSat && !g_cfg.photoVignette && !g_cfg.photoTemp && !g_cfg.photoTint &&
+        !g_cfg.photoSepia && !g_cfg.photoFade && !g_cfg.photoGrain && !g_cfg.photoAberration && !g_cfg.photoBars)
+        return;
+    static u32 frame = 0;
+    ++frame;
+    const float t = (float)g_cfg.photoTemp / 100.0f, m = (float)g_cfg.photoTint / 100.0f;  // warm +, magenta +
+    const float extra[16] = {1.0f + 0.12f * t + 0.04f * m, 1.0f - 0.08f * m, 1.0f - 0.12f * t + 0.04f * m, (float)g_cfg.photoVignette / 100.0f,
+                             (float)g_cfg.photoBright / 200.0f, 1.0f + (float)g_cfg.photoContrast / 100.0f,
+                             1.0f + (float)g_cfg.photoSat / 100.0f, (float)g_cfg.photoSepia / 100.0f,
+                             (float)g_cfg.photoFade / 100.0f, (float)g_cfg.photoGrain / 100.0f, (float)g_cfg.photoAberration / 10.0f,
+                             (float)g_cfg.photoBars / 100.0f * 0.12f,
+                             (float)(frame % 997), 0.f, 0.f, 0.f};
+    RunPass(dev, &g_colorShader, &g_colorFailed, "photo filter", kColorSource, sizeof(kColorSource) - 1, kProfilesColor, 100, extra, 4);
 }
 
 void SharpenFrame(void* dev, int percent) {
