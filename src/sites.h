@@ -456,6 +456,19 @@ constexpr uint32_t kGlyphIndexFn = 0x459F70;
 // constants themselves are shared with other code and stay as they are).
 constexpr SiteDef kSiteExposure85 = {"exposure x0.85", 0x6EA202, 6, {0xDC, 0x0D, 0xA0, 0xF9, 0x77, 0x00}};
 constexpr SiteDef kSiteExposure75 = {"exposure x0.75", 0x6EA1A7, 6, {0xDC, 0x0D, 0x50, 0x35, 0x77, 0x00}};
+// The pixel shader of the final composite: variant 30 of the tone-map blob at BCEE68h (FUN_006EA8E0 picks n*30 with
+// n = [post+248h]; variant 14 at BD1628h has the same bytes). ps_3_0, 1000 bytes, samplers s0..s4, reads c9, c10, c15 and
+// c16 only: the contrast, pitch, chroma and colour offset the game sets in c11..c14 are not read by any of the 32 variants.
+// The Xbox 360 look swaps it for one draw; the bound shader is recognised by the size and the FNV-1a of its byte code, and
+// tests/verify_sites.cpp checks both copies in DP.exe against the same two numbers.
+constexpr SiteDef kCompositeShader = {"composite pixel shader", 0xBD4638, 16,
+    {0x00, 0x03, 0xFF, 0xFF, 0xFE, 0xFF, 0x6A, 0x00, 0x43, 0x54, 0x41, 0x42, 0x1C, 0x00, 0x00, 0x00}};
+constexpr uint32_t kCompositeShaderCopyVa = 0xBD1628, kCompositeShaderSize = 1000, kCompositeShaderFnv = 0x62D2C59B;
+inline uint32_t Fnv1a(const uint8_t* data, uint32_t length) {
+    uint32_t h = 2166136261u;
+    for (uint32_t i = 0; i < length; ++i) h = (h ^ data[i]) * 16777619u;
+    return h;
+}
 
 // ---- Controller bindings (configJ.cnf / configJex.cnf) ---------------------------------------------------------
 // In controller mode every action reads its binding code from these globals, filled from the two files at start.
@@ -533,6 +546,7 @@ constexpr const SiteDef* kAllSites[] = {
     &kSiteZeroDelta, &kSiteHouseListFormat, &kSiteExtraJoyPoll, &kSiteSkipIntro,
     &kSiteResetRefresh, &kSitePresentCall, &kSitePreResetCall, &kSiteAniso1, &kSiteAniso2,
     &kSiteReflectionBias, &kSiteSceneInitCall, &kSitePostInitCall,
+    &kCompositeShader,
     &kSiteStorageH1, &kSiteStorageW1, &kSiteStorageH2, &kSiteStorageW2,
     &kSiteWorldUpdateCalls[0], &kSiteWorldUpdateCalls[1], &kSiteCarDriveCall, &kSiteCarAfterStepCall, &kSiteCarTicks[0], &kSiteCarTicks[1], &kSiteCarTicks[2],
     &kSiteCarTicks[3], &kSiteCarTicks[4], &kSiteCarTicks[5], &kSiteCarTicks[6], &kSiteCarTicks[7], &kSiteCarTicks[8], &kSiteCarTicks[9],
