@@ -1397,8 +1397,8 @@ void DrawAbout() {
     const wchar_t* credits[5] = {
         en ? L"ZachFix (h714je): research of the port and many ideas" : L"ZachFix (h714je): дослідження порту й багато ідей",
         en ? L"DPStabilityFix (Cesario67): saves, timing, DualSense layout" : L"DPStabilityFix (Cesario67): збереження, час, розкладка DualSense",
-        en ? L"MapFix and CrashFix (Behelit09, MIT): the full map, navigation crash" : L"MapFix і CrashFix (Behelit09, MIT): повна мапа, аварія навігації",
-        en ? L"DPfix (Peter Durante): resolution, shadows, texture replacement" : L"DPfix (Peter Durante): роздільність, тіні, підміна текстур",
+        en ? L"MapFix, CrashFix and FreeCam (Behelit09, MIT): full map, navigation crash, free camera" : L"MapFix, CrashFix і FreeCam (Behelit09, MIT): повна мапа, аварія навігації, вільна камера",
+        en ? L"DPfix (Durante): resolution, shadows, texture replacement" : L"DPfix (Durante): роздільність, тіні, підміна текстур",
         en ? L"Kenney Input Prompts (CC0): button icons" : L"Kenney Input Prompts (CC0): іконки кнопок",
     };
     for (int i = 0; i < 5; ++i) DrawText(credits[i], kCx, y + 22 + i * 24, 0xFFC4C4CE, 15);
