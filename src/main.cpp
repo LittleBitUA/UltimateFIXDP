@@ -165,6 +165,7 @@ static void Startup() {
     if (!g_cfg.safeMode && g_cfg.waypoint && InstallWaypoint()) ++on;
     if (!g_cfg.safeMode && InstallGlyphIndexFix()) ++on;
     if (g_cfg.byteTextCyrillic && InstallByteTextFix()) ++on;
+    if (InstallTextTools()) ++on;
     if (!g_cfg.safeMode && g_cfg.halveFlashes && InstallEffectStep()) ++on;
     if (!g_cfg.safeMode && InstallAmbientOcclusion()) ++on;
     if (!g_cfg.safeMode && g_cfg.keepBlurLook && InstallBlurLook()) ++on;

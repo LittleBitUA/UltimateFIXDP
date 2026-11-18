@@ -177,6 +177,21 @@ static const char kDefaultIni[] =
     "; Always use the US language slot (the game default). Translations replace the files of that slot, so this\r\n"
     "; keeps them working whatever language config.cnf says.\r\n"
     "ForceUsSlot=1\r\n"
+    "; Text overlay for translators: put mes_all.json (the translation as the SWERY Localization Tool saves it, DPMsgTool's JSON)\r\n"
+    "; and, if you changed it, the tool's glyphmap.json into UltimateFix\\text. The records whose text differs from the loaded\r\n"
+    "; MES_ALL.MES are replaced in memory, the game's files stay as they are. Files *.txt with lines \"0x1234 = text\" (same\r\n"
+    "; markers) correct single records. What is refused and why is in UltimateFix\\loc.log. With none of these files in the\r\n"
+    "; folder nothing is hooked. The guide is docs/TEXT_OVERLAY.md of the mod. Restart needed.\r\n"
+    "TextOverlay=1\r\n"
+    "; For translators: 1 = the id of every text record is printed over it on the screen (the number the overlay files use).\r\n"
+    "; Restart needed to switch it on.\r\n"
+    "ShowMessageId=0\r\n"
+    "; For translators: 1 = UltimateFix\\loc.log gets every message that uses a cell that is empty in the font atlas or lies beyond\r\n"
+    "; it, and every draw that overflows the game's batch of 768 glyph quads (once per message and cell). Restart needed.\r\n"
+    "GlyphLog=0\r\n"
+    "; For translators: 1 = the MES_ALL.MES the game loaded is written to UltimateFix\\mes_dump.json in the form of the tool's\r\n"
+    "; mes_all.json, at every start: switch it off afterwards. Restart needed.\r\n"
+    "TextDump=0\r\n"
     "\r\n"
     "[World]\r\n"
     "; Culling distances of the camera, in game units. Objects farther away are not drawn. The game uses\r\n"
@@ -551,6 +566,10 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.scaleToWindow = (int)GetPrivateProfileIntW(L"Display", L"ScaleToWindow", 1, ini);
     g_cfg.displayDebug = (int)GetPrivateProfileIntW(L"Display", L"Debug", 0, ini);
     g_cfg.forceUsSlot = (int)GetPrivateProfileIntW(L"Language", L"ForceUsSlot", 1, ini);
+    g_cfg.textOverlay = (int)GetPrivateProfileIntW(L"Language", L"TextOverlay", 1, ini);
+    g_cfg.showMessageId = (int)GetPrivateProfileIntW(L"Language", L"ShowMessageId", 0, ini);
+    g_cfg.glyphLog = (int)GetPrivateProfileIntW(L"Language", L"GlyphLog", 0, ini);
+    g_cfg.textDump = (int)GetPrivateProfileIntW(L"Language", L"TextDump", 0, ini);
     g_cfg.farClass3 = (int)GetPrivateProfileIntW(L"World", L"FarClass3", 5000, ini);
     g_cfg.farClass4 = (int)GetPrivateProfileIntW(L"World", L"FarClass4", 1000, ini);
     g_cfg.farClass5 = (int)GetPrivateProfileIntW(L"World", L"FarClass5", 2000, ini);

@@ -392,6 +392,7 @@ HRESULT WINAPI OurPresent(void* dev, const RECT* src, const RECT* dst, HWND wnd,
         if (countdown > 0) --countdown;
     }
     if (windowThread && !src && !dst) WaypointFrame(dev);
+    if (windowThread && !src && !dst) TextToolsFrame();
     if (g_cfg.menu && windowThread && !src && !dst) ui::OnFrame(dev);  // laid out in 1280x720 units, scaled to the back buffer
     if (windowThread && !src && !dst) SessionFrame(dev);  // after the menu: its notice box is drawn on top
     if (windowThread && !src && !dst) PacerBeforePresent();  // the 60 frames/s limit (mode 1), then the Present time is measured

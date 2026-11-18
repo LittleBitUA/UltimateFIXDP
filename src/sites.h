@@ -317,6 +317,21 @@ constexpr SiteDef kGaussCalls[6] = {
 // movzx plus a byte compare makes them index the atlas rows 1 and 2 like any other character.
 constexpr SiteDef kSiteByteText = {"byte text sign extension", 0x45BB0D, 7, {0x0F, 0xBE, 0x04, 0x3E, 0x83, 0xF8, 0xA9}};
 constexpr uint8_t kByteTextFixed[7] = {0x0F, 0xB6, 0x04, 0x3E, 0x3C, 0xA9, 0x90};
+// Translator tools (modules/text_overlay.cpp).
+// The text module's setup FUN_0045F610 asks the resource manager for the data of MES_ALL.MES (id 2400h): push 0 / push 2400h /
+// call FUN_006B2BE0 (thiscall, ECX = CRdData, ret 8), and stores the result in CMessage+44h right after (mov [esi+44h],eax). All 18
+// reads of the text go through that pointer, so this one call is where the text overlay hands over its merged copy.
+constexpr SiteDef kSiteMesData = {"MES data call", 0x45F679, 5, {0xE8, 0x62, 0x35, 0x25, 0x00}};
+constexpr SiteDef kSiteMesDataStore = {"MES data pointer store", 0x45F67E, 3, {0x89, 0x46, 0x44}};
+// Entry of the text drawer FUN_0045C9F0 (thiscall, ten stack arguments, ret 28h): sub esp,0CCh / push ebx / push esi, then
+// mov esi,[esp+0E8h] (the message id, the fifth argument). Wrapped for the message id label and so that the glyph log knows
+// which message is being drawn.
+constexpr SiteDef kSiteMesDrawEntry = {"text drawer entry", 0x45C9F0, 8, {0x81, 0xEC, 0xCC, 0x00, 0x00, 0x00, 0x53, 0x56}};
+constexpr SiteDef kSiteMesDrawNext = {"text drawer id load", 0x45C9F8, 7, {0x8B, 0xB4, 0x24, 0xE8, 0x00, 0x00, 0x00}};
+// Entry of FUN_0045A760, which every glyph quad goes through (thiscall, three pointers, ret 0Ch): mov eax,[ecx+12070h] /
+// cmp eax,300h; the jge that follows reads the flags of that compare (a full batch drops the quad).
+constexpr SiteDef kSiteGlyphPushEntry = {"glyph quad entry", 0x45A760, 11, {0x8B, 0x81, 0x70, 0x20, 0x01, 0x00, 0x3D, 0x00, 0x03, 0x00, 0x00}};
+constexpr SiteDef kSiteGlyphPushNext = {"glyph quad full-batch jump", 0x45A76B, 6, {0x0F, 0x8D, 0x8E, 0x00, 0x00, 0x00}};
 // WinMain: any command-line argument (the stock launcher passes one when its "Full Screen mode" box is ticked) sets the
 // fullscreen flag at 0148BBC0h to 1. The exact argument "-full1280" (FUN_0040ECB0 is a strcmp, 0 = equal) takes the
 // branch at 007006CE, which also sets the 1280x1024 flag at 0148BBC4h to 1; any other argument takes 007006E4 and sets
@@ -671,10 +686,10 @@ constexpr const SiteDef* kAllSites[] = {
     &kFarPlane[5], &kSiteLanguageCall, &kSiteDifficultyNewGame, &kSiteDifficultyLoadClear,
     &kSiteDifficultyDialog1, &kSiteDifficultyDialog2, &kSiteFrameClockCall, &kSiteWheelRead, &kSiteGlyphIndexCall, &kSiteEffectStepA, &kSiteEffectStepB, &kSitePhysicsStepCall, &kSiteMapDrawCall, &kSiteTextDrawEntry, &kSiteSpriteDrawEntry, &kSiteSpotAccessor, &kSiteSpotRebuild[0], &kSiteSpotRebuild[1], &kSiteSpotRebuild[2], &kAltPhaseCalls[0], &kAltPhaseCalls[1], &kAltPhaseCalls[2], &kSiteResidencyEntry, &kSiteSetTargetEntry, &kSiteResourceOfSlot, &kSiteStateEntry, &kSiteSuitChange, &kSiteStrafeTail, &kSiteFullscreenArg[0], &kSiteFullscreenArg[1], &kSiteByteText, &kGaussCalls[0], &kGaussCalls[1], &kGaussCalls[2], &kGaussCalls[3], &kGaussCalls[4], &kGaussCalls[5], &kSiteCompositeDraw, &kSiteCameraCall, &kSiteExposure85, &kSiteExposure75, &kMapZoomFloor, &kMapZoomClampCall, &kMapZoomInit, &kMapPanX, &kMapPanZ, &kMapTileLookup, &kMapTileLimit, &kMapDeleteResource, &kMapReleaseResource, &kMapFindResource, &kMapHeading[0], &kMapHeading[1], &kMapHeading[2], &kMapHeading[3], &kMapHeading[4], &kMapHeading[5], &kMapHeading[6], &kMapArrow, &kSiteNavLookup, &kSiteNavNullCheck, &kSiteTrig1, &kSiteTrig2, &kSiteTrig3, &kSiteActivation, &kSiteLodFactor, &kSiteHighDetail1, &kSiteHighDetail2, &kSiteHighDetail3, &kSiteVisibility1, &kSiteVisibility2, &kSiteInputCommit, &kSiteInputPoll, &kSiteStickEval, &kSiteAimStick[0], &kSiteAimStick[1], &kSiteAimStick[2], &kSiteAimStick[3], &kSiteWetGate, &kSiteAimH, &kSiteAimV, &kSiteFullscreenArg[2], &kSiteVisibilityTestEntry,
     &kSiteCueMatrix3d, &kSiteCueMatrix2d, &kSiteX3dMatrixClear, &kSiteX3dDspSetup, &kSiteCueUpdateDsp,
-
     &kSiteArchiveRetry, &kSiteArchiveMissing, &kSiteLooseRetry, &kSiteLooseMissing, &kSiteInflateRoomFirst, &kSiteInflateRoomRefill,
     &kSiteArchiveInflateCall, &kSiteLooseInflateCall, &kSiteArchiveBufferSize, &kSiteLooseBufferSize,
     &kSiteAudioDataLoad, &kSiteAudioPoolOffset, &kSiteAudioPoolVtable,
+    &kSiteMesData, &kSiteMesDataStore, &kSiteMesDrawEntry, &kSiteMesDrawNext, &kSiteGlyphPushEntry, &kSiteGlyphPushNext,
 };
 
 constexpr TailDef kAllTails[] = {

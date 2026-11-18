@@ -383,6 +383,19 @@ Item g_pageFixes[] = {
      {L"Одразу до титульного екрана.", L"Straight to the title screen."}, NOTR},
     {{L"Мова: примусово слот US (для перекладу)", L"Language: force the US slot (for translations)"}, &g_cfg.forceUsSlot, kBool, 0, 1, 1, true, L"Language", L"ForceUsSlot", nullptr, nullptr,
      {L"Переклад підміняє файли слота US; цей пункт тримає його незалежно від config.cnf.", L"A translation replaces the files of the US slot; this keeps it whatever config.cnf says."}, {L"Мова гри", L"Game language"}},
+    {{L"Текст із теки (накладка перекладу)", L"Text from a folder (translation overlay)"}, &g_cfg.textOverlay, kBool, 0, 1, 1, true, L"Language", L"TextOverlay", nullptr, nullptr,
+     {L"Покладіть у теку UltimateFix\\text файл mes_all.json (переклад, як його зберігає SWERY Localization Tool) і, якщо ви її змінювали, мапу glyphmap.json. Повідомлення, текст яких відрізняється від завантаженого грою, замінюються в пам'яті; файли гри не змінюються. Окремі рядки можна виправити файлами *.txt із рядками «0x1234 = текст». Що відхилено й чому, записано в UltimateFix\\loc.log. Якщо в теці немає файлів, нічого не змінюється. У грі ще не перевірено.",
+      L"Put mes_all.json (the translation as the SWERY Localization Tool saves it) and, if you changed it, the glyph map glyphmap.json into the folder UltimateFix\\text. The messages whose text differs from what the game loaded are replaced in memory; the game's files stay as they are. Single lines can be corrected with *.txt files that hold lines '0x1234 = text'. What was refused and why is in UltimateFix\\loc.log. With no files in the folder nothing changes. Not tested in the game yet."},
+     {L"Інструменти перекладача", L"Translator tools"}},
+    {{L"Показувати номери повідомлень", L"Show message numbers"}, &g_cfg.showMessageId, kBool, 0, 1, 1, true, L"Language", L"ShowMessageId", nullptr, nullptr,
+     {L"Над кожним текстом гри дрібно пишеться його номер (наприклад 0x1A2B). Саме цей номер пишуть у файлах накладки. Увімкнути можна лише з перезапуском, вимкнути одразу. У грі ще не перевірено.",
+      L"The number of every game text is printed over it in small type (0x1A2B, for example). It is the number the overlay files use. Switching it on needs a restart, switching it off works at once. Not tested in the game yet."}, NOTR},
+    {{L"Журнал відсутніх літер", L"Missing glyph log"}, &g_cfg.glyphLog, kBool, 0, 1, 1, true, L"Language", L"GlyphLog", nullptr, nullptr,
+     {L"У файл UltimateFix\\loc.log записується номер повідомлення й клітинка шрифту, якщо ця клітинка порожня в атласі шрифту або лежить за його межами, а також повідомлення, яке не вмістилося в один прохід малювання (768 прямокутників). Кожна знахідка один раз. У грі ще не перевірено.",
+      L"UltimateFix\\loc.log gets the message number and the font cell whenever the cell is empty in the font atlas or lies beyond it, and every message that does not fit into one draw (768 quads). Each finding once. Not tested in the game yet."}, NOTR},
+    {{L"Зберегти весь текст гри у файл", L"Save all game text to a file"}, &g_cfg.textDump, kBool, 0, 1, 1, true, L"Language", L"TextDump", nullptr, nullptr,
+     {L"Під час запуску весь MES_ALL.MES, який завантажила гра, записується в UltimateFix\\mes_dump.json у тому самому вигляді, що й mes_all.json інструмента перекладу. Його можна порівняти з файлом, який дає DPMsgTool, і так перевірити, що мод читає текст правильно. Файл пишеться за кожного запуску, тож потім вимкніть.",
+      L"At start the whole MES_ALL.MES the game loaded is written to UltimateFix\\mes_dump.json in the same form as the translation tool's mes_all.json. Compare it with the file DPMsgTool gives to check that the mod reads the text right. It is written at every start, so switch it off afterwards."}, NOTR},
     RESET_ITEM
 };
 Item g_pageSave[] = {
