@@ -34,5 +34,17 @@ bool PhotoPageOpen();                           // the menu is open on that page
 void ScreenshotFrame(void* device);              // saves a PNG when the screenshot key is pressed
 void ReleasePostResources();                     // before the device is reset (also frees the reused state block)
 
+// SMAA 1x (smaa.cpp): the other choice for AntialiasFrame. Returns false when it cannot run (a shader that does not
+// compile, a texture that cannot be made): it says so in the log once, and the caller uses its FXAA-like pass instead.
+bool SmaaFrame(void* device, int percent);
+void ReleaseSmaaTargets();                       // its render targets, before the device is reset
+
+// Building blocks of overlay.cpp for a final-image pass in another file.
+void* PostBackBuffer(void* device, UINT* width, UINT* height, UINT* format);  // the caller releases the surface
+// The copy of the back buffer the final-image passes share (a render target of the same size and format, made on
+// demand). The pointers belong to overlay.cpp: no Release. False = it cannot be created.
+bool PostCopyTarget(void* device, UINT width, UINT height, UINT format, void** texture, void** surface);
+void PostFullQuad(UINT width, UINT height);      // between OverlayBegin and OverlayEnd: texture coordinates 0..1 over the target
+
 }  // namespace ui
 }  // namespace ufx
