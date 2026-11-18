@@ -738,7 +738,7 @@ constexpr float kSideW = 224;                                           // sideb
 float kCx = 352, kCr = 1148;                                            // content left / right edge
 float kListTop = 170, kListBottom = 508;                                // item list area
 constexpr float kRowH = 40, kHeadH = 34;
-constexpr float kNavH = 44;  // sidebar rows
+float kNavH = 44;  // sidebar rows: 44, or less when a small panel would put the last one over the language buttons
 float kNavTop = 150;
 float kSliderX = 818, kLangY = 612;
 
@@ -758,6 +758,8 @@ void UpdateLayout() {
     kNavTop = kPy + 98;
     kSliderX = kCr - 330;
     kLangY = kPy + kPh - 56;
+    kNavH = (kLangY - 10 - kNavTop) / (float)kPageCount;
+    if (kNavH > 44) kNavH = 44;
 }
 constexpr u32 kAccent = 0xFFD0343C, kPanelBg = 0xF4101014, kSideBg = 0xFF0B0B0F, kRowSel = 0xFF1D1D26, kLine = 0xFF2A2A34,
               kText = 0xFFF2F2F5, kDim = 0xFF9696A4, kOn = 0xFF35C27A, kOff = 0xFF3C3C48, kAmber = 0xFFE5A83A;
@@ -1519,20 +1521,27 @@ void DrawLanguageChips() {
 
 void DrawAbout() {
     const bool en = g_cfg.language == 1;
-    float y = kListTop - 4;
+    // Everything below fits between the top of the list and the closing hint: on a small panel the gaps shrink (never the letters)
+    // and long lines are cut to the panel's width.
+    const float top = kListTop - 4, bottom = kPy + kPh - 40, width = kCr - kCx;
+    const float natural = 84 + 64 + 62 + 22 + 5 * 24 + 10 + 44;
+    float s = (bottom - top) / natural;
+    if (s > 1.f) s = 1.f;
+    const float line = 24 * s < 18 ? 18 : 24 * s;
+    float y = top;
     DrawText(L"UltimateFIXDP", kCx, y, kText, 30);
     wchar_t ver[48];
     wsprintfW(ver, en ? L"version %S" : L"версія %S", kVersion);
-    DrawText(ver, kCx, y + 40, kDim, 15);
-    y += 84;
+    DrawText(ver, kCx, y + 40 * s, kDim, 15);
+    y += 84 * s;
     DrawText(en ? L"Author" : L"Автор", kCx, y, kAccent, 13);
-    DrawText(en ? L"Dmytro Bydlov, the \"Little Bit\" team" : L"Дмитро Бидлов, команда «Little Bit»", kCx, y + 20, kText, 20);
-    y += 64;
+    DrawFitted(en ? L"Dmytro Bydlov, the \"Little Bit\" team" : L"Дмитро Бидлов, команда «Little Bit»", kCx, y + 20, kText, 20, width);
+    y += 64 * s;
     DrawText(en ? L"Licence" : L"Ліцензія", kCx, y, kAccent, 13);
-    DrawText(en ? L"MIT: use and change it freely. All code is our own; other projects gave ideas, facts and addresses."
-                : L"MIT: користуйтесь і змінюйте вільно. Увесь код наш власний; інші проєкти дали ідеї, факти й адреси.",
-             kCx, y + 20, kText, 15);
-    y += 62;
+    DrawFitted(en ? L"MIT: use and change it freely. All code is our own; other projects gave ideas, facts and addresses."
+                  : L"MIT: користуйтесь і змінюйте вільно. Увесь код наш власний; інші проєкти дали ідеї, факти й адреси.",
+               kCx, y + 20, kText, 15, width);
+    y += 62 * s;
     DrawText(en ? L"Thanks" : L"Подяки", kCx, y, kAccent, 13);
     const wchar_t* credits[5] = {
         en ? L"ZachFix (h714je): research of the port and many ideas" : L"ZachFix (h714je): дослідження порту й багато ідей",
@@ -1541,11 +1550,11 @@ void DrawAbout() {
         en ? L"DPfix (Durante): resolution, shadows, texture replacement" : L"DPfix (Durante): роздільність, тіні, підміна текстур",
         en ? L"Kenney Input Prompts (CC0): button icons" : L"Kenney Input Prompts (CC0): іконки кнопок",
     };
-    for (int i = 0; i < 5; ++i) DrawText(credits[i], kCx, y + 22 + i * 24, 0xFFC4C4CE, 15);
-    y += 22 + 5 * 24 + 10;
+    for (int i = 0; i < 5; ++i) DrawFitted(credits[i], kCx, y + 20 + (float)i * line, 0xFFC4C4CE, 15, width);
+    y += 20 + 5 * line + 10 * s;
     DrawText(en ? L"Testers" : L"Тестувальники", kCx, y, kAccent, 13);
-    DrawText(L"Gold flin, Tree Fan", kCx, y + 22, 0xFFC4C4CE, 15);
-    DrawText(en ? L"F10 or Esc close" : L"F10 або Esc закрити", kCx, kPy + kPh - 36, kDim, 13);
+    DrawFitted(L"Gold flin, Tree Fan", kCx, y + 20, 0xFFC4C4CE, 15, width);
+    DrawText(en ? L"F10 or Esc close" : L"F10 або Esc закрити", kCx, kPy + kPh - 30, kDim, 13);
 }
 
 // True when `size` bytes at `p` can be read: committed pages that allow reading, over the whole range. The Story page reads
