@@ -130,7 +130,11 @@ static void Startup() {
     if (InstallAudioGuard()) ++on;  // always: it only acts on values that would break the sound
     if (g_cfg.relativeQpc && InstallQpcTime()) ++on;
     if (InstallFramePacer()) ++on;
-    if (g_cfg.zeroDeltaGuard && InstallZeroDelta()) ++on;
+    // The mod's own pause (F10 with PauseInMenu, the photo mode, AutoRecover) hands the game frames of zero length: the guard
+    // stays in for those even when ZeroDeltaGuard=0.
+    if (!g_cfg.zeroDeltaGuard) Log("zero-delta: ZeroDeltaGuard=0 is not followed: the mod's own pause makes frames of zero length, the guard stays");
+    if (InstallZeroDelta()) ++on;
+    if (InstallStability()) ++on;
     if (g_cfg.saveGuard && InstallSaveGuard()) ++on;
     if (g_cfg.houseListFix && InstallHouseList()) ++on;
     if (g_cfg.removeExtraJoyPoll && InstallJoyPoll()) ++on;

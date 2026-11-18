@@ -68,6 +68,15 @@ static const char kDefaultIni[] =
     "ByteTextCyrillic=0\r\n"
     "; Zero frame delta turned movement speed into NaN and froze the game forever.\r\n"
     "ZeroDeltaGuard=1\r\n"
+    "; An angle that is not a number (NaN) hung the game for good in the angle normalisation (a deliberate endless loop of the port).\r\n"
+    "; 1 = it gives 0 and a line in ufx.log names the caller. Restart needed.\r\n"
+    "NanTrapGuard=1\r\n"
+    "; Keep XAudio2 and XACT loaded for the whole run: the game closes COM once more than it opens it after every video, and\r\n"
+    "; Windows may then unload XAudio2 under a running sound thread (a crash with \"XAudio2_7.dll unloaded\" in the event log).\r\n"
+    "PinAudio=1\r\n"
+    "; Keep the x87 precision of the main thread at 24 bits, as a plain Direct3D 9 device sets it. The port compares float values\r\n"
+    "; for equality (the aim limit), which holds only at 24 bits; DXVK or a Windows compatibility mode can leave 53. Changes at once.\r\n"
+    "PinFpu=1\r\n"
     "; Correct byte order of HOUSE_LIST.NOD (day/night state of buildings).\r\n"
     "HouseListFix=1\r\n"
     "; Drop the per-frame joyGetPosEx call that passes uninitialised memory.\r\n"
@@ -574,6 +583,9 @@ void LoadConfig(const wchar_t* ini) {
     // limit on screens of 61..139 Hz), so nothing is migrated any more; the mark stays for files that still lack it.
     if (GetPrivateProfileIntW(L"Time", L"PacingMigrated", 0, ini) < 2) WritePrivateProfileStringW(L"Time", L"PacingMigrated", L"2", ini);
     g_cfg.zeroDeltaGuard = (int)GetPrivateProfileIntW(L"Fixes", L"ZeroDeltaGuard", 1, ini);
+    g_cfg.nanTrapGuard = (int)GetPrivateProfileIntW(L"Fixes", L"NanTrapGuard", 1, ini);
+    g_cfg.pinAudio = (int)GetPrivateProfileIntW(L"Fixes", L"PinAudio", 1, ini);
+    g_cfg.pinFpu = (int)GetPrivateProfileIntW(L"Fixes", L"PinFpu", 1, ini);
     g_cfg.houseListFix = (int)GetPrivateProfileIntW(L"Fixes", L"HouseListFix", 1, ini);
     g_cfg.removeExtraJoyPoll = (int)GetPrivateProfileIntW(L"Fixes", L"RemoveExtraJoyPoll", 1, ini);
     g_cfg.skipIntro = (int)GetPrivateProfileIntW(L"Fixes", L"SkipIntro", 1, ini);

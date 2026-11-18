@@ -165,16 +165,18 @@ inline void LimiterReturned(LimiterState& s, uint64_t at, uint64_t presentTicks)
 }
 
 // The game rounds a frame delta d (in steps of 1/60 s) up to the next whole number when its fraction is 0.5 or more (WinMain,
-// FUN_00700650), so a frame of 0.5..0.99 steps counts as a whole step: at 75 frames/s the game runs 1.25x too fast. Mode 1 hands the
-// game the time it would round to anyway, previous + ceil(d)/60, and the next delta is measured from that value, so the game clock
-// never drifts from the real one (it is at most about half a step ahead).
+// FUN_00700650), and a fraction below that stays: 92 counters of the game take (int)dt, so a frame of 1.4 steps counts one tick.
+// With the limit of mode 1 on a screen of 61..139 Hz frames are held for whole refreshes (75 Hz: 13.3 or 26.7 ms, 0.8 or 1.6 steps),
+// and the old rule (hand out real time below a fraction of 0.49) gave a third of those frames a fractional step: the counters ran
+// at 0.88. Every frame now gets a whole number of steps, the nearest to the time since the value handed out last, and at least one;
+// the next delta is measured from that value, so the rounding never adds up (the game clock stays within 2.5 steps of the real one
+// on any refresh rate the limit holds to 60 a second, and within about 3.5 without a limit; tests/test_pacer.cpp).
 // Returns the whole steps to hand out after the previous value, or -1 when the real time can be handed out as it is.
 inline int PacerRoundUpSteps(double d) {
-    if (d <= 0.0) return 0;    // no time has passed since the value handed out last (it was a little ahead): hand it again
     if (d >= 7.0) return -1;   // a long frame (a load): the game cuts a delta of 8 or more by itself
-    int whole = (int)d;
-    if (d - (double)whole < 0.49) return -1;  // the game keeps this delta as it is (0.49: room for its float rounding)
-    return whole + 1;
+    if (d <= -2.5) return 0;   // far ahead (the limit is not holding): stop until the real time catches up
+    int k = (int)(d + 0.5 + 8.0) - 8;  // nearest whole number (floor for negative values too)
+    return k < 1 ? 1 : k;
 }
 
 }  // namespace ufx

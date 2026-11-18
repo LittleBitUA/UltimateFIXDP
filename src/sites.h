@@ -743,7 +743,13 @@ struct TailDef {
     const uint8_t* bytes;
 };
 
+// The NaN trap of the angle normalisation FUN_00409E90 (323 calls in 158 functions): after `call __isnan` the code is
+// test eax,eax / jz 409EA8 / jmp $ (EB FE), so a NaN angle hangs the game for good. docs/crashes/03_nan_spin_loops.md.
+constexpr SiteDef kSiteNanTrap = {"angle NaN trap", 0x409EA2, 6, {0x85, 0xC0, 0x74, 0x02, 0xEB, 0xFE}};
+constexpr uint32_t kNanTrapNumber = 0x409EA8;
+
 constexpr const SiteDef* kAllSites[] = {
+    &kSiteNanTrap,
     &kSiteBeaconCall, &kSiteBeaconDraw, &kSiteBeaconMove, &kStorySites[0], &kStorySites[1], &kStorySites[2], &kStorySites[3], &kStorySites[4],
     &kStorySites[5], &kStorySites[6], &kStorySites[7], &kStorySites[8], &kStorySites[9], &kStorySites[10],
     &kSiteZeroDelta, &kSiteHouseListFormat, &kSiteExtraJoyPoll, &kSiteSkipIntro,

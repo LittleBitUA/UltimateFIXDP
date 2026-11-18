@@ -291,6 +291,22 @@ int main(int argc, char** argv) {
     Check((int32_t)Rd32(kSiteArchiveBufferSize.bytes + 2) == kArchiveUnpackedSizeOffset, "inflate room", "archive reader: buffer size offset");
     Check((int32_t)Rd32(kSiteLooseBufferSize.bytes + 2) == kLooseUnpackedSizeOffset, "inflate room", "loose file reader: buffer size offset");
 
+    // NaN trap guard: a number goes back to 00409EA8, a NaN reports the caller and returns 0.0 (fldz / ret)
+    {
+        uint8_t nt[32];
+        const uint32_t ntVa = 0xC0000200, ntWorker = 0xC0001200;
+        size_t nnt = BuildNanTrapGuard(nt, ntVa, ntWorker, kNanTrapNumber);
+        printf("nan trap guard %zu bytes\n", nnt);
+        Check(nnt == 23, "nan trap", "size 23 (the module allocates 32)");
+        Check(nt[0] == 0x85 && nt[1] == 0xC0 && nt[2] == 0x74 && Rel8To(nt, 2, 18), "nan trap", "test eax,eax / jz number");
+        Check(nt[4] == 0xFF && nt[5] == 0x34 && nt[6] == 0x24, "nan trap", "push dword [esp]");
+        Check(Rel32To(nt, ntVa, 7, ntWorker), "nan trap", "call worker");
+        Check(nt[12] == 0x83 && nt[13] == 0xC4 && nt[14] == 0x04 && nt[15] == 0xD9 && nt[16] == 0xEE && nt[17] == 0xC3, "nan trap", "add esp,4 / fldz / ret");
+        Check(Rel32To(nt, ntVa, 18, kNanTrapNumber), "nan trap", "jmp number");
+        Check(kSiteNanTrap.bytes[2] == 0x74 && kSiteNanTrap.va + 4 + (int8_t)kSiteNanTrap.bytes[3] == kNanTrapNumber, "nan trap", "the original jz goes where a number continues");
+        Check(kSiteNanTrap.bytes[4] == 0xEB && kSiteNanTrap.bytes[5] == 0xFE, "nan trap", "the replaced jmp $");
+    }
+
     printf("%s\n", g_failures ? "STUB CHECKS FAILED" : "all stub checks passed");
     return g_failures ? 1 : 0;
 }

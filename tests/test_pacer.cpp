@@ -139,12 +139,43 @@ static void LimiterTests() {
         handedPrev = handed;
         plain += GameDelta(t - prevT);
     }
-    CHECK(game / 60.0 - t < 0.009 && game / 60.0 - t > -0.001, "75 frames/s carry: game %.4f s, real %.4f s", game / 60.0, t);
+    // whole steps only: frames faster than 60 a second (no limit holding) get one step each until the clock is 2.5 steps ahead,
+    // then wait one frame; the game clock stays within about 3.5 steps (58 ms) of the real one and never drifts
+    CHECK(game / 60.0 - t < 0.06 && game / 60.0 - t > -0.001, "75 frames/s carry: game %.4f s, real %.4f s", game / 60.0, t);
     CHECK(plain / 60.0 > t * 1.2, "75 frames/s without the carry: game %.4f s, real %.4f s (expected 1.25x)", plain / 60.0, t);
+}
+
+// The frames the limit of mode 1 holds for whole refreshes (the first refresh at or after each 1/60 s slot) on screens of
+// 61..139 Hz: every frame must get a whole number of steps (92 counters of the game take (int)dt), none of zero, and the game
+// clock must stay within 2.5 steps of the real one.
+void WholeStepTests() {
+    const double rates[] = {61, 75, 85, 90, 100, 120, 139};
+    for (double hz : rates) {
+        const double refresh = 1.0 / hz;
+        double prev = 0, handedPrev = 0, worst = 0;
+        int fractional = 0, zero = 0;
+        for (int f = 1; f < 20000; ++f) {
+            double t = __builtin_ceil((f / 60.0) / refresh - 1e-9) * refresh;
+            if (f % 7 == 0) t += 0.03;  // a slow frame now and then
+            if (t < prev + refresh) t = prev + refresh;
+            prev = t;
+            int k = PacerRoundUpSteps((t - handedPrev) * 60.0);
+            double handed = k < 0 ? t : handedPrev + k / 60.0;
+            double steps = (handed - handedPrev) * 60.0;
+            if (k < 0 && __builtin_fabs(steps - __builtin_floor(steps + 0.5)) > 1e-6) ++fractional;
+            if (k == 0) ++zero;
+            double ahead = (handed - t) * 60.0;
+            if (ahead > worst) worst = ahead;
+            handedPrev = handed;
+        }
+        CHECK(fractional == 0 && zero == 0 && worst < 2.5, "%.0f Hz held for whole refreshes: %d fractional and %d zero steps, %.2f steps ahead at most",
+              hz, fractional, zero, worst);
+    }
 }
 
 int main() {
     LimiterTests();
+    WholeStepTests();
     const uint64_t freq = 10000000;  // 10 MHz QPC
     const uint64_t ms = freq / 1000;
 

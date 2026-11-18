@@ -18,6 +18,9 @@ constexpr const char* kVersion = "0.7.0";
 struct Config {
     int relativeQpc;         // QueryPerformanceCounter relative to process start
     int zeroDeltaGuard;      // frameDelta == 0 must not turn movement speed into NaN/INF
+    int nanTrapGuard;        // the angle normalisation returns 0 for a NaN instead of hanging (stability.cpp)
+    int pinAudio;            // XAudio2 and XACT stay loaded for the whole run
+    int pinFpu;              // the main thread's x87 precision stays at 24 bits, as a Direct3D 9 device sets it
     int saveGuard;           // atomic dp.sav writes, backups, restore of a damaged file
     int saveBackups;         // how many backups to keep (1..200)
     int saveRestoreDamaged;  // restore dp.sav from the newest backup if its size is wrong
@@ -234,6 +237,8 @@ void StopVibration();
 void TriggerCapture(const void* joyInfoEx, bool menuOpen);
 bool InstallCrashHandler();
 bool InstallCrashGuards();
+bool InstallStability();   // stability.cpp: the NaN trap guard and the x87 precision of the main thread
+void StabilityFrame();     // once per frame from the Present hook: pins the sound libraries once, keeps the x87 word
 bool InstallAudioGuard();  // proxy.cpp: the X3DAudio guard, and the game's calls go through it from then on
 void ApplySurround();      // follows [Audio] Surround (also called from the menu)
 bool InstallMapFix();

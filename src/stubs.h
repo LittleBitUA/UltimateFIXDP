@@ -534,4 +534,24 @@ inline size_t BuildInflateRoomStub(uint8_t* out, uint32_t va, uint32_t workerVa,
     return (size_t)(p - out);
 }
 
+// The angle normalisation FUN_00409E90 (cdecl, one float, result in st0, plain ret) spins forever on a NaN: at 00409EA2
+// `test eax,eax / jz 00409EA8 / jmp $` after __isnan. These 6 bytes become a jmp here. A number goes back to 00409EA8 as before;
+// a NaN is reported to `worker` (cdecl, one argument: the caller's return address, the dword at [esp] at this point) and the
+// function returns 0.0 instead of hanging. The x87 stack is empty at that point (the argument was stored with fstp), so fldz
+// leaves exactly the one result the callers pop; eax, ecx and edx are free in a cdecl function.
+//     test eax,eax / jz number / push dword [esp] / call worker / add esp,4 / fldz / ret / number: jmp 00409EA8
+inline size_t BuildNanTrapGuard(uint8_t* out, uint32_t va, uint32_t workerVa, uint32_t numberVa) {
+    uint8_t* p = out;
+    *p++ = 0x85; *p++ = 0xC0;               // test eax, eax
+    *p++ = 0x74; *p++ = 0x0E;               // jz number (+14: over the 14 bytes below)
+    *p++ = 0xFF; *p++ = 0x34; *p++ = 0x24;  // push dword [esp]
+    *p++ = 0xE8;
+    StubPut32(p, workerVa - (va + (uint32_t)(p - out) + 4));  // call worker
+    *p++ = 0x83; *p++ = 0xC4; *p++ = 0x04;  // add esp, 4
+    *p++ = 0xD9; *p++ = 0xEE;               // fldz
+    *p++ = 0xC3;                            // ret
+    StubJmp(p, out, va, numberVa);          // number: back into the function
+    return (size_t)(p - out);
+}
+
 }  // namespace ufx
