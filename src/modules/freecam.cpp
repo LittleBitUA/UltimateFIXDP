@@ -68,6 +68,39 @@ bool CenterOfWindow(POINT* centre) {
     return ClientToScreen(w, centre) != 0;
 }
 
+// Field of view in play. The game's camera update (FUN_00535750) eases the angle at 00BD969Ch towards its target from the
+// value that is there (0x536BB8..0x536BD6: fov += (target - fov) * dt / time), so a scaled value must never stay there: it
+// is written right before the camera matrices are built and the game's own value goes back after the frame was shown
+// (GameFovAfterFrame, from the Present hook). If no Present came in between, the value we wrote is still there and is
+// recognised as ours.
+float g_fovGame = 0.f, g_fovWritten = 0.f;
+bool g_fovSwapped = false;
+
+bool InCutscene() {
+    if (*(volatile int*)(uintptr_t)kEventModeVa < 0) return true;  // a scene demo
+    u32 ev = *(volatile u32*)(uintptr_t)0x00BD9E58;               // CEvent: a script cutscene (the game's own test, 0042D010)
+    if (ev < 0x10000 || ev >= UserAddressEnd()) return false;
+    return (*(volatile u32*)(uintptr_t)(ev + 0x44) & 0x40000u) != 0 || *(volatile u32*)(uintptr_t)(ev + 0x34) != 0;
+}
+
+void GameFovBeforeBuild() {
+    volatile float* fov = (volatile float*)(uintptr_t)(kRenderCameraVa + 0x54);
+    float v = *fov;
+    if (g_fovSwapped && v == g_fovWritten) v = g_fovGame;  // the game has not written since: its own value is the saved one
+    g_fovSwapped = false;
+    const bool use = g_cfg.gameFov != 100 && !g_active && v > 0.05f && v < 3.0f && !InCutscene();
+    if (!use) {
+        *fov = v;  // the game's own value, in case ours was still there
+        return;
+    }
+    float w = v * (float)g_cfg.gameFov / 100.f;
+    if (w > 2.9f) w = 2.9f;  // about 166 degrees: the projection stays finite
+    g_fovGame = v;
+    *fov = w;
+    g_fovWritten = *fov;  // as stored (a float), so the comparison above is exact
+    g_fovSwapped = true;
+}
+
 // Runs once per frame in the game thread, in front of the camera matrix build.
 void __attribute__((cdecl)) CameraWorker() {
     {   // the near plane of the main camera (a float in its context), logged once for diagnostics; it is never changed
@@ -108,6 +141,7 @@ void __attribute__((cdecl)) CameraWorker() {
         }
         Log("freecam: %s", g_active ? "on" : "off");
     }
+    GameFovBeforeBuild();
     if (!g_active) return;
 
     float* eye = (float*)(uintptr_t)(kRenderCameraVa + 0x04);
@@ -185,6 +219,13 @@ void __attribute__((cdecl)) CameraWorker() {
 }  // namespace
 
 bool FreeCamBlocksInput() { return g_active && g_cfg.freeCamFreeze; }
+
+void GameFovAfterFrame() {
+    if (!g_fovSwapped) return;
+    volatile float* fov = (volatile float*)(uintptr_t)(kRenderCameraVa + 0x54);
+    if (*fov == g_fovWritten) *fov = g_fovGame;  // the game's next camera update eases from its own angle
+    g_fovSwapped = false;
+}
 
 bool InstallFreeCam() {
     const SiteDef& s = kSiteCameraCall;

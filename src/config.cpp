@@ -51,8 +51,11 @@ static const char kDefaultIni[] =
     "; 1 = frame limit (recommended): 60 frames per second on average at any refresh rate, and the game clock stays within half a\r\n"
     "; step of real time (the mod rounds a short frame up to a whole step itself and takes that time off the next one); 2 = 30 per\r\n"
     "; second like the console, 3 = 60 per second with the game time in whole 1/60 s steps (2 and 3 hitch when the game is below 60);\r\n"
-    "; 0 = as the game does it. Changes at once.\r\n"
-    "FramePacing=1"
+    "; 0 = no limit (default): the frame rate follows the screen. The game rounds a delta of 0.5..0.99 steps up to a whole step, so\r\n"
+    "; without a limit everything runs too fast at 61..139 Hz (75 Hz: 1.25 times, 120 Hz: twice): on such a screen the mod keeps the\r\n"
+    "; limit of 1 by itself and says so in the log. From 140 Hz up the frames are short enough not to be rounded, and HighFpsPhysics\r\n"
+    "; keeps the car in real time. Changes at once.\r\n"
+    "FramePacing=0"
     "\r\n"
     "\r\n"
     "[Fixes]\r\n"
@@ -154,6 +157,9 @@ static const char kDefaultIni[] =
     "ScalePostBuffers=0\r\n"
     "; Maximum anisotropic filtering, 1..16 (the game uses 8).\r\n"
     "Anisotropy=16\r\n"
+    "; Field of view while playing, in percent of the game's own (about 65 degrees): 100 = as the game, 120 = about 78 degrees.\r\n"
+    "; The game keeps its own zoom (aiming, the car); cutscenes and the photo mode keep their own view. Changes at once.\r\n"
+    "FieldOfView=100\r\n"
     "; The PC port darkens the picture by 0.85 (and 0.75 more in one cutscene state); the console did not.\r\n"
     "; 1 = remove the factors (about 15% brighter). Changes at once.\r\n"
     "XboxExposure=0\r\n"
@@ -567,19 +573,11 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.pauseInMenu = (int)GetPrivateProfileIntW(L"Time", L"PauseInMenu", 0, ini);
     g_cfg.surround = (int)GetPrivateProfileIntW(L"Audio", L"Surround", 1, ini);
     if (g_cfg.surround < 0 || g_cfg.surround > 2) g_cfg.surround = 1;
-    g_cfg.framePacing = (int)GetPrivateProfileIntW(L"Time", L"FramePacing", 1, ini);
+    g_cfg.framePacing = (int)GetPrivateProfileIntW(L"Time", L"FramePacing", 0, ini);
     if (g_cfg.framePacing < 0 || g_cfg.framePacing > 3) g_cfg.framePacing = 0;
-    // Older versions wrote FramePacing=0 into the file as a default. Without the frame limit the game runs its physics per frame:
-    // at 144-180 frames/s a car is far too fast. Once (migration 2), a 0 is turned into 1, which now means only a frame limit with real
-    // game time (it used to be the whole-step clock, now mode 3, that hitches below 60 frames/s). A 0 chosen afterwards stays.
-    if (GetPrivateProfileIntW(L"Time", L"PacingMigrated", 0, ini) < 2) {
-        WritePrivateProfileStringW(L"Time", L"PacingMigrated", L"2", ini);
-        if (g_cfg.framePacing == 0) {
-            g_cfg.framePacing = 1;
-            WritePrivateProfileStringW(L"Time", L"FramePacing", L"1", ini);
-            Log("config: FramePacing=0 changed to 1 (frame limit 60, the game keeps real time)");
-        }
-    }
+    // Migration 2 of 0.5.x turned a 0 into 1 once. Since 0.7.0 no limit is the default again and is safe (PacingMode keeps the
+    // limit on screens of 61..139 Hz), so nothing is migrated any more; the mark stays for files that still lack it.
+    if (GetPrivateProfileIntW(L"Time", L"PacingMigrated", 0, ini) < 2) WritePrivateProfileStringW(L"Time", L"PacingMigrated", L"2", ini);
     g_cfg.zeroDeltaGuard = (int)GetPrivateProfileIntW(L"Fixes", L"ZeroDeltaGuard", 1, ini);
     g_cfg.houseListFix = (int)GetPrivateProfileIntW(L"Fixes", L"HouseListFix", 1, ini);
     g_cfg.removeExtraJoyPoll = (int)GetPrivateProfileIntW(L"Fixes", L"RemoveExtraJoyPoll", 1, ini);
@@ -686,6 +684,9 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.shadowPrecision = (int)GetPrivateProfileIntW(L"Graphics", L"ShadowPrecision", 1, ini);
     g_cfg.scalePostBuffers = (int)GetPrivateProfileIntW(L"Graphics", L"ScalePostBuffers", 0, ini);
     g_cfg.anisotropy = (int)GetPrivateProfileIntW(L"Graphics", L"Anisotropy", 16, ini);
+    g_cfg.gameFov = (int)GetPrivateProfileIntW(L"Graphics", L"FieldOfView", 100, ini);
+    if (g_cfg.gameFov < 70) g_cfg.gameFov = 70;
+    if (g_cfg.gameFov > 150) g_cfg.gameFov = 150;
     if (g_cfg.anisotropy < 1) g_cfg.anisotropy = 1;
     if (g_cfg.anisotropy > 16) g_cfg.anisotropy = 16;
     g_cfg.xboxExposure = (int)GetPrivateProfileIntW(L"Graphics", L"XboxExposure", 0, ini);

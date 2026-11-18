@@ -79,6 +79,7 @@ struct Config {
     int shadowScale;         // shadow map size in percent (100 = original 512/1024)
     int scalePostBuffers;    // also enlarge the blur/bloom storage buffers with the scene
     int anisotropy;          // maximum anisotropic filtering, 1..16 (the game uses 8)
+    int gameFov;             // field of view in play, percent of the game's own (100 = unchanged), 70..150
     int xboxExposure;        // no 0.85 / 0.75 exposure factors, as on the console
     int xboxLook;            // master switch of the Xbox 360 look: scene grading in the final composite and the display gamma
     int xboxGrade;           // strength of the scene grading (the game's contrast, chroma and colour offset), percent
@@ -272,6 +273,7 @@ unsigned PadButtons();  // buttons of the last pad data handed to the game (0 = 
 void EnsureLauncherStub(const wchar_t* gameDir);  // in the game: put the quick-start stub in place of DPLauncher.exe
 void InstallCpuTweaks();
 bool InstallWaypoint();
+void GameFovAfterFrame();  // freecam.cpp: gives the game its own field of view back after a frame was shown
 void WaypointFrame(void* device);  // once per frame from the Present hook: the waypoint keys and the state its drawing needs
 bool WaypointToObjective();        // the waypoint goes to the game's current objective (the next one when it stands on one already)
 int WaypointObjectives(int* yards);  // objective points on the game's map now and the yards to the first one; -1 = not known

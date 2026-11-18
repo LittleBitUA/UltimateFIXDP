@@ -92,8 +92,27 @@ static bool g_limActive = false;
 static double g_limBase = 0;
 static u64 g_limQ0 = 0, g_limFreq = 1;
 
-static double FrameClockInner(int arg) {
+int DisplayRefreshHz();
+
+// The mode in force. "No limit" (0) is kept only where it is safe: the game rounds a frame of 0.5..0.99 steps up to a whole step
+// (0x700B92), so on a screen of 61..139 Hz an unlimited game runs everything too fast (75 Hz: x1.25, 120 Hz: x2). There the limit of
+// mode 1 is used instead; from 140 Hz up the frames are below half a step and are not rounded (HighFpsPhysics handles the car).
+static int PacingMode() {
     int mode = g_cfg.framePacing;
+    if (mode != 0) return mode;
+    int hz = DisplayRefreshHz();
+    static int said = -1;
+    bool keep = hz > 60 && hz < 140;
+    if ((int)keep != said) {
+        said = (int)keep;
+        Log(keep ? "pacer: no frame limit was chosen, but at %d Hz the game would run too fast: the 60 frames/s limit stays on"
+                 : "pacer: no frame limit (%d Hz)", hz);
+    }
+    return keep ? 1 : 0;
+}
+
+static double FrameClockInner(int arg) {
+    int mode = PacingMode();
     if (arg == 0 && mode == 1) {
         if (!g_limActive) {
             g_limActive = true;
@@ -175,7 +194,7 @@ static bool RecoverTick() {
     if (g_recoverFrames > 0) { --g_recoverFrames; return true; }
     if (!g_cfg.autoRecover || ui::IsOpen() || g_cfg.photoFreeze) { g_slowFrames = 0; return false; }
     // Slow = 1.8 frames of the mode's own rate (30 ms at 60, 60 ms in the 30 frames/s mode, where every frame lasts 33 ms by design).
-    double slowMs = g_cfg.framePacing == 2 ? 60.0 : 30.0;
+    double slowMs = PacingMode() == 2 ? 60.0 : 30.0;
     if (ms > slowMs && ms < 250.0) ++g_slowFrames; else g_slowFrames = 0;   // longer gaps are loading screens
     if (g_slowFrames >= 60 && (g_lastRecoverQ == 0 || q - g_lastRecoverQ > 20ull * (u64)f.QuadPart)) {
         g_slowFrames = 0;
@@ -219,7 +238,7 @@ static LimiterState g_lim;
 static bool g_limOn = false;
 
 void PacerBeforePresent() {
-    if (g_cfg.framePacing != 1) { g_limOn = false; return; }
+    if (PacingMode() != 1) { g_limOn = false; return; }
     LARGE_INTEGER f;
     QueryPerformanceFrequency(&f);
     u64 freq = (u64)f.QuadPart;
@@ -234,7 +253,7 @@ void PacerBeforePresent() {
 }
 
 void PacerAfterPresent(u64 returnedAt, double presentMs) {
-    if (g_cfg.framePacing != 1 || !g_limOn) return;
+    if (PacingMode() != 1 || !g_limOn) return;
     bool was = g_lim.vsync;
     u64 presentTicks = presentMs > 0 ? (u64)(long long)(presentMs * (double)(long long)g_lim.freq / 1000.0) : 0;
     LimiterReturned(g_lim, returnedAt, presentTicks);
@@ -255,7 +274,7 @@ static int g_prevMode = -1;
 static double FrameClockOut(int arg) {
     double raw = FrameClockInner(arg);
     if (arg != 0) return raw;
-    int mode = g_cfg.framePacing;
+    int mode = PacingMode();
     if (g_prevMode >= 0 && mode != g_prevMode && g_haveOut) {
         double basis = g_paused ? g_pauseStart : raw;
         double jump = Sub53(Sub53(basis, g_pauseCut), g_lastOut);
@@ -290,7 +309,7 @@ double __cdecl FrameClock(int arg) {
     if (arg == 0) {
         // Mode 1 keeps the real time, but the game rounds a delta of 0.5..0.99 steps up to a whole step (pacer.h, PacerRoundUpSteps):
         // hand it the rounded value at once and measure the next delta from there, so the rounding never adds up.
-        if (g_cfg.framePacing == 1 && g_haveOut) {
+        if (PacingMode() == 1 && g_haveOut) {
             int k = PacerRoundUpSteps(Sub53(out, g_lastOut) * 60.0);
             if (k >= 0) out = Seconds53(g_lastOut, (double)k, 60.0, kStepEpsilon);  // a hair above k/60, as in the whole-step modes
         }
@@ -307,7 +326,7 @@ bool InstallFramePacer() {
         return false;
     }
     if (!PatchCall(s.va, s.bytes, s.len, (const void*)FrameClock)) return false;
-    Log("pacer: frame clock hooked, mode %d", g_cfg.framePacing);
+    Log("pacer: frame clock hooked, mode %d", PacingMode());
     return true;
 }
 

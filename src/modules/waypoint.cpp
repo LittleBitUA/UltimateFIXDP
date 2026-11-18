@@ -735,7 +735,7 @@ extern "C" void __cdecl WaypointMapOverlay() {
         u32 layout = g_wpMapObj + 0x19D0;
         int count = *(volatile int*)(uintptr_t)(layout + 0x84);
         u32 table = *(volatile u32*)(uintptr_t)(layout + 0x88);
-        if (count >= 2 && table >= 0x10000 && table < 0x7FFE0000u) {
+        if (count >= 2 && Ptr(table)) {
             cx = (F(table, 0x04) + F(table, 0x14)) * 0.5f;
             cy = (F(table, 0x08) + F(table, 0x18)) * 0.5f;
         }

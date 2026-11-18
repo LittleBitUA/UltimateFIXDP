@@ -307,6 +307,7 @@ HRESULT WINAPI OurPresent(void* dev, const RECT* src, const RECT* dst, HWND wnd,
         ui::XboxGammaFrame(dev);  // last: it stands for the screen of the console, behind everything the game and the filters drew
         ui::PerfPostEnd(dev);
         ui::ScreenshotFrame(dev);
+        GameFovAfterFrame();
     }
     // Frame statistics over a window of 30 frames. While both panels are off nothing is measured; when one is
     // switched on again everything starts from zero, so the time it was off does not show up as one huge frame.
