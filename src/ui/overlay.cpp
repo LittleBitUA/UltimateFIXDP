@@ -866,7 +866,9 @@ const char kHbaoSource[] =
     "float4 main(float2 uv : TEXCOORD0) : COLOR {\n"
     "  float dc = max(Dep(uv), 1.0);\n"
     "  if (dc > 30000.0) return float4(1, 1, 1, 1);\n"
-    "  float k = max(c0.w * 0.25, 2.0);\n"
+    // the surface slope from the next texels: a wider step (it was a quarter of the radius) took the slope across a crease for
+    // every pixel that near it, which drew a band with a hard edge along wall corners and ceiling edges
+    "  float k = 1.0;\n"
     "  float dr = Dep(uv + float2(c0.x * k, 0.0)); float dl = Dep(uv - float2(c0.x * k, 0.0));\n"
     "  float dd = Dep(uv + float2(0.0, c0.y * k)); float du = Dep(uv - float2(0.0, c0.y * k));\n"
     "  float2 g;\n"
@@ -886,7 +888,7 @@ const char kHbaoSource[] =
     "      float t = (j - jit) * 0.25 * c0.w;\n"
     "      float2 o = dir * t;\n"
     "      float ds = Dep(uv + o * c0.xy);\n"
-    "      float dz = dc + dot(g, o) - ds - 1.0;\n"   // above the tangent plane; 1 unit for the packing's steps
+    "      float dz = dc + dot(g, o) - ds - (1.0 + dc * 0.002);\n"   // above the tangent plane; 1 unit for the packing's steps
     "      float lat = t * dc * c1.z;\n"
     "      float len2 = dz * dz + lat * lat;\n"
     "      float s = dz / sqrt(len2 + 1e-4);\n"
