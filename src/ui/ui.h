@@ -46,6 +46,8 @@ void PerfOverlayFrame(void* device, double fps, double frameMs, double presentMs
 void FrameStatsPush(double frameMs);
 void FrameStatsPanel(void* device, double totalMs, double gameMs, double physicsMs, double presentMs, double worstMs, double busyMs);
 bool PhotoPageOpen();                           // the menu is open on that page
+void ResidentsPage(float left, float top, float right, float bottom);  // the schedule viewer, drawn into the menu's content area (residents.cpp)
+void ResidentsScroll(int rows);                 // its list: positive = down
 void ScreenshotFrame(void* device);              // saves a PNG when the screenshot key is pressed
 void ReleasePostResources();                     // before the device is reset (also frees the reused state block)
 

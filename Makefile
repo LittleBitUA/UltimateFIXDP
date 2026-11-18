@@ -19,6 +19,7 @@ LDFLAGS  := -shared -nostdlib -nostartfiles -Wl,-e,_DllEntry@12 -Wl,--kill-at -W
 LIBS     := -lkernel32 -luser32 -lgdi32 -lgcc
 SRC      += src/ui/xbox_look.cpp
 SRC      += src/modules/quick_turn.cpp
+SRC      += src/modules/npc_map.cpp src/ui/residents.cpp
 
 all: $(OUT)/X3DAudio1_7.dll $(OUT)/ufx_laa.exe $(OUT)/ufx_play.exe
 
@@ -123,7 +124,17 @@ test_resguard: $(OUT)/test_resguard
 test: test_resguard
 .PHONY: test_resguard
 
+# The residents' timetable lookup (src/schedule.h, used by modules/npc_map.cpp), part of "make test".
+$(OUT)/test_schedule: tests/test_schedule.cpp src/schedule.h
+	@mkdir -p $(OUT)
+	$(HOSTCXX) -std=c++17 -Isrc -o $@ tests/test_schedule.cpp
+
+test-schedule: $(OUT)/test_schedule
+	$(OUT)/test_schedule
+
+test: test-schedule
+
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all test test-stepplan clean hlslcheck
+.PHONY: all test test-stepplan clean hlslcheck test-schedule

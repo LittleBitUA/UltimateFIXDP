@@ -265,6 +265,11 @@ static const char kDefaultIni[] =
     "; Smallest zoom and the zoom the map opens with, in percent (the game: 100 and 100).\r\n"
     "MinZoom=20\r\n"
     "DefaultZoom=20\r\n"
+    "; 1 = the residents of the town the game has around you are marked on this map with their names (an o and the name, in the\r\n"
+    "; game's font). The mod only reads the game's data for it. Drawn by the waypoint's pass over the map, so it needs\r\n"
+    "; [Waypoint] Enabled=1, Enabled=1 here and Orientation 1 or 2; only outdoors in the town. Off by default: it tells more than\r\n"
+    "; the game's own map does. Changes at once from F10. (F10 also has a page with every resident's timetable.)\r\n"
+    "ShowResidents=0\r\n"
     "\r\n"
     "[Input]\r\n"
     "; DualSense: 1 = a light engine hum in a car (follows the right trigger) and a kick for every shot (by the kind of weapon).\r\n"
@@ -761,6 +766,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.mapDefaultZoom = (int)GetPrivateProfileIntW(L"Map", L"DefaultZoom", 20, ini);
     if (g_cfg.mapDefaultZoom < 10) g_cfg.mapDefaultZoom = 10;
     if (g_cfg.mapDefaultZoom > 350) g_cfg.mapDefaultZoom = 350;
+    g_cfg.showResidents = (int)GetPrivateProfileIntW(L"Map", L"ShowResidents", 0, ini);
     g_cfg.crashDump = (int)GetPrivateProfileIntW(L"Debug", L"CrashDump", 1, ini);
     g_cfg.dumpTextures = (int)GetPrivateProfileIntW(L"Debug", L"DumpTextures", 0, ini);
     g_cfg.traceCamera = (int)GetPrivateProfileIntW(L"Debug", L"TraceCamera", 0, ini);

@@ -335,6 +335,9 @@ Item g_pageMapItems[] = {
      {L"З яким масштабом відкривається мапа.", L"The zoom the map opens with."}, NOTR},
     {{L"Усі плитки мапи", L"All map tiles"}, &g_cfg.mapFix, kBool, 0, 1, 1, true, L"Map", L"Enabled", nullptr, nullptr,
      {L"Малює всі 64 плитки одразу й тримає їх у пам'яті (близько 100 МБ). Вимкнення повертає мапу гри.", L"Draws all 64 tiles at once and keeps them in memory (about 100 MB). Turning it off restores the game's map."}, NOTR},
+    {{L"Жителі на мапі паузи", L"Residents on the pause map"}, &g_cfg.showResidents, kBool, 0, 1, 1, false, L"Map", L"ShowResidents", nullptr, nullptr,
+     {L"Жителів міста, які зараз є поруч у грі, позначено на мапі паузи кружечком «o» з іменем (шрифтом гри). Мод лише читає дані гри й нічого в ній не змінює. Працює надворі в місті, коли ввімкнено «Мітка (F7)» і «Усі плитки мапи», а мапа не обертається (північ або південь угорі). Типово вимкнено: це показує більше, ніж мапа самої гри. Де хто має бути за розкладом, видно в розділі «Жителі». Змінюється одразу.",
+      L"The residents of the town the game has around you are marked on the pause map with an 'o' and their name (in the game's font). The mod only reads the game's data and changes nothing in it. Works outdoors in the town, with 'Waypoint (F7)' and 'All map tiles' on and a map that does not turn (north or south up). Off by default: it shows more than the game's own map. Where everyone should be by the timetable is on the 'Residents' page. Changes at once."}, NOTR},
     RESET_ITEM
 };
 Item g_pageInput[] = {
@@ -630,10 +633,11 @@ struct Page {
     int count;
     bool about;  // the "About" page has no settings
     void (*custom)() = nullptr;  // what draws a page without settings (null: the About text)
+    bool residents = false;  // a page without settings that shows the residents' timetable instead (residents.cpp)
 };
 void DrawStory();
 constexpr int kPhotoPage = 3;  // the photo mode section (the camera keys and the preview of the filters know it)
-// Six sections, most used first. Some are several pages of settings put together once at start (MergePages), each part under its heading.
+// Eight sections, most used first. Some are several pages of settings put together once at start (MergePages), each part under its heading.
 Page g_pages[] = {
     {{L"Екран і графіка", L"Screen and graphics"}, {L"Вікно, роздільність, тіні, різкість, іконки", L"Window, resolution, shadows, sharpness, icons"}, nullptr, 0, false},
     {{L"Керування", L"Controls"}, {L"Ґеймпад, стіки, вібрація", L"Gamepad, sticks, vibration"}, g_pageInput, (int)(sizeof(g_pageInput) / sizeof(Item)), false},
@@ -641,11 +645,12 @@ Page g_pages[] = {
     {{L"Фоторежим і читкоди", L"Photo mode and cheats"}, {L"Камера, фільтри, знімок, гроші, час, погода", L"Camera, filters, picture, money, time, weather"}, nullptr, 0, false},
     {{L"Виправлення", L"Fixes"}, {L"Час, помилки гри, мова, захист dp.sav, діагностика", L"Time, game bugs, language, protection of dp.sav, diagnostics"}, nullptr, 0, false},
     {{L"Сюжет", L"Story"}, {L"Епізод, побічні завдання, поточна ціль (лише перегляд)", L"Episode, side quests, current destination (read-only)"}, nullptr, 0, true, DrawStory},
+    {{L"Жителі", L"Residents"}, {L"Де хто зараз за розкладом гри і куди піде далі", L"Where everyone is now by the game's timetable, and where next"}, nullptr, 0, true, nullptr, true},
     {{L"Про мод", L"About"}, {L"Автор і подяки", L"Author and credits"}, nullptr, 0, true},
 };
 constexpr int kPageCount = (int)(sizeof(g_pages) / sizeof(Page));
 
-// The sidebar has 6 sections instead of 11: some are several pages of settings put together once at start (each part keeps its heading).
+// The sidebar has 8 sections instead of 13: some are several pages of settings put together once at start (each part keeps its heading).
 struct PageSource {
     Item* items;
     int count;
@@ -1098,6 +1103,7 @@ void HandleInput(bool foreground) {
         if (Pressed(VK_TAB)) SelectPage(g_page + ((GetAsyncKeyState(VK_SHIFT) & 0x8000) ? -1 : 1));
         if (Pressed(VK_NEXT)) SelectPage(g_page + 1);
         if (Pressed(VK_PRIOR)) SelectPage(g_page - 1);
+        if (pg.residents) ResidentsScroll(-g_wheel * 2 + (Pressed(VK_DOWN) ? 1 : 0) - (Pressed(VK_UP) ? 1 : 0));
         g_wheel = 0;
         float mx, my;
         if (Pressed(VK_LBUTTON) && MousePosition(&mx, &my)) SidebarClick(mx, my);
@@ -1672,6 +1678,7 @@ void Draw() {
     DrawLanguageChips();
     if (pg.about) {
         if (pg.custom) pg.custom();
+        else if (pg.residents) ResidentsPage(kCx, kListTop, kCr, kPy + kPh - 44);
         else DrawAbout();
         return;
     }
