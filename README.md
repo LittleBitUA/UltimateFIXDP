@@ -1,49 +1,76 @@
 <div align="center">
 
+<img src="docs/logo.png" width="120" alt="UltimateFIXDP"/>
+
 # UltimateFIXDP
 
-**The all-in-one fix for _Deadly Premonition: The Director's Cut_ (PC, Steam)**
+**The all-in-one fix for _Deadly Premonition: The Director's Cut_**
 <br>
-_Універсальний фікс для_ **Deadly Premonition: The Director's Cut** _(PC, Steam)_
+_Універсальний фікс для_ **Deadly Premonition: The Director's Cut**
 
-[![Release](https://img.shields.io/github/v/release/LittleBitUA/UltimateFIXDP?include_prereleases&style=for-the-badge&color=c4192b)](https://github.com/LittleBitUA/UltimateFIXDP/releases)
+[![GitHub release](https://img.shields.io/github/v/release/LittleBitUA/UltimateFIXDP?include_prereleases&style=for-the-badge&color=c4192b)](https://github.com/LittleBitUA/UltimateFIXDP/releases)
 [![License](https://img.shields.io/badge/license-MIT-c4192b?style=for-the-badge)](LICENSE)
 [![Steam 1.01b](https://img.shields.io/badge/Steam-1.01b-c4192b?style=for-the-badge&logo=steam)](https://store.steampowered.com/app/247660/)
 [![Made by Little Bit](https://img.shields.io/badge/by-%C2%ABLittle%20Bit%C2%BB-c4192b?style=for-the-badge)](https://t.me/LittleBitUA)
 
-**[⬇️ Download / Завантажити](https://github.com/LittleBitUA/UltimateFIXDP/releases/latest)** · **[🇬🇧 English](#-english)** · **[🇺🇦 Українська](#-українська)**
-
-<img src="docs/screenshots/menu-graphics.jpg" width="90%" alt="UltimateFIXDP settings menu in game"/>
+<img src="docs/screenshots/menu-graphics.jpg" width="92%" alt="UltimateFIXDP settings menu in game"/>
 
 </div>
 
-> [!NOTE]
-> **Public testing.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` before you start.
-> <br>**Публічне тестування.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Перед початком зробіть копію `savedata\dp.sav`.
-
-> [!TIP]
-> **Used [DP1 Launcher](https://github.com/dplauncher/DP1-Launcher)?** UltimateFIXDP is its successor. What the launcher set up through DPfix, the 4 GB patch and DXVK (resolution, SSAO, borderless, save backups) is now built into the mod itself, with far more fixes. Remove DPfix before installing.
-> <br>**Користувались [DP1 Launcher](https://github.com/dplauncher/DP1-Launcher)?** UltimateFIXDP — його наступник. Те, що лаунчер налаштовував через DPfix, 4GB-патч і DXVK (роздільність, SSAO, вікно без рамки, копії сейвів), тепер вбудовано в сам мод, і виправлень набагато більше. Перед установкою приберіть DPfix.
-
 ---
 
-## 🇬🇧 English
+## 🇬🇧 In English
 
-One file, `X3DAudio1_7.dll`, in the game folder. No exe patching, no installer, a full settings menu in game (**F10**).
+One DLL in the game folder instead of DPfix, a 4 GB patch, a stability fix, a map fix and a crash fix.
+No exe patching, no installer: press **F10** in game and everything is there.
 
-### ✨ Highlights
+> **Public test build.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
 
-| | |
-|---|---|
-| 🛡️ **Stability** | The crash after cutscenes, the zero-frame-time freeze, the Alt+Tab hang, the "only a reboot helps" slowdown. Crash handler and freeze watchdog for anything left. |
-| 🚀 **Performance** | Found why the game sits at ~45 FPS on some PCs (a gamepad poll every frame): **45 → 180 FPS** in our test. A 60 FPS limit that works at any refresh rate. |
-| 🖥️ **Graphics** | Borderless window, **real output resolution** (sharp HUD and text), supersampling 1×–3×, SSAO, FXAA, sharpening, wet reflections, 16× AF, longer draw distance. |
-| 🎮 **DualSense** | USB and Bluetooth without Steam Input, **adaptive triggers per weapon**, rumble that finally works, haptics for driving and shooting, PlayStation button icons. |
-| 🗺️ **Map** | The full pause map (64 tiles, proper zoom, north up), **waypoints** with the game's own minimap arrows. |
-| 📷 **Photo mode** | Free camera, frozen time, filters, FOV, costumes, poses, PNG screenshots. _Experimental._ |
-| 💾 **Saves** | Atomic writes, backups, automatic restore of a damaged save. |
+### Features
 
-### 🖼️ Screenshots
+- 🛡️ **Stability** — the crash after cutscenes, the zero-frame-time freeze and the Alt+Tab hang are fixed; a crash handler and a freeze watchdog write a dump if anything still goes wrong
+- 🚀 **Low FPS fixed** — on some PCs the game sat at ~45 FPS with an idle GPU; **45 → 180 FPS** in our test
+- ⏱️ **60 FPS limit at any refresh rate** — at 144 / 180 Hz the game used to run too fast
+- 🖥️ **Real output resolution** — the picture and the HUD at your monitor's resolution instead of 1280×720, borderless window, no DPI blur
+- ✨ **Graphics** — supersampling 1×–3×, SSAO, FXAA, sharpening, wet reflections, 16× anisotropic filtering, sharper shadows, longer draw distance
+- 🎮 **DualSense** — USB and Bluetooth without Steam Input, **adaptive triggers per weapon**, haptics for driving and shooting, PlayStation button icons
+- 📳 **Rumble that works** — the PC port calculated vibration and never sent it to the gamepad
+- 🔫 **Aim on L2, shoot on R2** — like a modern shooter, on Xbox pads too; prompts switch between keyboard and gamepad by themselves
+- 🗺️ **Full pause map** — all 64 tiles, proper zoom, north up
+- 📍 **Waypoints** — F7 sets a mark; the distance in the game's own font and the game's own arrows on the minimap (_arrows are experimental_)
+- 💾 **Safe saves** — atomic writes, backups, automatic restore of a damaged `dp.sav`
+- 📷 **Photo mode** — free camera, frozen time, filters, FOV, costumes, poses, PNG screenshots (_experimental_)
+- 🧰 **Tools** — frame statistics panel, built-in profiler, cheats page (money, time, weather, ammo, god mode)
+- 🇺🇦🇬🇧 **Two languages** — Ukrainian and English, switched in the menu
+
+### Engine fixes (RE-based)
+
+Every fix below comes from reverse engineering the game and comparing the PC
+port with the Xbox 360 original:
+
+- 🕒 **The "only a reboot helps" slowdown** — the game counted time from
+  the Windows uptime counter in single-precision x87 floats, so after days
+  without a reboot the frame time lost precision. The mod hands the game a
+  counter that starts with the game.
+- 🎯 **The 45 FPS mystery** — the game asks Windows about a WinMM gamepad on
+  every frame, even with none connected, and on some systems that call takes
+  milliseconds. Found with the mod's own profiler; the mod now asks twice a
+  second.
+- 🌗 **Day and night inside buildings** — the port reads the building list
+  (`HOUSE_LIST`) with a wrong byte-order key: 64 of its 81 entries were misread, so
+  interiors had the wrong lighting.
+- 💥 **The crash after cutscenes** — an NPC told to walk to waypoint `-1`
+  read the navigation table out of bounds. Guarded at the lookup.
+- ➗ **The zero-delta freeze** — a frame with zero time divided by zero and
+  spun forever. Guarded.
+- 🎚️ **Difficulty** — the PC port skips the difficulty screen and stays on
+  Easy forever. Normal is the default again, and the choice is yours.
+- 📳 **Vibration** — the same event-to-rumble table as on Xbox 360, but the
+  PC port never sends it to the device. Restored.
+- 🚧 **Draw distance** — booths and vending machines vanished 500 units
+  away because of a far plane the Xbox version does not have.
+
+### Screenshots
 
 <table>
 <tr>
@@ -56,230 +83,200 @@ One file, `X3DAudio1_7.dll`, in the game folder. No exe patching, no installer, 
 </tr>
 </table>
 
-### 📦 Installation
+### Standing on the shoulders of
 
-1. **Back up** `savedata\dp.sav`.
-2. Download the [latest release](https://github.com/LittleBitUA/UltimateFIXDP/releases/latest) and copy `X3DAudio1_7.dll` and the `UltimateFix` folder into the game folder (next to `DP.exe`).
-3. Start the game and press **F10**. Settings are saved to `UltimateFix.ini`, the log to `UltimateFix\ufx.log`.
+The code is our own (MIT). The ideas, facts and addresses came from earlier community work:
 
-> [!IMPORTANT]
-> Steam version **1.01b** only. Other builds are detected and the mod stays inactive.
-> <br>For DualSense, turn off Steam Input for the game (Properties → Controller).
-> <br>Do not combine with ZachFix or DPStabilityFix: they patch the same places.
+| Project | Author | What we learned from it |
+|---|---|---|
+| **[ZachFix](https://github.com/h714je/ZachFix)** | h714je | Research of the port, many ideas |
+| **[DPfix](https://github.com/PeterTh/dpfix)** | Peter "Durante" Thoman | Resolution, shadows, texture replacement |
+| **[DPStabilityFix](https://github.com/Cesario67/DeadlyPremonitionFix)** | Cesario67 | Saves, timing, DualSense layout |
+| **[CrashFix](https://github.com/Behelit09/DeadlyPremonition-CrashFix)** · **[MapFix](https://github.com/Behelit09/Deadly-Premonition-The-Director-s-Cut-MapFix)** · **[FreeCam](https://github.com/Behelit09/DeadlyPremonition-FreeCam)** | Behelit09 | Navigation crash, the full map, free camera |
+| **[DPRecomp](https://github.com/LittleBitUA/DPRecomp)** | «Little Bit» | Our Xbox 360 recompilation: the reference the PC port is compared with |
+| **[Kenney Input Prompts](https://kenney.nl/assets/input-prompts)** | Kenney | Gamepad button icons (CC0) |
+| **[DXVK](https://github.com/doitsujin/dxvk)** | Philip "doitsujin" Rebohle | Optional Vulkan renderer, bundled under its own license |
 
-<details>
-<summary><b>Optional extras in the release</b></summary>
+🧪 **Testers:** **Gold flin** and **Tree Fan**. Thank you for playing the unfinished builds and reporting everything that broke.
 
-- `ufx_laa.exe` lets `DP.exe` use 4 GB of memory (useful with high supersampling). It keeps `DP.exe.bak`; `ufx_laa.exe --undo` reverts it.
-- `ufx_play.exe` is the quick start without the launcher window. The mod installs it by itself; hold **Shift** at start for the old launcher once, `ufx_play.exe --undo` reverts it.
-- `dxvk\Install_DXVK.bat` / `Remove_DXVK.bat` turn DXVK (Vulkan) on and off. _Experimental, not tested in game yet._
+### Installation
 
-**Uninstall:** delete `X3DAudio1_7.dll` (and `UltimateFix\` if you like).
-</details>
+1. Back up `savedata\dp.sav`
+2. Download the latest version from [Releases](https://github.com/LittleBitUA/UltimateFIXDP/releases)
+3. Copy `X3DAudio1_7.dll` and the `UltimateFix` folder into the game folder (next to `DP.exe`)
+4. Start the game and press **F10**
 
-### ⌨️ Keys
+> **Requirements:** the Steam version 1.01b of the game. Other builds are detected and the mod stays inactive.
+> <br>**DualSense:** turn off Steam Input for the game (Properties → Controller).
+> <br>**Do not combine** with DPfix, ZachFix or DPStabilityFix: UltimateFIXDP replaces them.
+> <br>**Coming from [DP1 Launcher](https://github.com/dplauncher/DP1-Launcher)?** This is its successor: remove DPfix (`d3d9.dll`, `DPfix.ini`) first.
+
+Optional extras in the release: `ufx_laa.exe` (lets the game use 4 GB of memory, `--undo` reverts), `ufx_play.exe` (start without the launcher window; the mod installs it by itself, hold **Shift** for the old launcher), `dxvk\Install_DXVK.bat` (Vulkan renderer, _experimental_).
+
+To uninstall, delete `X3DAudio1_7.dll`.
+
+### Keys
 
 | Key | Action |
 |---|---|
 | **F10** | Settings menu |
 | **F7** | Set a waypoint (on the pause map or in the world) · **Shift+F7** removes it |
-| **F6** | Photo mode (camera, frozen time, panel) |
-| **F5 / F4** | Free camera only / hide the HUD in photo mode |
+| **F6** | Photo mode |
+| **F5** / **F4** | Free camera only / hide the HUD in photo mode |
 | **F11** | Screenshot (PNG, without the menu) |
 | **F9** | Profiler (writes a profile to the log) |
-| DualSense touchpad click | Same as F7 |
 
-<details>
-<summary><b>📋 Everything it does, in detail</b></summary>
+### If something goes wrong
 
-#### Stability and fixes
-- **The "only a PC reboot helps" slowdown.** The game's timer lost precision after long Windows uptime (x87 float time). The mod hands it a counter that starts with the game.
-- **Low FPS on some systems.** The game asked Windows about a WinMM gamepad on every frame, even with none connected, and on some PCs that call is very slow (45 FPS with the GPU at 4%). The mod now asks twice a second.
-- **Crashes**: the NPC-after-cutscene crash, the freeze on a zero frame time (division by zero), the hang after Alt+Tab in windowed mode, and others. A crash handler and a freeze watchdog write a dump and a log line if anything still goes wrong.
-- **Day and night inside buildings.** The port read the building list (`HOUSE_LIST`) with a wrong key, so most interiors had the wrong lighting.
-- **Safer saves**: the game wipes `dp.sav` before writing it. The mod writes to a temporary file and replaces the save in one step, keeps backups, and restores the last good copy if a save is damaged.
-- **60 FPS limit at any refresh rate.** At 144/180 Hz the game used to run too fast.
-- **Normal difficulty by default** (the PC port forced Easy).
-- **No launcher window**: the game starts straight away.
+- `UltimateFix\ufx.log` says for every fix whether it is active or skipped, and why
+- Every feature can be switched off in F10 or in `UltimateFix.ini`; `[Debug] SafeMode=1` starts with fewer hooks
+- Report problems with `ufx.log` and the `crash_*.dmp` / `hang_*.dmp` file, if there is one
+- After an update, an old `UltimateFix.ini` keeps old values: delete it to get the new defaults
 
-#### Display and graphics
-- Borderless window on the whole monitor, aspect-correct scaling, no blur on 125%/150% DPI screens.
-- Real output resolution: the back buffer and the HUD are drawn at your monitor's resolution instead of 1280×720.
-- Supersampling of the 3D scene (1×, 1.5×, 2×, 3×), sharper shadows, SSAO, FXAA, sharpening, 16× anisotropic filtering, wet reflections, longer draw distance.
+### Development
 
-#### DualSense and gamepads
-- DualSense over USB or Bluetooth, read directly: no Steam Input needed.
-- Adaptive triggers per weapon (pistol, magnum, shotgun, SMG, rifle, rocket launcher), turned off while driving.
-- Rumble works: the PC port calculated vibration and never sent it anywhere. Extra haptics: engine hum while driving, a kick on every shot.
-- Aim on L2, shoot on R2, like a modern shooter (Xbox pads too). PlayStation button icons, automatic keyboard/pad prompt switching.
-
-#### Map and navigation
-- Full pause map: all 64 tiles, proper zoom, north up (optional).
-- Waypoint: F7 on the pause map sets it at the map centre, F7 in the world where you stand. A distance label in the game's own font, and the game's own arrows on the minimap edge. _Minimap arrows are experimental._
-
-#### Photo mode and extras (_experimental_)
-- Free camera, frozen time, filters, field of view, costumes, poses, HUD toggle, PNG screenshots.
-- Cheats page: money, time of day, weather, ammo, god mode.
-- Tools: frame statistics panel, built-in sampling profiler, freeze watchdog.
-
-#### How it works
-UltimateFIXDP is a proxy `X3DAudio1_7.dll`: the game loads it like the real audio library, the mod passes every audio call on to the real one and patches the game in memory. Every patch first checks the game's code byte by byte. If something does not match (another build, or another mod already patched that spot), only that patch switches itself off and the log says why.
-</details>
-
-<details>
-<summary><b>🩺 If something goes wrong</b></summary>
-
-- Look in `UltimateFix\ufx.log`: every patch says whether it is active or skipped, and why.
-- Every feature can be switched off in F10 or in `UltimateFix.ini`; `[Debug] SafeMode=1` starts the mod with fewer hooks.
-- When reporting a problem, attach `ufx.log` and, if there is one, the `crash_*.dmp` / `hang_*.dmp` file.
-- An old `UltimateFix.ini` keeps old values. If defaults look wrong after an update, delete it and the mod writes a fresh one.
-</details>
-
-<details>
-<summary><b>🔧 Building from source</b></summary>
-
-mingw-w64 (i686), freestanding C++17 without the C runtime. The DLL imports only `kernel32`, `user32` and `gdi32`.
-
-```
-make                                  # build/X3DAudio1_7.dll (needs i686-w64-mingw32-g++ and xxd)
-make test DPEXE=/path/to/DP.exe       # checks every patch site and stub against a real DP.exe
+```bash
+make                                  # build/X3DAudio1_7.dll
+make test DPEXE=/path/to/DP.exe       # checks every patch site against a real DP.exe
 ```
 
-`src/` the mod (`modules/` one file per feature, `sites.h` every patched address with its expected bytes, `ui/` the F10 menu) · `tests/` host tests · `tools/` launcher stub, LAA patcher, save/archive helpers.
-</details>
+Stack: **freestanding C++17** (mingw-w64 i686, no C runtime; imports only `kernel32`, `user32`, `gdi32`),
+a proxy `X3DAudio1_7.dll` that passes audio calls on to the real library and patches the game in memory.
+Every patch checks the game's bytes first: if they differ, only that patch switches itself off.
 
 ---
 
-## 🇺🇦 Українська
+## 🇺🇦 Українською
 
-Один файл, `X3DAudio1_7.dll`, у теці гри. Без правок exe, без інсталятора, повне меню налаштувань у грі (**F10**).
+Одна DLL у теці гри замість DPfix, 4GB-патча, фіксу стабільності, фіксу мапи й фіксу вильотів.
+Без правок exe, без інсталятора: натисніть **F10** у грі, і все там.
 
-### ✨ Головне
+> **Тестова збірка.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
 
-| | |
-|---|---|
-| 🛡️ **Стабільність** | Виліт після катсцен, зависання на нульовому кадрі, зависання після Alt+Tab, гальмування, яке лікувалось лише перезавантаженням ПК. Обробник вильотів і сторож зависань на все інше. |
-| 🚀 **Швидкодія** | Знайшли, чому на деяких ПК гра тримається на ~45 FPS (опитування ґеймпада щокадру): **45 → 180 FPS** у нашому тесті. Ліміт 60 FPS на будь-якій частоті екрана. |
-| 🖥️ **Графіка** | Вікно без рамки, **справжня вихідна роздільність** (чіткі HUD і текст), суперсемплінг 1×–3×, SSAO, FXAA, різкість, мокрі відбиття, анізотропія 16×, більша дальність промальовки. |
-| 🎮 **DualSense** | USB і Bluetooth без Steam Input, **адаптивні триґери під кожну зброю**, вібрація, яка нарешті працює, відгук у машині й при пострілах, іконки кнопок PlayStation. |
-| 🗺️ **Мапа** | Повна мапа паузи (64 плитки, нормальний масштаб, північ угорі), **мітки** з рідними стрілками гри на мінімапі. |
-| 📷 **Фоторежим** | Вільна камера, зупинка часу, фільтри, кут огляду, костюми, пози, знімки PNG. _Експериментально._ |
-| 💾 **Збереження** | Атомарний запис, резервні копії, автоматичне відновлення пошкодженого сейву. |
+### Можливості
 
-### 📦 Установка
+- 🛡️ **Стабільність** — виправлено виліт після катсцен, зависання на нульовому кадрі й зависання після Alt+Tab; обробник вильотів і сторож зависань пишуть дамп, якщо щось усе ж трапиться
+- 🚀 **Виправлено низький FPS** — на деяких ПК гра трималась на ~45 FPS при вільній відеокарті; у нашому тесті **45 → 180 FPS**
+- ⏱️ **Ліміт 60 FPS на будь-якій частоті екрана** — на 144 / 180 Гц гра раніше бігла надто швидко
+- 🖥️ **Справжня вихідна роздільність** — картинка й HUD у роздільності монітора, а не 1280×720, вікно без рамки, без розмиття від масштабування Windows
+- ✨ **Графіка** — суперсемплінг 1×–3×, SSAO, FXAA, різкість, мокрі відбиття, анізотропна фільтрація 16×, чіткіші тіні, більша дальність промальовки
+- 🎮 **DualSense** — USB і Bluetooth без Steam Input, **адаптивні триґери під кожну зброю**, відгук у машині й при пострілах, іконки кнопок PlayStation
+- 📳 **Вібрація, яка працює** — PC-порт рахував її, але не надсилав на ґеймпад
+- 🔫 **Приціл на L2, постріл на R2** — як у сучасних шутерах, і на Xbox-падах; підказки самі перемикаються між клавіатурою й ґеймпадом
+- 🗺️ **Повна мапа паузи** — усі 64 плитки, нормальний масштаб, північ угорі
+- 📍 **Мітки** — F7 ставить мітку; відстань ігровим шрифтом і рідні стрілки гри на мінімапі (_стрілки експериментальні_)
+- 💾 **Надійні збереження** — атомарний запис, резервні копії, автоматичне відновлення пошкодженого `dp.sav`
+- 📷 **Фоторежим** — вільна камера, зупинка часу, фільтри, кут огляду, костюми, пози, знімки PNG (_експериментально_)
+- 🧰 **Інструменти** — панель статистики кадру, вбудований профайлер, сторінка читкодів (гроші, час, погода, набої, невразливість)
+- 🇺🇦🇬🇧 **Дві мови** — українська та англійська, перемикаються в меню
 
-1. **Зробіть копію** `savedata\dp.sav`.
-2. Завантажте [останній реліз](https://github.com/LittleBitUA/UltimateFIXDP/releases/latest) і скопіюйте `X3DAudio1_7.dll` і теку `UltimateFix` у теку гри (поруч із `DP.exe`).
-3. Запустіть гру і натисніть **F10**. Налаштування зберігаються в `UltimateFix.ini`, журнал у `UltimateFix\ufx.log`.
+### Виправлення рушія (на основі reverse engineering)
 
-> [!IMPORTANT]
-> Лише Steam-версія **1.01b**. Інші збірки мод розпізнає і не вмикається.
-> <br>Для DualSense вимкніть Steam Input для гри (Властивості → Контролер).
-> <br>Не поєднуйте з ZachFix і DPStabilityFix: вони змінюють ті самі місця.
+Кожне виправлення нижче — результат розбору коду гри й порівняння PC-порту
+з оригіналом для Xbox 360:
 
-<details>
-<summary><b>Необов'язкові додатки в релізі</b></summary>
+- 🕒 **Гальмування, яке лікувалось лише перезавантаженням ПК** — гра
+  рахувала час від лічильника роботи Windows у x87 float одинарної точності,
+  тож після кількох днів без перезавантаження час кадру втрачав точність.
+  Мод дає грі лічильник, який починається разом із нею.
+- 🎯 **Загадка 45 FPS** — гра щокадру питає Windows про ґеймпад WinMM,
+  навіть коли його немає, а на деяких системах цей виклик триває мілісекунди.
+  Знайдено вбудованим профайлером мода; тепер мод питає двічі на секунду.
+- 🌗 **День і ніч у будівлях** — порт читає список будівель (`HOUSE_LIST`)
+  з неправильним ключем порядку байтів: 64 з 81 записів читались хибно, тож
+  у приміщеннях було не те освітлення.
+- 💥 **Виліт після катсцен** — NPC, якого відправили до точки `-1`, читав
+  таблицю навігації поза її межами. Тепер там стоїть перевірка.
+- ➗ **Зависання на нульовому кадрі** — кадр із нульовим часом ділив на нуль
+  і крутився вічно. Тепер там стоїть перевірка.
+- 🎚️ **Складність** — PC-порт пропускає екран вибору складності й назавжди
+  лишає легку. Звичайна знову типова, і вибір за вами.
+- 📳 **Вібрація** — та сама таблиця «подія → вібрація», що й на Xbox 360,
+  але PC-порт не надсилає її на пристрій. Відновлено.
+- 🚧 **Дальність промальовки** — будки й автомати зникали за 500 одиниць
+  через дальню площину, якої у версії для Xbox немає.
 
-- `ufx_laa.exe` дозволяє `DP.exe` використовувати 4 ГБ пам'яті (корисно з великим суперсемплінгом). Робить копію `DP.exe.bak`; `ufx_laa.exe --undo` повертає як було.
-- `ufx_play.exe` — швидкий старт без вікна лаунчера. Мод ставить його сам; утримуйте **Shift** при запуску, щоб один раз відкрити старий лаунчер, `ufx_play.exe --undo` повертає як було.
-- `dxvk\Install_DXVK.bat` / `Remove_DXVK.bat` вмикають і вимикають DXVK (Vulkan). _Експериментально, у грі ще не перевірено._
+### На чиїх плечах стоїмо
 
-**Видалення:** видаліть `X3DAudio1_7.dll` (і за бажанням `UltimateFix\`).
-</details>
+Код наш власний (MIT). Ідеї, факти й адреси взято з попередніх робіт спільноти:
 
-### ⌨️ Клавіші
+| Проєкт | Автор | Чого ми з нього навчились |
+|---|---|---|
+| **[ZachFix](https://github.com/h714je/ZachFix)** | h714je | Дослідження порту, багато ідей |
+| **[DPfix](https://github.com/PeterTh/dpfix)** | Peter «Durante» Thoman | Роздільність, тіні, підміна текстур |
+| **[DPStabilityFix](https://github.com/Cesario67/DeadlyPremonitionFix)** | Cesario67 | Збереження, час, розкладка DualSense |
+| **[CrashFix](https://github.com/Behelit09/DeadlyPremonition-CrashFix)** · **[MapFix](https://github.com/Behelit09/Deadly-Premonition-The-Director-s-Cut-MapFix)** · **[FreeCam](https://github.com/Behelit09/DeadlyPremonition-FreeCam)** | Behelit09 | Виліт навігації, повна мапа, вільна камера |
+| **[DPRecomp](https://github.com/LittleBitUA/DPRecomp)** | «Little Bit» | Наша рекомпіляція версії для Xbox 360: еталон, з яким порівнюємо PC-порт |
+| **[Kenney Input Prompts](https://kenney.nl/assets/input-prompts)** | Kenney | Іконки кнопок ґеймпада (CC0) |
+| **[DXVK](https://github.com/doitsujin/dxvk)** | Philip «doitsujin» Rebohle | Необов'язковий Vulkan-рендерер, під власною ліцензією |
+
+🧪 **Тестувальники:** **Gold flin** і **Tree Fan**. Дякуємо, що грали в недороблені збірки й повідомляли про все, що ламалось.
+
+### Встановлення
+
+1. Зробіть копію `savedata\dp.sav`
+2. Завантажте останню версію з [Releases](https://github.com/LittleBitUA/UltimateFIXDP/releases)
+3. Скопіюйте `X3DAudio1_7.dll` і теку `UltimateFix` у теку гри (поруч із `DP.exe`)
+4. Запустіть гру й натисніть **F10**
+
+> **Вимоги:** Steam-версія гри 1.01b. Інші збірки мод розпізнає і не вмикається.
+> <br>**DualSense:** вимкніть Steam Input для гри (Властивості → Контролер).
+> <br>**Не поєднуйте** з DPfix, ZachFix і DPStabilityFix: UltimateFIXDP їх замінює.
+> <br>**Користувались [DP1 Launcher](https://github.com/dplauncher/DP1-Launcher)?** Це його наступник: спершу приберіть DPfix (`d3d9.dll`, `DPfix.ini`).
+
+Необов'язкові додатки в релізі: `ufx_laa.exe` (дозволяє грі 4 ГБ пам'яті, `--undo` повертає як було), `ufx_play.exe` (запуск без вікна лаунчера; мод ставить його сам, утримуйте **Shift**, щоб відкрити старий лаунчер), `dxvk\Install_DXVK.bat` (Vulkan-рендерер, _експериментально_).
+
+Щоб видалити мод, видаліть `X3DAudio1_7.dll`.
+
+### Клавіші
 
 | Клавіша | Дія |
 |---|---|
 | **F10** | Меню налаштувань |
 | **F7** | Поставити мітку (на мапі паузи або у світі) · **Shift+F7** прибирає |
-| **F6** | Фоторежим (камера, зупинка часу, панель) |
-| **F5 / F4** | Лише вільна камера / сховати HUD у фоторежимі |
+| **F6** | Фоторежим |
+| **F5** / **F4** | Лише вільна камера / сховати HUD у фоторежимі |
 | **F11** | Знімок екрана (PNG, без меню) |
 | **F9** | Профайлер (пише профіль у журнал) |
-| Клік по тачпаду DualSense | Те саме, що F7 |
 
-<details>
-<summary><b>📋 Усе, що він робить, докладно</b></summary>
+### Якщо щось не так
 
-#### Стабільність і виправлення
-- **Гальмування, яке лікувалось лише перезавантаженням ПК.** Таймер гри втрачав точність, коли Windows довго працює (час у x87 float). Мод дає їй лічильник, який починається разом із грою.
-- **Низький FPS на деяких системах.** Гра щокадру питала Windows про ґеймпад WinMM, навіть коли його немає, а на деяких ПК цей виклик дуже повільний (45 FPS при завантаженні відеокарти 4%). Тепер мод питає двічі на секунду.
-- **Вильоти**: виліт NPC після катсцени, зависання на нульовому кроці кадру (ділення на нуль), зависання після Alt+Tab у вікні та інші. Обробник вильотів і сторож зависань пишуть дамп і рядок у журнал, якщо щось усе ж трапиться.
-- **День і ніч у будівлях.** PC-порт читав список будівель (`HOUSE_LIST`) з неправильним ключем, тож у більшості приміщень було не те освітлення.
-- **Надійніші збереження**: гра стирає `dp.sav` перед записом. Мод пише в тимчасовий файл і замінює сейв одним кроком, тримає резервні копії, а пошкоджений сейв відновлює з останньої доброї.
-- **Ліміт 60 FPS на будь-якій частоті екрана.** На 144/180 Гц гра раніше бігла надто швидко.
-- **Звичайна складність за замовчуванням** (PC-порт примусово ставив легку).
-- **Без вікна лаунчера**: гра стартує одразу.
+- `UltimateFix\ufx.log` пише про кожне виправлення, чи воно ввімкнене, чи пропущене, і чому
+- Будь-яку функцію можна вимкнути в F10 або в `UltimateFix.ini`; `[Debug] SafeMode=1` запускає мод із меншою кількістю хуків
+- Про проблеми пишіть із файлом `ufx.log` і файлом `crash_*.dmp` / `hang_*.dmp`, якщо він є
+- Після оновлення старий `UltimateFix.ini` зберігає старі значення: видаліть його, щоб отримати нові типові
 
-#### Екран і графіка
-- Вікно без рамки на весь монітор, масштабування зі збереженням пропорцій, без розмиття на екранах 125%/150%.
-- Справжня вихідна роздільність: задній буфер і HUD малюються в роздільності монітора, а не 1280×720.
-- Суперсемплінг 3D-сцени (1×, 1,5×, 2×, 3×), чіткіші тіні, SSAO, FXAA, різкість, анізотропна фільтрація 16×, мокрі відбиття, більша дальність промальовки.
+### Розробка
 
-#### DualSense і ґеймпади
-- DualSense напряму через USB або Bluetooth: Steam Input не потрібен.
-- Адаптивні триґери під кожну зброю (пістолет, магнум, дробовик, автомат, гвинтівка, гранатомет), у машині вимикаються.
-- Вібрація працює: PC-порт рахував її, але нікуди не надсилав. Додатковий відгук: гул двигуна в машині, поштовх на кожен постріл.
-- Приціл на L2, постріл на R2, як у сучасних шутерах (і для Xbox-падів). Іконки кнопок PlayStation, автоматичне перемикання підказок між клавіатурою й ґеймпадом.
-
-#### Мапа й навігація
-- Повна мапа паузи: усі 64 плитки, нормальний масштаб, північ угорі (за бажанням).
-- Мітка: F7 на мапі паузи ставить її в центрі мапи, F7 у світі — там, де ви стоїте. Напис із відстанню ігровим шрифтом і рідні стрілки гри на краю мінімапи. _Стрілки на мінімапі експериментальні._
-
-#### Фоторежим і додатки (_експериментально_)
-- Вільна камера, зупинка часу, фільтри, кут огляду, костюми, пози, приховування HUD, знімки PNG.
-- Сторінка читкодів: гроші, час доби, погода, набої, невразливість.
-- Інструменти: панель статистики кадру, вбудований профайлер, сторож зависань.
-
-#### Як це працює
-UltimateFIXDP — це підмінний `X3DAudio1_7.dll`: гра вантажить його як справжню бібліотеку звуку, мод передає всі звукові виклики справжній бібліотеці й виправляє гру в пам'яті. Кожна правка спершу звіряє код гри байт у байт. Якщо щось не збігається (інша збірка або інший мод уже змінив це місце), вимикається лише ця правка, а в журналі написано чому.
-</details>
-
-<details>
-<summary><b>🩺 Якщо щось не так</b></summary>
-
-- Загляньте в `UltimateFix\ufx.log`: кожна правка пише, чи вона ввімкнена, чи пропущена, і чому.
-- Будь-яку функцію можна вимкнути в F10 або в `UltimateFix.ini`; `[Debug] SafeMode=1` запускає мод із меншою кількістю хуків.
-- Коли повідомляєте про проблему, додайте `ufx.log` і, якщо є, файл `crash_*.dmp` / `hang_*.dmp`.
-- Старий `UltimateFix.ini` зберігає старі значення. Якщо після оновлення типові налаштування виглядають не так, видаліть його, і мод створить новий.
-</details>
-
-<details>
-<summary><b>🔧 Збірка з коду</b></summary>
-
-mingw-w64 (i686), C++17 без C runtime. DLL імпортує лише `kernel32`, `user32` і `gdi32`.
-
-```
-make                                  # build/X3DAudio1_7.dll (потрібні i686-w64-mingw32-g++ і xxd)
-make test DPEXE=/шлях/до/DP.exe       # звіряє кожне місце правки й кожну заглушку зі справжнім DP.exe
+```bash
+make                                  # build/X3DAudio1_7.dll
+make test DPEXE=/шлях/до/DP.exe       # звіряє кожне місце правки зі справжнім DP.exe
 ```
 
-`src/` сам мод (`modules/` по файлу на функцію, `sites.h` з кожною адресою правки та очікуваними байтами, `ui/` меню F10) · `tests/` тести на хості · `tools/` заглушка лаунчера, патчер LAA, помічники для сейвів і архівів.
-</details>
+Стек: **C++17 без C runtime** (mingw-w64 i686; імпорти лише `kernel32`, `user32`, `gdi32`),
+підмінний `X3DAudio1_7.dll`, який передає звукові виклики справжній бібліотеці й виправляє гру в пам'яті.
+Кожна правка спершу звіряє байти гри: якщо вони інші, вимикається лише ця правка.
 
 ---
 
-## 💛 Credits · Подяки
+## ⚖️ Disclaimer
 
-The code is our own; ideas and research came from earlier community work. Thank you to their authors.
-<br>Код наш власний; ідеї та дослідження взято з попередніх робіт спільноти. Дякуємо їхнім авторам.
+Цей проєкт не афілійований із Access Games / Rising Star Games / Toybox Inc.
+Усі права на гру належать правовласникам. Проєкт не містить файлів гри.
+Це фанатська ініціатива, безкоштовно і з відкритою душею.
 
-| Project · Проєкт | Author · Автор |
-|---|---|
-| [ZachFix](https://github.com/h714je/ZachFix) | h714je |
-| [DPfix](https://github.com/PeterTh/dpfix) | Durante (Peter Thoman) |
-| [DPStabilityFix](https://github.com/Cesario67/DeadlyPremonitionFix) | Cesario67 |
-| [CrashFix](https://github.com/Behelit09/DeadlyPremonition-CrashFix) · [MapFix](https://github.com/Behelit09/Deadly-Premonition-The-Director-s-Cut-MapFix) · [FreeCam](https://github.com/Behelit09/DeadlyPremonition-FreeCam) | Behelit09 |
-| [DPRecomp](https://github.com/LittleBitUA/DPRecomp) — our Xbox 360 recompilation, used to compare the PC code with the original · наша рекомпіляція версії для Xbox 360, з якою ми порівнювали код PC-версії | «Little Bit» |
-| [Kenney Input Prompts](https://kenney.nl/assets/input-prompts) — gamepad icons · іконки ґеймпадів (CC0) | Kenney |
-| [DXVK](https://github.com/doitsujin/dxvk) — optional extra under its own license · необов'язковий додаток під власною ліцензією (`dxvk/LICENSE-DXVK.txt`) | doitsujin |
+This project is not affiliated with Access Games / Rising Star Games / Toybox Inc.
+All rights to the game belong to their respective owners. The project ships no game files.
+This is a fan-made, free, open initiative.
+
+---
 
 <div align="center">
 
-Deadly Premonition belongs to its owners. This project ships no game files.
-<br>Deadly Premonition належить своїм правовласникам. Проєкт не містить файлів гри.
+Створено **Dmytro Bidlov** з любов'ю від [«Little Bit»](https://t.me/LittleBitUA) 🇺🇦
+&nbsp;·&nbsp;
+Made by **Dmytro Bidlov** with love from [«Little Bit»](https://t.me/LittleBitUA) 🇺🇦
 
-**MIT** · [LICENSE](LICENSE) · made in 🇺🇦 by [«Little Bit»](https://t.me/LittleBitUA)
+Спасибі Swery (Hidetaka Suehiro) за безсмертну, абсурдну й щемливу гру. ✦
 
 </div>

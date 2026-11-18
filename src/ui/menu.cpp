@@ -1402,6 +1402,9 @@ void DrawAbout() {
         en ? L"Kenney Input Prompts (CC0): button icons" : L"Kenney Input Prompts (CC0): іконки кнопок",
     };
     for (int i = 0; i < 5; ++i) DrawText(credits[i], kCx, y + 22 + i * 24, 0xFFC4C4CE, 15);
+    y += 22 + 5 * 24 + 10;
+    DrawText(en ? L"Testers" : L"Тестувальники", kCx, y, kAccent, 13);
+    DrawText(L"Gold flin, Tree Fan", kCx, y + 22, 0xFFC4C4CE, 15);
     DrawText(en ? L"F10 or Esc close" : L"F10 або Esc закрити", kCx, kPy + kPh - 36, kDim, 13);
 }
 
