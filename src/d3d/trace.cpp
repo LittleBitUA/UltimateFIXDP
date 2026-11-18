@@ -27,6 +27,7 @@ typedef HRESULT(WINAPI* SetPsConstFFn)(void*, UINT, const float*, UINT);
 
 CreateD3dFn r_Direct3DCreate9 = nullptr;
 CreateDeviceFn r_CreateDevice = nullptr;
+bool g_fullLayer = false;  // the device slots are hooked too (tracing, shadows, icons, output); otherwise only a failed CreateDevice is caught
 CreateTextureFn r_CreateTexture = nullptr;
 CreateSurfaceFn r_CreateRenderTarget = nullptr;
 CreateDepthFn r_CreateDepthStencil = nullptr;
@@ -249,7 +250,26 @@ HRESULT WINAPI H_CreateDevice(void* d3d, UINT adapter, DWORD type, HWND focus, D
     }
     HRESULT hr = r_CreateDevice(d3d, adapter, type, focus, flags, pp, dev);
     if (g_cfg.traceResources) Log("d3d: CreateDevice -> %08X", (u32)hr);
-    if (SUCCEEDED(hr) && dev && *dev) PatchDevice(*dev);
+    if (SUCCEEDED(hr) && dev && *dev) {
+        if (g_fullLayer) PatchDevice(*dev);
+        return hr;
+    }
+    // The game throws the result away (0x6CC597) and crashes on the first use of the device (0x6E1F47) with no word to the player.
+    // Say what happened instead, in the log and in a window, and end the game cleanly.
+    const u32* p = (const u32*)pp;
+    Log("d3d: CreateDevice FAILED with %08X (adapter %u, back buffer %ux%u format %u, windowed %u, refresh %u): the game cannot run",
+        (u32)hr, adapter, p ? p[0] : 0, p ? p[1] : 0, p ? p[2] : 0, p ? p[8] : 0, p ? p[12] : 0);
+    wchar_t text[900];
+    if (g_cfg.language == 1)
+        wsprintfW(text, L"Deadly Premonition could not create its Direct3D 9 device (error %08X), so the game cannot start.\n\n"
+                        L"Try: restart the PC; update the video driver; if DXVK or another d3d9.dll is in the game folder, remove it; "
+                        L"set [Graphics] OutputWidth=0 and RenderScale=100 in UltimateFix.ini.\n\nDetails are in UltimateFix\\ufx.log.", (u32)hr);
+    else
+        wsprintfW(text, L"Deadly Premonition не змогла створити графічний пристрій Direct3D 9 (помилка %08X), тому гра не запуститься.\n\n"
+                        L"Спробуйте: перезапустити ПК; оновити драйвер відеокарти; якщо в теці гри є DXVK чи інший d3d9.dll, приберіть його; "
+                        L"поставте в UltimateFix.ini [Graphics] OutputWidth=0 і RenderScale=100.\n\nПодробиці в UltimateFix\\ufx.log.", (u32)hr);
+    MessageBoxW(focus, text, L"UltimateFIXDP", MB_OK | MB_ICONERROR | MB_TOPMOST);
+    ExitProcess(1);
     return hr;
 }
 
@@ -360,7 +380,8 @@ void* WINAPI H_Direct3DCreate9(UINT sdk) {
 
 void DetectD3dLibrary() { NameD3dLibrary(); }  // display.cpp, at the first Present
 
-bool InstallD3dTrace() {
+bool InstallD3dTrace(bool full) {
+    g_fullLayer = full;
     void** slot = FindImportSlot(GetModuleHandleW(nullptr), "d3d9.dll", "Direct3DCreate9");
     if (!slot) {
         Log("d3d: Direct3DCreate9 import not found, device layer skipped");
@@ -371,8 +392,10 @@ bool InstallD3dTrace() {
         Log("d3d: could not patch the import table, device layer skipped");
         return false;
     }
-    Log("d3d: device layer installed (tracing %s, shadow constant %s)", g_cfg.traceResources ? "on" : "off",
-        g_cfg.shadowScale > 100 ? "on" : "off");
+    if (full)
+        Log("d3d: device layer installed (tracing %s, shadow constant %s)", g_cfg.traceResources ? "on" : "off", g_cfg.shadowScale > 100 ? "on" : "off");
+    else
+        Log("d3d: device creation watched (a failed CreateDevice is reported instead of a crash); the device layer is not needed");
     return true;
 }
 

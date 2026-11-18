@@ -215,7 +215,7 @@ bool InstallLanguageSlot();
 bool InstallResetRefreshFix();
 bool InstallDisplay();
 bool InstallGraphicsTweaks();
-bool InstallD3dTrace();
+bool InstallD3dTrace(bool full);
 bool InstallOutputResolution();
 bool InstallWorldDistance();
 void ApplyWorldDistance();

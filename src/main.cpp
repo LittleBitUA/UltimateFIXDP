@@ -176,7 +176,8 @@ static void Startup() {
     if (!g_cfg.safeMode && InstallAmbientOcclusion()) ++on;
     if (!g_cfg.safeMode && g_cfg.keepBlurLook && InstallBlurLook()) ++on;
     // The half-pixel fix is hooked whenever the output resolution is active, so that switching it on in the menu works at once.
-    if ((g_cfg.traceResources || g_cfg.shadowScale > 100 || g_cfg.shadowPrecision || g_cfg.glyphTheme || g_outputW) && InstallD3dTrace()) ++on;
+    // Always: with none of these the layer only watches CreateDevice (a failure is reported instead of the game's crash).
+    if (InstallD3dTrace(g_cfg.traceResources || g_cfg.shadowScale > 100 || g_cfg.shadowPrecision || g_cfg.glyphTheme || g_outputW)) ++on;
     // Always: besides the menu's own input blocking, the joyGetPosEx hook carries the missing-pad throttle, the XInput
     // fallback, OnlyFirstPad, the native DualSense and the automatic input switch.
     if (ui::Install()) ++on;
