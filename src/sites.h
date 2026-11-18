@@ -832,6 +832,12 @@ struct TailDef {
 // test eax,eax / jz 409EA8 / jmp $ (EB FE), so a NaN angle hangs the game for good. docs/crashes/03_nan_spin_loops.md.
 constexpr SiteDef kSiteNanTrap = {"angle NaN trap", 0x409EA2, 6, {0x85, 0xC0, 0x74, 0x02, 0xEB, 0xFE}};
 
+// Mouse look (input_extras.cpp): the two readers of the mouse movement, FUN_0070AF50 (x) and FUN_0070B000 (y), do
+// `fild sens / fmul dword [movement] / call _ftol2`; the fmul becomes a call to a stub that also multiplies by our scale.
+constexpr SiteDef kSiteMouseX = {"mouse x reader: fmul [dx]", 0x70AFE8, 6, {0xD8, 0x0D, 0x40, 0x00, 0x4B, 0x01}};
+constexpr SiteDef kSiteMouseY = {"mouse y reader: fmul [dy]", 0x70B098, 6, {0xD8, 0x0D, 0x44, 0x00, 0x4B, 0x01}};
+constexpr uint32_t kMouseDxVa = 0x14B0040, kMouseDyVa = 0x14B0044;
+
 // Game files from mods (game_files.cpp). In the loader FUN_006B33F0 (LoadThread only), right after the CAddon lookup: [ebp+8]
 // the requested id, [ebp-38h] the id after the language redirect, [ebp-40h] the CAddon path or 0, [ebp-14h] the size out,
 // [ebp-1Ch] the data. The branch `cmp [ebp-40h],0 / je 006B3502` is replaced: with no CAddon path our worker may hand over the
@@ -848,6 +854,7 @@ constexpr uint32_t kNanTrapNumber = 0x409EA8;
 
 constexpr const SiteDef* kAllSites[] = {
     &kSiteNanTrap,
+    &kSiteMouseX, &kSiteMouseY,
     &kSiteGameFileBranch, &kSiteGameFileAddon, &kSiteGameFileArchive, &kSiteGameFileStore, &kSiteGameFileHave,
     &kSiteBeaconCall, &kSiteBeaconDraw, &kSiteBeaconMove, &kStorySites[0], &kStorySites[1], &kStorySites[2], &kStorySites[3], &kStorySites[4],
     &kStorySites[5], &kStorySites[6], &kStorySites[7], &kStorySites[8], &kStorySites[9], &kStorySites[10],

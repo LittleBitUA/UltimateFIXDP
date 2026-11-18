@@ -55,6 +55,8 @@ struct Config {
     int vibrationStrength;   // percent
     int analogTriggers;      // analog gas and brake in vehicles (the PC port reduces them to on/off)
     int triggerDeadzone;     // trigger dead zone, 0..254 (console: 30)
+    int mouseSensitivity;    // %, 25..400: the mouse look speed over the game's own setting
+    int invertMouseX, invertMouseY;
     int lowLatencyInput;     // poll the controller before committing the input snapshot (one tick less delay)
     int stickProfile;        // 1 = Xbox 360 stick curve (24% dead zone, no slew), 0 = the PC port's own
     int defaultPadBindings;  // give the game the Xbox layout when configJ.cnf / configJex.cnf are missing

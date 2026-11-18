@@ -581,4 +581,13 @@ inline size_t BuildGameFileHook(uint8_t* out, uint32_t va, uint32_t workerVa, ui
     return (size_t)(p - out);
 }
 
+// Called in place of `fmul dword [movement]` (6 bytes, kSiteMouseX/Y): fmul dword [movement] / fmul dword [scale] / ret.
+inline size_t BuildMouseScaleStub(uint8_t* out, uint32_t movementVa, uint32_t scaleVa) {
+    uint8_t* p = out;
+    *p++ = 0xD8; *p++ = 0x0D; StubPut32(p, movementVa);  // fmul dword [movement]
+    *p++ = 0xD8; *p++ = 0x0D; StubPut32(p, scaleVa);     // fmul dword [scale]
+    *p++ = 0xC3;                                         // ret
+    return (size_t)(p - out);
+}
+
 }  // namespace ufx

@@ -315,6 +315,10 @@ static const char kDefaultIni[] =
     "TriggerDeadzone=30\r\n"
     "; The game commits the input snapshot before polling, so input reaches it one tick late. 1 = poll first.\r\n"
     "LowLatencyInput=0\r\n"
+    "; Mouse look: speed in % of the game's (25..400) and inversion of each axis. Changes at once.\r\n"
+    "MouseSensitivity=100\r\n"
+    "InvertMouseX=0\r\n"
+    "InvertMouseY=0\r\n"
     "; Stick curve: 1 = the console's (smooth 24% dead zone, no frame-rate dependent smoothing, camera dead zone\r\n"
     "; 0.25), 0 = the PC port's (a stick counts only past ~40% of its travel, then jumps). Controller mode only.\r\n"
     "StickProfile=1\r\n"
@@ -630,6 +634,11 @@ void LoadConfig(const wchar_t* ini) {
     if (g_cfg.triggerDeadzone < 0) g_cfg.triggerDeadzone = 0;
     if (g_cfg.triggerDeadzone > 254) g_cfg.triggerDeadzone = 254;
     g_cfg.lowLatencyInput = (int)GetPrivateProfileIntW(L"Input", L"LowLatencyInput", 0, ini);
+    g_cfg.mouseSensitivity = (int)GetPrivateProfileIntW(L"Input", L"MouseSensitivity", 100, ini);
+    if (g_cfg.mouseSensitivity < 25) g_cfg.mouseSensitivity = 25;
+    if (g_cfg.mouseSensitivity > 400) g_cfg.mouseSensitivity = 400;
+    g_cfg.invertMouseX = GetPrivateProfileIntW(L"Input", L"InvertMouseX", 0, ini) ? 1 : 0;
+    g_cfg.invertMouseY = GetPrivateProfileIntW(L"Input", L"InvertMouseY", 0, ini) ? 1 : 0;
     g_cfg.stickProfile = (int)GetPrivateProfileIntW(L"Input", L"StickProfile", 1, ini);
     g_cfg.defaultPadBindings = (int)GetPrivateProfileIntW(L"Input", L"DefaultPadBindings", 1, ini);
     g_cfg.nativeDualSense = (int)GetPrivateProfileIntW(L"Input", L"NativeDualSense", 1, ini);

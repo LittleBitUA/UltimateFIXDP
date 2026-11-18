@@ -311,6 +311,14 @@ int main(int argc, char** argv) {
         Check(kSiteNanTrap.bytes[4] == 0xEB && kSiteNanTrap.bytes[5] == 0xFE, "nan trap", "the replaced jmp $");
     }
 
+    // mouse scale: the original fmul, then ours
+    {
+        uint8_t ms[16];
+        size_t nms = BuildMouseScaleStub(ms, kMouseDxVa, 0xC0002000);
+        Check(nms == 13 && ms[0] == 0xD8 && ms[1] == 0x0D && Rd32(ms + 2) == kMouseDxVa && ms[6] == 0xD8 && ms[7] == 0x0D &&
+              Rd32(ms + 8) == 0xC0002000 && ms[12] == 0xC3, "mouse", "fmul [dx] / fmul [scale] / ret");
+        Check(Rd32(kSiteMouseX.bytes + 2) == kMouseDxVa && Rd32(kSiteMouseY.bytes + 2) == kMouseDyVa, "mouse", "the sites multiply by dx and dy");
+    }
     // game files from mods: the loader branch after the CAddon lookup
     {
         uint8_t gf[64];
