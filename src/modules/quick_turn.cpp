@@ -9,7 +9,9 @@
 // own terms: the stick is pulled back (the console's 150 degrees), the direction it asks for (camera yaw + stick angle,
 // what the game's own steering turns him to) lies more than 150 degrees away from his heading, and the logical X is
 // pressed. Because he starts turning the moment the stick moves, a press counts for a short while after that
-// moment, and the turn goes to the opposite of the heading he had then: the console's "heading + pi".
+// moment, and the turn goes to the opposite of the heading he had then: the console's "heading + pi". In practice the
+// press has to come together with the stick or within about 0.2 s: at 0.2 rad per 1/60 s York has less than 45 degrees
+// left after 12 ticks, and then the game's own steering is left to finish.
 //
 // The gate sits where the game's own test is (00503FA7), after the weapon wheel and before the run and breath buttons,
 // so a turn leaves FUN_00503C60 the way the game's own path does. Only the idle state gets it; the weapon states of the
@@ -31,7 +33,9 @@ typedef float(__attribute__((thiscall)) * InputStickFn)(void* input, unsigned pa
 const float kPi = 3.14159265f;
 const float kBackAngle = 2.6179938f;  // 150 degrees: the game's constant at 00775F78h, the console's DAT_82004E5C
 const float kLeastTurn = 0.7853982f;  // 45 degrees: with less left to turn, the game's own steering has already done the job
-const DWORD kChordMs = 300;           // how long after the stick was pulled back the press still counts
+// How long after the stick was pulled back the press still counts. While the game's steering runs, kLeastTurn ends the
+// window earlier (about 0.2 s); this bound is for the ticks when it does not run (00522FADh: the counter at 008A971Ch below 10).
+const DWORD kChordMs = 300;
 
 const unsigned kStickBackBit = 0x8000;  // left stick Y beyond +50/128 (FUN_00709130), the bit the PC weapon branch asks for at 005042E4
 // The console's X in the PC numbering: the idle branch asks for it held to run (005041D8) and the weapon branch asks for its
@@ -79,6 +83,9 @@ int __cdecl QuickTurnWorker(void* playerPtr) {
         // York and Zach only, like the pose and costume code: kind 2 moves by other rules (00522DA5), 1 and 3 were not studied.
         (mgr[0x8CA12] != 0 && mgr[0x8CA12] != 4) || mgr[0x8CA12] != mgr[0x8CA13] ||
         (*(volatile u32*)(uintptr_t)kEventModeVa & 0x80000000u) ||                  // a cutscene
+        // The idle handler leaves at once, the stick does not move York at all: a script has taken the control away (bit 31
+        // of +638h clear, 00522DABh; event 19h / 2711h switches it) or +65Ch is not zero (00522EADh).
+        !(*(volatile u32*)(player + 0x638) & 0x80000000u) || *(volatile u32*)(player + 0x65C) != 0 ||
         // Flag 4 belongs to the game's own test (and walks him backwards); with 8 (stance) or 80h, or with the aiming camera,
         // the idle handler does not steer by the camera (00523CC8, 00523CDD, 00523D5D) and the rule above has no meaning.
         (*(volatile u32*)(mgr + 0x8C5C8) & (4 | 8 | 0x80)) || *(volatile u32*)(camera + 0x154) == 2) {
