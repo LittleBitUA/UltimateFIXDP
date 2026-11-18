@@ -140,6 +140,20 @@ static const char kDefaultIni[] =
     "; Always use the US language slot (the game default). Translations replace the files of that slot, so this\r\n"
     "; keeps them working whatever language config.cnf says.\r\n"
     "ForceUsSlot=1\r\n"
+    "; Text overlay for translators: lines \"0x1234 = text\" in UltimateFix\\text\\*.txt (UTF-8) replace those records of MES_ALL.MES\r\n"
+    "; in memory, the game's files stay as they are. UltimateFix\\text\\glyphmap.txt says which cell of the font atlas each character\r\n"
+    "; is (\"<character> = 0x..\"). Refused lines are listed in UltimateFix\\loc.log with the reason. With no .txt file in the folder\r\n"
+    "; nothing is hooked. The guide is docs/TEXT_OVERLAY.md of the mod. Restart needed.\r\n"
+    "TextOverlay=1\r\n"
+    "; For translators: 1 = the id of every text record is printed over it on the screen (the number the overlay files use).\r\n"
+    "; Restart needed to switch it on.\r\n"
+    "ShowMessageId=0\r\n"
+    "; For translators: 1 = UltimateFix\\loc.log gets every message that uses a cell that is empty in the font atlas or lies beyond\r\n"
+    "; it, and every draw that overflows the game's batch of 768 glyph quads (once per message and cell). Restart needed.\r\n"
+    "GlyphLog=0\r\n"
+    "; For translators: 1 = the MES_ALL.MES the game loaded is written to UltimateFix\\mes_dump.txt in the format of the overlay\r\n"
+    "; files, at every start: switch it off afterwards. Restart needed.\r\n"
+    "TextDump=0\r\n"
     "\r\n"
     "[World]\r\n"
     "; Culling distances of the camera, in game units. Objects farther away are not drawn. The game uses\r\n"
@@ -490,6 +504,10 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.scaleToWindow = (int)GetPrivateProfileIntW(L"Display", L"ScaleToWindow", 1, ini);
     g_cfg.displayDebug = (int)GetPrivateProfileIntW(L"Display", L"Debug", 0, ini);
     g_cfg.forceUsSlot = (int)GetPrivateProfileIntW(L"Language", L"ForceUsSlot", 1, ini);
+    g_cfg.textOverlay = (int)GetPrivateProfileIntW(L"Language", L"TextOverlay", 1, ini);
+    g_cfg.showMessageId = (int)GetPrivateProfileIntW(L"Language", L"ShowMessageId", 0, ini);
+    g_cfg.glyphLog = (int)GetPrivateProfileIntW(L"Language", L"GlyphLog", 0, ini);
+    g_cfg.textDump = (int)GetPrivateProfileIntW(L"Language", L"TextDump", 0, ini);
     g_cfg.farClass3 = (int)GetPrivateProfileIntW(L"World", L"FarClass3", 5000, ini);
     g_cfg.farClass4 = (int)GetPrivateProfileIntW(L"World", L"FarClass4", 1000, ini);
     g_cfg.farClass5 = (int)GetPrivateProfileIntW(L"World", L"FarClass5", 2000, ini);
