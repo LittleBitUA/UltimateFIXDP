@@ -338,6 +338,15 @@ static const char kDefaultIni[] =
     "; 1 = the waypoint is also put into the game's own list of map points as an objective: the minimap shows the game's red\r\n"
     "; chevrons on its edge towards it (more of them the farther it is), the pause map its icon. Needs a restart.\r\n"
     "Minimap=1\r\n"
+    "; 1 = while the place is on the screen, the game's own objective beacon stands over it instead of the bare label: the red arrows\r\n"
+    "; (more of them the farther it is) with \"N Yards\" under them, drawn by the game's own code. The label stays for a place off the\r\n"
+    "; screen or behind you, and while the game has not loaded the arrow picture. 0 = always the label. Turning it off works at\r\n"
+    "; once, turning it on needs a restart.\r\n"
+    "Beacon=1\r\n"
+    "; Ctrl + this key puts the waypoint on the game's current objective (the story destination first, then the other objective\r\n"
+    "; points of its map), so the distance and the arrow on the screen edge work for story goals. Press again for the next one when\r\n"
+    "; there are several. Virtual key code: 118 = F7 (so Ctrl+F7), 0 = off. Changes at once.\r\n"
+    "ObjectiveKey=118\r\n"
     "\r\n"
     "[Debug]\r\n"
     "; 1 = a run with fewer hooks: no free camera, physics hook, strafe/costume/pose/cheat bridge, alternate 3D, waypoint, icon index fix,\r\n"
@@ -534,6 +543,9 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.waypoint = (int)GetPrivateProfileIntW(L"Waypoint", L"Enabled", 1, ini);
     g_cfg.waypointKey = (int)GetPrivateProfileIntW(L"Waypoint", L"Key", 0x76, ini);
     g_cfg.waypointMinimap = (int)GetPrivateProfileIntW(L"Waypoint", L"Minimap", 1, ini);
+    g_cfg.waypointBeacon = (int)GetPrivateProfileIntW(L"Waypoint", L"Beacon", 1, ini);
+    g_cfg.waypointObjectiveKey = (int)GetPrivateProfileIntW(L"Waypoint", L"ObjectiveKey", 0x76, ini);
+    if (g_cfg.waypointObjectiveKey < 0 || g_cfg.waypointObjectiveKey > 254) g_cfg.waypointObjectiveKey = 0;
     g_cfg.replaceLauncher = (int)GetPrivateProfileIntW(L"General", L"ReplaceLauncher", 1, ini);
     g_cfg.autoRecover = (int)GetPrivateProfileIntW(L"Time", L"AutoRecover", 0, ini);
     g_cfg.physicsSteps = (int)GetPrivateProfileIntW(L"Time", L"PhysicsSteps", 0, ini);

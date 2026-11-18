@@ -76,6 +76,7 @@ bool IgnoredKey(int vk) {
     if (vk == VK_CONTROL || vk == VK_SHIFT || vk == VK_MENU || (vk >= VK_LSHIFT && vk <= VK_RMENU)) return true;
     if (vk == VK_LWIN || vk == VK_RWIN || vk == VK_SNAPSHOT || vk == VK_F12) return true;
     if (vk == VK_F9 || vk == VK_F10) return true;  // F9: the sampling profiler, F10: the menu
+    if (vk == g_cfg.waypointObjectiveKey) return true;  // with Ctrl: the waypoint to the game's objective
     return vk == g_cfg.waypointKey || vk == g_cfg.screenshotKey || vk == g_cfg.freeCamKey || vk == g_cfg.freeCamHudKey;
 }
 

@@ -42,7 +42,7 @@ $(OUT)/ufx_play.exe: tools/ufx_play.cpp Makefile
 	    -nostdlib -nostartfiles -Wl,-e,_Begin -Wl,--subsystem,windows -Wl,--no-insert-timestamp -s -o $@ tools/ufx_play.cpp \
 	    -lkernel32 -luser32 -lgcc
 
-$(OUT)/verify_sites: tests/verify_sites.cpp src/sites.h
+$(OUT)/verify_sites: tests/verify_sites.cpp src/sites.h src/story.h
 	@mkdir -p $(OUT)
 	$(HOSTCXX) -std=c++17 -Isrc -o $@ tests/verify_sites.cpp
 

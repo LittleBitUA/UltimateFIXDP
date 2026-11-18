@@ -9,6 +9,7 @@
 // without a key (most of the photo mode and the cheats) last for the session only.
 #include "ui.h"
 #include "../sites.h"
+#include "../story.h"
 #include <mmsystem.h>
 
 namespace ufx {
@@ -290,6 +291,15 @@ Item g_pageGameplay[] = {
      {L"Звук", L"Sound"}},
     RESET_ITEM
 };
+// The waypoint to the game's objective: the key (always with Ctrl) and a button that does the same, for the pad.
+const int kObjectiveKeys[3] = {0, VK_F7, VK_F8};
+const Tr kObjectiveKeyNames[3] = {{L"Вимк.", L"Off"}, {L"Ctrl+F7", L"Ctrl+F7"}, {L"Ctrl+F8", L"Ctrl+F8"}};
+void FormatObjectiveKey(int v, wchar_t* out) { wsprintfW(out, g_cfg.language == 1 ? L"Ctrl + key %d" : L"Ctrl + клавіша %d", v); }
+int g_objectivePick = 0;
+const int kObjectiveValues[1] = {1};
+const Tr kObjectiveNames[1] = {{L"Поставити", L"Set"}};
+void DoObjective() { g_objectivePick = 0; WaypointToObjective(); }
+
 Item g_pageMapItems[] = {
     {{L"Мітка (F7): на мапі й у світі", L"Waypoint (F7): on the map and in the world"}, &g_cfg.waypoint, kBool, 0, 1, 1, true, L"Waypoint", L"Enabled", nullptr, nullptr,
      {L"F7 на мапі паузи ставить мітку в центрі мапи (де хрестик), F7 у світі ставить її там, де ви стоїте (або де вільна камера); Shift+F7 прибирає. У світі над місцем мітки висить напис «N Yards» ігровим шрифтом (як у самій грі), за краєм екрана він стоїть на краю зі стрілкою; у катсценах напису немає. На мапі червоний X, коли увімкнено «Усі плитки мапи» і мапа не обертається (північ або південь угорі). Те саме робить натискання тачпада DualSense. Потрібен перезапуск.",
@@ -298,7 +308,19 @@ Item g_pageMapItems[] = {
     {{L"Мітка як ціль гри (стрілки на мінімапі)", L"Waypoint as a game objective (minimap arrows)"}, &g_cfg.waypointMinimap, kBool, 0, 1, 1, true, L"Waypoint", L"Minimap", nullptr, nullptr,
      {L"Мітка стає точкою цілі в рідному списку мапи гри: на мінімапі з'являються червоні стрілки гри на краю в бік мітки (чим далі, тим їх більше), на мапі паузи іконка цілі. Так само, як гра показує свої завдання. Потрібен перезапуск.",
       L"The waypoint becomes an objective point in the game's own map list: the minimap shows the game's red arrows on its edge towards the waypoint (more of them the farther it is), the pause map shows the objective icon. Just like the game shows its own goals. Needs a restart."},
-     {L"Мітка", L"Waypoint"}},
+     NOTR},
+    {{L"Стрілки гри над міткою", L"The game's arrows over the waypoint"}, &g_cfg.waypointBeacon, kBool, 0, 1, 1, true, L"Waypoint", L"Beacon", nullptr, nullptr,
+     {L"Поки місце мітки видно на екрані, над ним стоять рідні червоні стрілки гри з написом «N Yards», як над сюжетними цілями (чим далі, тим стрілок більше; ближче 15 ярдів вони зелені). Напис мода лишається, коли мітка за краєм екрана чи позаду, і поки гра не завантажила картинку стрілок. Вимкнути можна одразу; щоб увімкнути знову, потрібен перезапуск.",
+      L"While the waypoint's place is on the screen, the game's own red arrows with \"N Yards\" stand over it, as over story goals (more arrows the farther it is; green within 15 yards). The mod's label stays for a waypoint off the screen or behind you, and while the game has not loaded the arrow picture. Turning it off works at once; turning it back on needs a restart."},
+     NOTR},
+    {{L"Мітка на ціль гри: клавіша", L"Waypoint to the game's objective: key"}, &g_cfg.waypointObjectiveKey, kInt, 0, 254, 1, false, L"Waypoint", L"ObjectiveKey", nullptr, nullptr,
+     {L"Ctrl і ця клавіша ставлять мітку на поточну ціль гри (спершу сюжетне місце призначення, потім інші точки цілей на мапі), тож відстань і стрілка на краю екрана працюють і для сюжетних цілей. Ще одне натискання: наступна ціль, якщо їх кілька. Якщо цілі на мапі немає, нічого не зміниться. Там, де гра вже показує над ціллю свої стрілки, мод других не малює. Enter: свій код клавіші. Змінюється одразу.",
+      L"Ctrl and this key put the waypoint on the game's current objective (the story destination first, then the other objective points of the map), so the distance and the arrow on the screen edge work for story goals too. Press again for the next one when there are several. With no objective on the map nothing changes. Where the game already shows its own arrows over the goal, the mod draws no second ones. Enter: a key code of your own. Changes at once."},
+     NOTR, kObjectiveKeys, 3, kObjectiveKeyNames, FormatObjectiveKey},
+    {{L"Мітка на поточну ціль гри", L"Waypoint to the game's current objective"}, &g_objectivePick, kInt, 0, 1, 1, false, nullptr, nullptr, DoObjective, nullptr,
+     {L"Те саме, що Ctrl+F7, кнопкою: зручно з ґеймпадом. Працює під час гри; якщо цілі на мапі немає, мітка лишається як була. Що гра зараз вважає ціллю, видно в розділі «Сюжет».",
+      L"The same as Ctrl+F7, as a button: handy with a gamepad. Works while playing; with no objective on the map the waypoint stays as it was. The Story section shows what the game counts as the goal now."},
+     NOTR, kObjectiveValues, 1, kObjectiveNames, nullptr, false},
     {{L"Орієнтація мапи", L"Map orientation"}, &g_cfg.mapOrientation, kInt, 0, 2, 1, false, L"Map", L"Orientation", ApplyMapFix, kMapOrientTr,
      {L"Обертається як у грі, або північ чи південь завжди угорі (стрілка Йорка обертається замість мапи).", L"Rotates as in the game, or north or south is always up (York's arrow turns instead of the map)."}, {L"Мапа", L"Map"}},
     {{L"Найменший масштаб, %", L"Smallest zoom, %"}, &g_cfg.mapMinZoom, kInt, 10, 100, 5, false, L"Map", L"MinZoom", ApplyMapFix, nullptr,
@@ -601,7 +623,9 @@ struct Page {
     Item* items;
     int count;
     bool about;  // the "About" page has no settings
+    void (*custom)() = nullptr;  // what draws a page without settings (null: the About text)
 };
+void DrawStory();
 constexpr int kPhotoPage = 3;  // the photo mode section (the camera keys and the preview of the filters know it)
 // Six sections, most used first. Some are several pages of settings put together once at start (MergePages), each part under its heading.
 Page g_pages[] = {
@@ -610,6 +634,7 @@ Page g_pages[] = {
     {{L"Гра і світ", L"Game and world"}, {L"Складність, бій, дальність, мапа", L"Difficulty, combat, distance, map"}, nullptr, 0, false},
     {{L"Фоторежим і читкоди", L"Photo mode and cheats"}, {L"Камера, фільтри, знімок, гроші, час, погода", L"Camera, filters, picture, money, time, weather"}, nullptr, 0, false},
     {{L"Виправлення", L"Fixes"}, {L"Час, помилки гри, мова, захист dp.sav, діагностика", L"Time, game bugs, language, protection of dp.sav, diagnostics"}, nullptr, 0, false},
+    {{L"Сюжет", L"Story"}, {L"Епізод, побічні завдання, поточна ціль (лише перегляд)", L"Episode, side quests, current destination (read-only)"}, nullptr, 0, true, DrawStory},
     {{L"Про мод", L"About"}, {L"Автор і подяки", L"Author and credits"}, nullptr, 0, true},
 };
 constexpr int kPageCount = (int)(sizeof(g_pages) / sizeof(Page));
@@ -1485,6 +1510,124 @@ void DrawAbout() {
     DrawText(en ? L"F10 or Esc close" : L"F10 або Esc закрити", kCx, kPy + kPh - 36, kDim, 13);
 }
 
+// True when `size` bytes at `p` can be read: committed pages that allow reading, over the whole range. The Story page reads
+// the game's memory through pointers the game made; before a game is started they may be null or point nowhere.
+bool Readable(const void* p, size_t size) {
+    const u8* at = (const u8*)p;
+    const u8* end = at + size;
+    if (!p || end < at) return false;
+    const DWORD readable = PAGE_READONLY | PAGE_READWRITE | PAGE_WRITECOPY | PAGE_EXECUTE_READ | PAGE_EXECUTE_READWRITE | PAGE_EXECUTE_WRITECOPY;
+    while (at < end) {
+        MEMORY_BASIC_INFORMATION mbi;
+        if (!VirtualQuery(at, &mbi, sizeof(mbi))) return false;
+        if (mbi.State != MEM_COMMIT || !(mbi.Protect & readable) || (mbi.Protect & PAGE_GUARD)) return false;
+        at = (const u8*)mbi.BaseAddress + mbi.RegionSize;
+    }
+    return true;
+}
+
+// Reads the game's story state (story.h) without calling or changing anything of the game. 0 = read, 1 = the game has not set
+// its data up yet, 2 = the game's code is not the one the offsets were taken from.
+int ReadStory(StoryState* out) {
+    static int sitesOk = -1;
+    if (sitesOk < 0) {
+        sitesOk = 1;
+        for (const SiteDef& site : kStorySites)
+            if (!BytesMatch(site.va, site.bytes, site.len)) {
+                sitesOk = 0;
+                Log("story: %s at %08X differs from DP.exe 1.01b, the Story page stays empty", site.name, site.va);
+            }
+    }
+    if (!sitesOk) return 2;
+    constexpr u32 kEventCorePtrVa = 0x00BD9FE8;  // CEvCore, the script interpreter that owns the flags (getter FUN_00408960)
+    const u8* game = *(const u8* volatile*)(uintptr_t)kGameManagerPtrVa;
+    const u8* core = *(const u8* volatile*)(uintptr_t)kEventCorePtrVa;
+    if (!Readable(game, kStoryGameSpan) || !Readable(core, 0x12B8)) return 1;
+    StoryView view;
+    view.game = game;
+    view.flags = *(const u8* const volatile*)(core + 0x3C);
+    view.flagBytes = *(const volatile u32*)(core + 0x40);
+    const u8* project = *(const u8* const volatile*)(core + 0x12AC);
+    view.groups = *(const u8* const volatile*)(core + 0x12B4);
+    if (view.flagBytes == 0 || view.flagBytes > 0x10000 || !Readable(view.flags, view.flagBytes) || !Readable(project, 0x1C)) return 1;
+    view.groupCount = *(const volatile u32*)(project + 0x18);
+    if (view.groupCount == 0 || view.groupCount > 0x400 || !Readable(view.groups, view.groupCount * kStoryGroupSize)) return 1;
+    view.destAllowed = (const u8*)(uintptr_t)kStoryDestTableVa;
+    StoryDecode(view, out);
+    return 0;
+}
+
+// The Story page: what the game itself keeps about the progress, shown and nothing more.
+void DrawStory() {
+    const bool en = g_cfg.language == 1;
+    const float w = kCr - kCx;
+    float y = kListTop - 4;
+    DrawText(en ? L"Read-only: the mod changes nothing of the game here.     F10 or Esc close"
+                : L"Лише перегляд: мод тут нічого не змінює в грі.     F10 або Esc закрити",
+             kCx, kPy + kPh - 36, kDim, 13);
+    StoryState st = {};
+    const int result = ReadStory(&st);
+    if (result) {
+        DrawLines(result == 1 ? (en ? L"The game has not set its story data up yet. Open this page while playing."
+                                    : L"Гра ще не підготувала дані сюжету. Відкрийте цю сторінку під час гри.")
+                              : (en ? L"This DP.exe keeps its story data elsewhere, so the page stays empty (see UltimateFix\\ufx.log)."
+                                    : L"Цей DP.exe тримає дані сюжету в інших місцях, тому сторінка порожня (див. UltimateFix\\ufx.log)."),
+                  kCx, y, kText, 17, 22, w, 4, true);
+        return;
+    }
+    wchar_t line[400];
+
+    DrawText(en ? L"Progress" : L"Прогрес", kCx, y, kAccent, 13);
+    if (st.episode > 0) wsprintfW(line, en ? L"Episode %d  ·  chapter %d  ·  step %d" : L"Епізод %d  ·  розділ %d  ·  крок %d", st.episode, st.chapter, st.step);
+    else wsprintfW(line, en ? L"Before the first episode (chapter %d, step %d)" : L"Ще до першого епізоду (розділ %d, крок %d)", st.chapter, st.step);
+    DrawText(line, kCx, y + 20, kText, 20);
+    DrawText(st.finished ? (en ? L"The game has been finished." : L"Гру вже пройдено.") : (en ? L"The game has not been finished yet." : L"Гру ще не пройдено."),
+             kCx, y + 48, st.finished ? kOn : kDim, 15);
+    y += 80;
+
+    DrawText(en ? L"Side quests" : L"Побічні завдання", kCx, y, kAccent, 13);
+    if (!st.sideKnown) {
+        DrawText(en ? L"No data: the game's flag table has no such group." : L"Немає даних: у таблиці прапорів гри немає такої групи.", kCx, y + 20, kDim, 15);
+        y += 52;
+    } else {
+        wsprintfW(line, en ? L"Taken %d of %d, done %d" : L"Узято %d з %d, виконано %d", st.sideTaken, kStorySideQuests, st.sideDone);
+        DrawText(line, kCx, y + 20, kText, 17);
+        y += 46;
+        if (st.sideOpenCount) {
+            int n = wsprintfW(line, en ? L"Taken and not done yet (the game's own numbers, counted from 0): " : L"Узяті й ще не виконані (номери, як їх рахує гра, від 0): ");
+            for (int i = 0; i < st.sideOpenCount; ++i) n += wsprintfW(line + n, i ? L", %d" : L"%d", st.sideOpen[i]);
+            y += 19.f * (float)DrawLines(line, kCx, y, 0xFFC4C4CE, 15, 19, w, 2, true);
+        }
+        y += 12;
+    }
+
+    DrawText(en ? L"Current destination" : L"Поточна ціль", kCx, y, kAccent, 13);
+    if (!st.destKnown) {
+        lstrcpyW(line, en ? L"No data: the game's flag table has no such group." : L"Немає даних: у таблиці прапорів гри немає такої групи.");
+    } else if (st.destIndex < 0) {
+        lstrcpyW(line, en ? L"No story destination in the town right now." : L"Зараз у місті немає сюжетного місця призначення.");
+    } else {
+        const u8* t = st.destWindow;
+        int n = wsprintfW(line, en ? L"Story destination %d" : L"Сюжетне місце призначення № %d", st.destIndex);
+        if (t[0] | t[1] | t[2] | t[3]) n += wsprintfW(line + n, en ? L", open from %02d:%02d to %02d:%02d" : L", час: з %02d:%02d до %02d:%02d", t[0], t[1], t[2], t[3]);
+        else n += wsprintfW(line + n, en ? L", at any time" : L", у будь-який час");
+        if (st.destActive > 1) wsprintfW(line + n, en ? L"  (%d active in all)" : L"  (усього активних: %d)", st.destActive);
+    }
+    DrawFitted(line, kCx, y + 20, kText, 17, w);
+    int yards = 0;
+    const int points = WaypointObjectives(&yards);
+    if (points > 0) wsprintfW(line, en ? L"Objective points on the game's map: %d, the first is %d yards away. The \"Waypoint to the game's current objective\" button in \"Game and world\" (Ctrl+F7 by default) puts the waypoint on it."
+                                  : L"Точок цілі на мапі гри: %d, до першої %d ярдів. Мітку на неї ставить кнопка «Мітка на поточну ціль гри» в розділі «Гра і світ» (типово ще й Ctrl+F7).", points, yards);
+    else lstrcpyW(line, en ? L"The game's map has no objective point right now." : L"На мапі гри зараз немає точок цілі.");
+    y += 46;
+    if (points >= 0) y += 19.f * (float)DrawLines(line, kCx, y, 0xFFC4C4CE, 15, 19, w, 3, true);  // not with the waypoint switched off
+    y += 12;
+
+    DrawText(en ? L"Story flags" : L"Сюжетні прапори", kCx, y, kAccent, 13);
+    wsprintfW(line, en ? L"Raised %d of %d" : L"Піднято %d з %d", st.flagsRaised, st.flagsTotal);
+    DrawText(line, kCx, y + 20, kText, 17);
+}
+
 // A background colour with its alpha scaled by the menu opacity setting.
 u32 Fade(u32 c) {
     u32 a = (c >> 24) * (u32)g_cfg.menuOpacity / 100;
@@ -1522,7 +1665,8 @@ void Draw() {
 
     DrawLanguageChips();
     if (pg.about) {
-        DrawAbout();
+        if (pg.custom) pg.custom();
+        else DrawAbout();
         return;
     }
     float y = kListTop;

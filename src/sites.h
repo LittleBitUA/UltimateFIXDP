@@ -270,6 +270,32 @@ constexpr SiteDef kSiteSpotRebuild[3] = {
     {"map point rebuild call (stage load)", 0x5D58CB, 5, {0xE8, 0x50, 0xA6, 0x01, 0x00}},
     {"map point rebuild call (pause map)", 0x652B75, 5, {0xE8, 0xA6, 0xD3, 0xF9, 0xFF}},
 };
+// The game's objective beacon (the red arrows of GOAL.XPC with "%d Yards" under them). FUN_005B1120 draws one icon (thiscall:
+// ECX = the 38h-byte icon, one float argument = the size, ret 4 at 005B155A), FUN_005B0DD0 moves it and runs its bobbing (thiscall,
+// one argument = a pointer to 3 floats, ret 4 at 005B0F88). The 12h (2D draw) branch of the stage manager's handler FUN_005D26B0 is
+// only  mov ecx,014375F4h / call 005EE3F0 (the four fixed target icons; takes ECX alone, plain ret at 005EE45D) / pop edi / pop ebx /
+// pop esi: the waypoint's beacon is drawn from that call, in the pass and the render state the game draws its own icons in.
+constexpr SiteDef kSiteBeaconCall = {"target icons draw (mov ecx + call)", 0x5D4A6F, 10, {0xB9, 0xF4, 0x75, 0x43, 0x01, 0xE8, 0x77, 0x99, 0x01, 0x00}};
+constexpr SiteDef kSiteBeaconDraw = {"objective icon draw entry", 0x5B1120, 16,
+    {0x83, 0xEC, 0x48, 0x56, 0x8B, 0xF1, 0x83, 0x7E, 0x04, 0x00, 0x0F, 0x84, 0x26, 0x04, 0x00, 0x00}};
+constexpr SiteDef kSiteBeaconMove = {"objective icon move entry", 0x5B0DD0, 16,
+    {0x83, 0xEC, 0x14, 0x8B, 0x44, 0x24, 0x18, 0xD9, 0x40, 0x04, 0x56, 0xD9, 0x5C, 0x24, 0x1C, 0x8B}};
+constexpr uint32_t kTargetIconsDrawFn = 0x5EE3F0, kIconDrawFn = 0x5B1120, kIconMoveFn = 0x5B0DD0;
+// Story page of the menu (read-only, see story.h): the places in the game's own code that fix every offset the page reads. Nothing
+// here is patched or called; the page stays empty when one of them differs.
+constexpr SiteDef kStorySites[11] = {
+    {"story: chapter store", 0x4526D7, 6, {0x88, 0x86, 0x09, 0xC6, 0x08, 0x00}},              // mov [esi+8C609h],al (FUN_004526D0)
+    {"story: episode store", 0x4526E8, 6, {0x88, 0x86, 0x08, 0xC6, 0x08, 0x00}},              // mov [esi+8C608h],al
+    {"story: sub-step store", 0x44F7E4, 6, {0x88, 0x81, 0x0A, 0xC6, 0x08, 0x00}},             // mov [ecx+8C60Ah],al (FUN_0044F7E0)
+    {"story: side quest group", 0x43D2B5, 5, {0x83, 0x7C, 0x24, 0x14, 0x28}},                 // cmp group,28h (FUN_0043D270)
+    {"story: side quest count", 0x43D2C0, 9, {0x8B, 0x4C, 0x24, 0x10, 0x83, 0xF9, 0x32, 0x7D, 0x2E}},  // local < 50 = taken, else done
+    {"story: finished flag", 0x43D3D7, 12, {0x83, 0x7C, 0x24, 0x14, 0x44, 0x75, 0x14, 0x83, 0x7C, 0x24, 0x10, 0x3C}},  // group 44h, flag 3Ch
+    {"story: destination group", 0x452281, 9, {0x6A, 0x48, 0x8B, 0xC8, 0xE8, 0x26, 0xBE, 0x2B, 0x00}},  // push 48h / call 0070E0B0 (FUN_00452270)
+    {"story: destination window", 0x4522B7, 7, {0x8D, 0x84, 0xB7, 0x68, 0xD3, 0x0C, 0x00}},   // lea eax,[edi+esi*4+CD368h]
+    {"story: destination table", 0x5E6E16, 7, {0x80, 0xB9, 0x60, 0xF5, 0x8B, 0x00, 0x01}},    // cmp byte [ecx+8BF560h],1 (FUN_005E6E10)
+    {"story: flag array pointer", 0x70FEAA, 3, {0x8B, 0x51, 0x3C}},                           // mov edx,[ecx+3Ch] (FUN_0070FE90)
+    {"story: flag group table", 0x70DFF0, 6, {0x8B, 0x91, 0xB4, 0x12, 0x00, 0x00}},           // mov edx,[ecx+12B4h] (FUN_0070DFE0)
+};
 constexpr SiteDef kMapPanX = {"map pan limit X", 0x659534, 6, {0xD9, 0x44, 0x24, 0x3C, 0xD9, 0xC0}};
 constexpr SiteDef kMapPanZ = {"map pan limit Z", 0x659574, 6, {0xD9, 0x44, 0x24, 0x38, 0xD9, 0xC0}};
 constexpr SiteDef kMapTileLookup = {"map tile lookup (first 16 of 20 bytes)", 0x65A2ED, 16,
@@ -670,6 +696,8 @@ struct TailDef {
 };
 
 constexpr const SiteDef* kAllSites[] = {
+    &kSiteBeaconCall, &kSiteBeaconDraw, &kSiteBeaconMove, &kStorySites[0], &kStorySites[1], &kStorySites[2], &kStorySites[3], &kStorySites[4],
+    &kStorySites[5], &kStorySites[6], &kStorySites[7], &kStorySites[8], &kStorySites[9], &kStorySites[10],
     &kSiteZeroDelta, &kSiteHouseListFormat, &kSiteExtraJoyPoll, &kSiteSkipIntro,
     &kSiteResetRefresh, &kSitePresentCall, &kSitePreResetCall, &kSiteAniso1, &kSiteAniso2,
     &kSiteReflectionBias, &kSiteSceneInitCall, &kSitePostInitCall,

@@ -1,6 +1,7 @@
 // Host-side check against a real DP.exe on disk: every site in kAllSites, the longer byte runs in kAllTails,
 // the shadow literals and every import slot in kImports (sites.h). A site a module checks with bytes of its
-// own that are not in sites.h is not covered.
+// own that are not in sites.h is not covered. Also the decoder of the menu's Story page (story.h), run on made-up
+// game memory with the destination table of the real DP.exe.
 // Build:  make test DPEXE=/path/to/DP.exe
 #include <stdint.h>
 #include <stdio.h>
@@ -9,6 +10,7 @@
 #include <vector>
 
 #include "sites.h"
+#include "story.h"
 
 using namespace ufx;
 
@@ -43,6 +45,84 @@ static bool vaToOff(uint32_t va, size_t* off) {
 }
 
 static bool rvaToOff(uint32_t rva, size_t* off) { return vaToOff(rva + g_imageBase, off); }
+
+static bool g_storyOk = true;
+static void storyCheck(bool condition, const char* what) {
+    printf("%s  story decoder: %s\n", condition ? "ok  " : "FAIL", what);
+    g_storyOk &= condition;
+}
+
+// The Story page decoder on made-up memory: a CGame image, the flag bits, a group table with the three groups the game's code
+// names by number (their first flags and sizes are those of the game's PROJECT.DPB) and the destination table of DP.exe.
+static bool storySelfTest() {
+    size_t tableOff, tableEnd;
+    if (!vaToOff(kStoryDestTableVa, &tableOff) || !vaToOff(kStoryDestTableVa + kStoryDestinations - 1, &tableEnd)) {
+        printf("FAIL  story decoder: the destination table %08X is not backed by file bytes\n", kStoryDestTableVa);
+        return false;
+    }
+    const uint8_t* allowed = &g_file[tableOff];
+    storyCheck(allowed[0] != 1 && allowed[1] == 1 && allowed[2] == 1 && allowed[25] != 1 && allowed[33] == 1 && allowed[34] != 1,
+               "the table of DP.exe allows destinations 1, 2 and 33 and not 0, 25 and 34");
+
+    std::vector<uint8_t> game(kStoryGameSpan, 0), flags(0x306, 0), groups(0x65 * kStoryGroupSize, 0);
+    auto setGroup = [&](uint32_t group, uint32_t first, uint32_t count) {
+        memcpy(&groups[group * kStoryGroupSize], &first, 4);
+        memcpy(&groups[group * kStoryGroupSize + 4], &count, 4);
+    };
+    setGroup(kStoryGroupSide, 0xB00, 0x80);
+    setGroup(kStoryGroupCommon, 0xC58, 0x400);
+    setGroup(kStoryGroupDestination, 0x10FC, 0x100);
+    auto raise = [&](uint32_t flag) { flags[flag >> 3] |= (uint8_t)(1u << (flag & 7)); };
+    StoryView view = {game.data(), flags.data(), (uint32_t)flags.size(), groups.data(), 0x65, allowed};
+    StoryState s;
+
+    StoryDecode(view, &s);
+    storyCheck(s.episode == 0 && s.chapter == 0 && s.step == 0 && !s.finished && s.sideKnown && s.sideTaken == 0 && s.sideDone == 0 &&
+                   s.sideOpenCount == 0 && s.destKnown && s.destIndex == -1 && s.destActive == 0 && s.flagsRaised == 0 &&
+                   s.flagsTotal == 0x80 + 0x400 + 0x100,
+               "empty memory: nothing started, no quest, no destination");
+
+    game[kStoryEpisodeOff] = 4;
+    game[kStoryChapterOff] = 15;
+    game[kStoryStepOff] = 2;
+    raise(0xB00 + 3);
+    raise(0xB00 + 7);
+    raise(0xB00 + 49);
+    raise(0xB00 + 50 + 7);   // quest 7 done
+    raise(0x10FC + 0);       // raised, but the table does not allow it
+    raise(0x10FC + 25);      // the same
+    raise(0x10FC + 2);
+    raise(0x10FC + 33);
+    const uint8_t window[4] = {9, 0, 21, 30};
+    memcpy(&game[kStoryWindowOff + 2 * 4], window, 4);
+    StoryDecode(view, &s);
+    storyCheck(s.episode == 4 && s.chapter == 15 && s.step == 2 && !s.finished, "episode, chapter and sub-step bytes");
+    storyCheck(s.sideTaken == 3 && s.sideDone == 1 && s.sideOpenCount == 2 && s.sideOpen[0] == 3 && s.sideOpen[1] == 49,
+               "side quests: flag i = taken, flag 50 + i = done");
+    storyCheck(s.destIndex == 2 && s.destActive == 2 && memcmp(s.destWindow, window, 4) == 0,
+               "destination: the first raised flag the table allows, with its time window");
+    storyCheck(s.flagsRaised == 8, "raised flags are counted");
+
+    raise(0xC58 + kStoryFlagFinished);
+    StoryDecode(view, &s);
+    storyCheck(s.finished, "finished: flag 3Ch of group 44h");
+    flags[(0xC58 + kStoryFlagFinished) >> 3] = 0;
+    game[kStoryFinishedOff] = 0x81;  // difficulty 1 (normal) with bit 7
+    game[kStoryChapterOff] = 0xFF;
+    StoryDecode(view, &s);
+    storyCheck(s.finished && s.chapter == -1, "finished: bit 7 of the difficulty byte; the chapter is a signed byte");
+
+    view.groupCount = 0x40;  // a table without the groups 44h and 48h
+    game[kStoryFinishedOff] = 0;
+    raise(0xC58 + kStoryFlagFinished);
+    StoryDecode(view, &s);
+    storyCheck(s.sideKnown && s.sideTaken == 3 && !s.finished && !s.destKnown && s.destIndex == -1, "a missing group reads as nothing");
+    view.groupCount = 0x65;
+    setGroup(kStoryGroupDestination, 0x1800, 0x100);  // would end past the 0x306 bytes of flags
+    StoryDecode(view, &s);
+    storyCheck(!s.destKnown && s.destIndex == -1 && s.destActive == 0, "a group that does not fit the flag array is never read");
+    return g_storyOk;
+}
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -155,6 +235,7 @@ int main(int argc, char** argv) {
                imp.slotVa == 0 ? " (not pinned)" : "");
         ok &= match;
     }
+    ok &= storySelfTest();
     printf("%s\n", ok ? "ALL CHECKS PASSED" : "SOME CHECKS FAILED");
     return ok ? 0 : 1;
 }

@@ -7,6 +7,11 @@
 //   In the world: "123 Yards" floats over the place; off the screen it sits on the edge with an arrow (< >), behind the camera at the side.
 //   The label is drawn from the entry of the game's text function, at most once per frame and only on frames where the game draws
 //   some text itself; like the game's own label, not in cutscenes.
+//   While the place is on the screen, the game's own objective beacon stands over it instead of the bare label: the red arrows of
+//   GOAL.XPC with "%d Yards" under them, drawn by the game's FUN_005B1120 from the pass of its own target icons (see
+//   WaypointBeaconDraw). The label stays for a place off the screen or behind the camera and while the game does not hold the picture.
+//   Ctrl+F7 (the objective key): the waypoint goes to the game's current objective, a point of type 8, 9 or 10 of its map point
+//   list, so the distance and the edge arrow work for story goals; again = the next objective when there are several.
 //   On the pause map: a red X on the place (or on the edge), a + in the middle of the map where F7 puts it. The X needs the map
 //   fix with a fixed orientation (north or south up): on the map that turns with the player only the + is drawn.
 //
@@ -25,6 +30,7 @@ extern volatile int g_mapOrient;
 extern volatile int g_mapFixInstalled;
 void __cdecl WaypointMapOverlay();
 void __cdecl WaypointSpotUpkeep();
+void __cdecl WaypointBeaconDraw();
 }
 
 namespace ufx {
@@ -41,6 +47,7 @@ constexpr u32 kTextPrintFn = 0x0045C540;
 constexpr float kYardsPerUnit = 0.1f * 1.0936f;
 // The game's map point list (see kSiteSpotAccessor): the waypoint is one more entry, id FFFFh (no game point has it), type 10 (an
 // objective: the minimap draws its red chevrons on the edge towards it, the pause map its icon), floor 0 (what the rebuild writes).
+constexpr u32 kSpotManagerVa = 0x0143C078;
 constexpr u32 kSpotCountVa = 0x0143C078 + 0x2E838, kSpotListVa = 0x0143C078 + 0x2E83C;
 constexpr u32 kSpotEntry = 0xFFFFu | (10u << 16);
 // The minimap copies the whole list into a 256-entry stack array (005F7A91..005F7ABD, right below its /GS cookie) and the pause
@@ -50,7 +57,41 @@ constexpr int kSpotGuard = 0xF0;
 // player's floor (written only by FUN_005026B0; the pause map shows an indoor point only on its floor).
 constexpr u32 kAreaOff = 0x834FE0, kFloorOff = 0x834FF4;
 
+// The navigation table (0x1437A20): the byte at +4 says that it is loaded (FUN_005E1ED0 writes no position otherwise, 005E1ED0),
+// the node count is at +8.
+constexpr u32 kNavLoadedVa = 0x01437A24, kNavCountVa = 0x01437A28;
+// The resource manager (pointer at 00BD9E3Ch, what the getter FUN_004051F0 returns), the event manager CEvent (00BD9E58h, getter
+// FUN_00405360) and the 2D renderer FUN_005B1120 draws its quads with (ECX of FUN_006E3360, 005B1470).
+constexpr u32 kResourceMgrVa = 0x00BD9E3C, kEventPtrVa = 0x00BD9E58, kQuadRendererVa = 0x00BD7680;
+constexpr u32 kGoalPictureId = 0x32;       // UPDATA/BG/00/00/GOAL.XPC in the resource table
+constexpr u32 kGameFlagsOff = 0x8C5EC;      // CGame: mask 10000000h = the HUD is off, mask 2 = the mode with the bigger beacons
+constexpr u32 kTargetVtable = 0x0077D854;   // CObjectTarget, written by its constructor at 005F438E
+// A point this close to the left or right edge of the screen counts as off the screen: the label sits on the edge there.
+constexpr float kEdgeMargin = 60.f;
+
 typedef void(__cdecl* TextPrintFn)(void* message, float x, float y, int flags, const float* rgba, const char* format, ...);
+typedef void(__attribute__((thiscall)) * IconMoveFn)(void* icon, const float* position);
+typedef void(__attribute__((thiscall)) * IconDrawFn)(void* icon, float size);
+typedef int(__attribute__((thiscall)) * SpotPosFn)(void* manager, float* out, int index);
+
+// The game's CObjectTargetIcon as its constructor FUN_0042B010 fills it. The mod keeps one of its own: it is never handed to the
+// game's allocator, its vtable is never called by the two functions used here, and it never goes through FUN_005B1050, which may
+// load GOAL.XPC synchronously.
+struct BeaconIcon {
+    u32 vtable;      // +00h  00772124h
+    u32 texture;     // +04h  the texture record, 0 = draw nothing (the first test of FUN_005B1120)
+    int type;        // +08h  0 = the red arrows with "%d Yards" under them (what a route objective gets, 005B1663)
+    float pos[4];    // +0Ch  the place in the world, w = 1 (written by FUN_005B0DD0)
+    float rgba[4];   // +1Ch
+    float bob;       // +2Ch  the bobbing in pixels, between -16 and 0
+    float bobSpeed;  // +30h  -1 at first, FUN_005B0DD0 flips the sign at both ends
+    u8 ownColour;    // +34h  1 = rgba, 0 = grey
+    u8 unused35;     // +35h  0
+    u8 pad[2];
+};
+static_assert(sizeof(BeaconIcon) == 0x38 && offsetof(BeaconIcon, pos) == 0x0C && offsetof(BeaconIcon, rgba) == 0x1C &&
+              offsetof(BeaconIcon, bob) == 0x2C && offsetof(BeaconIcon, ownColour) == 0x34, "CObjectTargetIcon layout");
+BeaconIcon g_icon = {0x00772124, 0, 0, {0.f, 0.f, 0.f, 1.f}, {1.f, 0.f, 0.f, 1.f}, 0.f, -1.f, 1, 0, {0, 0}};
 
 bool g_installed = false;
 bool g_spotInstalled = false;
@@ -65,9 +106,20 @@ void* volatile g_dev = nullptr;        // the D3D9 device (from the Present hook
 int g_offscreenFrames = 0;            // frames in a row where every 2D call went to another target
 bool g_targetCheck = true;            // only draw into the back buffer (the HUD may also draw into textures)
 volatile bool g_inWorker = false;
+bool g_beaconInstalled = false;
+bool g_accessorOk = false;             // the map point accessor is the one of 1.01b (the game's or our stub in front of it)
+volatile int g_objNode = -1;           // the node of the objective the waypoint was put on (the objective key), -1 = a free waypoint
+// What the game itself shows over that objective now (TrackOwnBeacon): its red arrows with the yards, or arrows of another
+// kind, which have no number.
+enum OwnIcon { kOwnNone, kOwnYards, kOwnArrows };
+volatile int g_ownIcon = kOwnNone;
+volatile unsigned g_beaconPass = 0;    // the frame of the last WaypointBeaconDraw
+volatile bool g_beaconPassSeen = false;
 
 float Sqrt(float x) { float r; __asm__("fsqrt" : "=t"(r) : "0"(x)); return r; }
 float F(u32 base, u32 off) { return *(volatile float*)(uintptr_t)(base + off); }
+u32 U(u32 va) { return *(volatile u32*)(uintptr_t)va; }
+bool Ptr(u32 p) { return p >= 0x10000 && p < UserAddressEnd(); }
 
 void Print(float x, float y, const float* rgba, const char* format, int value) {
     void* msg = *(void**)(uintptr_t)kMessageVa;
@@ -80,6 +132,7 @@ void Print(float x, float y, const float* rgba, const char* format, int value) {
 const float kRed[4] = {1.f, 0.15f, 0.1f, 1.f};
 const float kGreen[4] = {0.35f, 1.f, 0.35f, 1.f};
 const float kWhite[4] = {1.f, 1.f, 1.f, 1.f};
+const float kBeaconRed[4] = {1.f, 0.f, 0.f, 1.f};  // what FUN_005B1050 gives the type 0 icon (005B10C8)
 
 // like the game (005F7C4Ch): the 3D distance times 0.1 * 1.0936, the fraction dropped
 int YardsTo(float x, float y, float z) {
@@ -88,8 +141,8 @@ int YardsTo(float x, float y, float z) {
 }
 
 u32 GameManager() {
-    u32 g = *(volatile u32*)(uintptr_t)kGameManagerPtrVa;
-    return g >= 0x10000 && g < 0x7FFE0000u ? g : 0;
+    u32 g = U(kGameManagerPtrVa);
+    return Ptr(g) ? g : 0;
 }
 
 void RememberArea() {
@@ -102,13 +155,115 @@ void RememberArea() {
 // CEvent+34h a running P-demo) and no SCENE demo ([008A6074h] < 0). The last alone misses script cutscenes and videos.
 bool GameIdle() {
     if (*(volatile int*)(uintptr_t)kEventModeVa < 0) return false;
-    u32 ev = *(volatile u32*)(uintptr_t)0x00BD9E58;
-    if (ev < 0x10000 || ev >= 0x7FFE0000u) return true;  // not created yet: no event can run
+    u32 ev = U(kEventPtrVa);
+    if (!Ptr(ev)) return true;  // not created yet: no event can run
     if (*(volatile u32*)(uintptr_t)(ev + 0x44) & 0x40000u) return false;
     return *(volatile u32*)(uintptr_t)(ev + 0x34) == 0;
 }
 
 bool g_spriteHooked = false;
+
+// The texture record of GOAL.XPC, fetched the way FUN_005B1050 does it (005B10D8..005B10F7), or 0 while the game does not hold the
+// picture. FUN_006B2C70(manager, 32h, 0) gives the picture object (+1Ch of the 30h-byte entry; the table is at manager+0Ch, the
+// number of entries at manager+4) only while the entry's reference count (u16 at +2Ch) is not 0, so a fresh look every frame
+// never keeps a pointer to a freed picture. FUN_006B5660(picture, 0, 0) gives the first texture record (at [picture+8]) when the
+// header [picture+4] has a row and a column (u16 at +0Ah, u8 at +0Ch) and the record has a Direct3D texture (+14h, +18h or +1Ch,
+// FUN_006B60E0). Read here instead of called: the getter FUN_004051F0 would create the manager, and FUN_006B5660 reads through
+// the header pointer without a check.
+u32 GoalTexture() {
+    u32 mgr = U(kResourceMgrVa);
+    if (!Ptr(mgr) || *(volatile int*)(uintptr_t)(mgr + 4) <= (int)kGoalPictureId) return 0;
+    u32 table = U(mgr + 0x0C);
+    if (!Ptr(table)) return 0;
+    u32 entry = table + kGoalPictureId * 0x30;
+    if (*(volatile u16*)(uintptr_t)(entry + 0x2C) == 0) return 0;
+    u32 picture = U(entry + 0x1C);
+    if (!Ptr(picture)) return 0;
+    u32 header = U(picture + 4), record = U(picture + 8);
+    if (!Ptr(header) || !Ptr(record)) return 0;
+    if (*(volatile u16*)(uintptr_t)(header + 0x0A) == 0 || *(volatile u8*)(uintptr_t)(header + 0x0C) == 0) return 0;
+    if (!U(record + 0x14) && !U(record + 0x18) && !U(record + 0x1C)) return 0;
+    return record;
+}
+
+// True when the game's beacon function would show an icon at the waypoint on the screen. FUN_005B1120 projects the place itself
+// (D3DXVec4Transform with 01481238h, then FUN_006B6870: x / w and -y / w scaled to the HUD size) and draws nothing when the clip z
+// is not above 0 (005B1186). The arrows stand 48 pixels above that point and reach about 140 pixels up (168 with the bigger
+// size), the text is under them: outside this box the icon would hang half off the screen, and the label on the edge says more.
+bool BeaconInView() {
+    const float W = F(kHudWVa, 0), H = F(kHudHVa, 0);
+    const float* m = (const float*)(uintptr_t)kViewProjVa;
+    const float in[4] = {g_x, g_y, g_z, 1.f};
+    float c[4];
+    for (int j = 0; j < 4; ++j) c[j] = in[0] * m[j] + in[1] * m[4 + j] + in[2] * m[8 + j] + in[3] * m[12 + j];
+    if (!(c[2] > 0.f) || !(c[3] > 0.01f)) return false;
+    const float sx = (c[0] / c[3]) * W * 0.5f + W * 0.5f, sy = -(c[1] / c[3]) * H * 0.5f + H * 0.5f;
+    return sx >= kEdgeMargin && sx <= W - kEdgeMargin && sy >= 160.f && sy <= H + 18.f;
+}
+
+// Everything FUN_005B1120 relies on without a check, and the game's own HUD gate (the HUD function FUN_005FFE80 at
+// 005FFEAB..005FFED1: the HUD flag byte, the free play test that GameIdle repeats, bit 10000000h of CGame+8C5ECh):
+//   - CGame, CEvent and the text object exist: the function fetches them through getters that would create them (0040A320 at
+//     005B1130, 00405360 at 005B14A8, the allocation at 005B14F3);
+//   - the player object exists: its position is read at 005B11AF right after the lookup, with no test of the result;
+//   - GOAL.XPC is held by the game and has a texture.
+bool BeaconReady(u32* texture) {
+    if (!g_beaconInstalled || !g_cfg.waypointBeacon) return false;
+    if (!*(volatile u8*)(uintptr_t)kHudFlagVa) return false;
+    u32 g = GameManager();
+    if (!g || (U(g + kGameFlagsOff) & 0x10000000u)) return false;
+    if (!Ptr(U(kEventPtrVa)) || !Ptr(U(kMessageVa)) || !Ptr(U(kQuadRendererVa))) return false;
+    u32 state;
+    if (!PlayerStateNow(&state)) return false;  // the lookup FUN_005B1120 itself makes (FUN_006C5FD0 with the handle at 008A9BA4h)
+    *texture = GoalTexture();
+    return *texture != 0;
+}
+
+// True when arrows with the yards stand over the place on the screen in this frame, so the text label is left out: the game's own
+// red beacon of the objective the waypoint was put on, or the mod's. Over the game's arrows of another kind (they have no
+// number) the label stays and the mod draws no arrows. WaypointBeaconDraw makes the same tests in the same frame; it must have
+// run in this frame or the one before, so the label comes back by itself if the game ever stops sending the pass. With the
+// beacon switched off the label is always drawn.
+bool BeaconStands() {
+    if (!g_cfg.waypointBeacon || !BeaconInView()) return false;
+    if (g_ownIcon != kOwnNone) return g_ownIcon == kOwnYards;
+    u32 texture;
+    return g_beaconPassSeen && g_frame - g_beaconPass <= 1 && BeaconReady(&texture);
+}
+
+// The waypoint was put on one of the game's objectives: a CObjectTarget, which draws an icon of its own (type at object+460h,
+// alpha at +480h, texture at +45Ch) with the same FUN_005B1120 while its "show" byte +3Bh is set. A route objective (map point
+// type 8 or 9) has icon type 0, the red arrows with the yards (005B1663): the mod draws nothing over the place then. The other
+// objectives have arrows without a number (type 1, orange, fading in within 15000 units, 005B16AD): the mod's arrows would
+// stand in the same spot, so it keeps to its text label there. The byte is written only by the object's update (FUN_005B1CB0),
+// which also moves the icon's bobbing (+484h) every frame through FUN_005B0DD0: a bobbing that stands still means the object
+// is not being updated and the byte may be stale. Once per frame, from the Present hook.
+void TrackOwnBeacon() {
+    static u32 lastBob = 0;
+    static int lastNode = -1, still = 100;
+    int own = kOwnNone;
+    const int node = g_objNode;
+    if (node != lastNode) {
+        lastNode = node;
+        still = 100;
+    }
+    const u32 g = GameManager();
+    // the manager holds A000h object pointers of the stage in play, indexed by the node: only in the area the objective is in
+    if (g_active && node >= 0 && node < 0xA000 && g && *(volatile int*)(uintptr_t)(g + kAreaOff) == g_area) {
+        u32 obj = U(kSpotManagerVa + (u32)node * 4);
+        if (Ptr(obj) && U(obj) == kTargetVtable && *(volatile u8*)(uintptr_t)(obj + 0x3B) && U(obj + 0x45C) && F(obj, 0x480) > 0.f) {
+            u32 bob = U(obj + 0x484);
+            if (bob != lastBob) {
+                lastBob = bob;
+                still = 0;
+            } else if (still < 100) {
+                ++still;
+            }
+            if (still < 4) own = U(obj + 0x460) == 0 ? kOwnYards : kOwnArrows;
+        }
+    }
+    g_ownIcon = own;
+}
 
 // True when the game is drawing into the back buffer right now (not into one of its textures, such as a map tile or a reflection).
 bool DrawingToScreen() {
@@ -145,6 +300,7 @@ void __cdecl TextDrawWorker(void* self, u32 arg) {
     g_drawnFrame = g_frame;
     u32 player = PlayerObjectNow();
     if (!player) return;
+    if (BeaconStands()) return;
     const float W = F(kHudWVa, 0), H = F(kHudHVa, 0);
     if (W < 100.f || H < 100.f) return;
     const float* m = (const float*)(uintptr_t)kViewProjVa;
@@ -153,7 +309,7 @@ void __cdecl TextDrawWorker(void* self, u32 arg) {
     for (int j = 0; j < 4; ++j) c[j] = in[0] * m[j] + in[1] * m[4 + j] + in[2] * m[8 + j] + in[3] * m[12 + j];
     int yards = YardsTo(F(player, 0x58), F(player, 0x5C), F(player, 0x60));
     const float* colour = yards < 15 ? kGreen : kRed;
-    const float margin = 60.f;
+    const float margin = kEdgeMargin;
     if (c[3] > 0.01f) {
         float sx = (c[0] / c[3]) * W * 0.5f + W * 0.5f, sy = -(c[1] / c[3]) * H * 0.5f + H * 0.5f;
         const char* format = "%d Yards";
@@ -179,7 +335,90 @@ void __cdecl TextEntryWorker(void* self, u32 arg) {
     TextDrawWorker(self, arg);
 }
 
+// One of the game's objective points in the map point list. FUN_005EFF20 gives an active target object (CObjectTarget) type 8
+// (a route objective inside its time window), 9 (outside it) or 10 (an ordinary objective); the minimap draws its chevrons
+// for exactly these.
+struct Objective {
+    float pos[3];
+    int type, node;
+    float distance2;  // from the player, squared
+};
+
+// The objectives of the list: route objectives first (8, then 9), then the ordinary ones, each kind nearest first. The positions
+// come from the game's accessor FUN_005E71B0 (thiscall: ECX = the manager, float out[4], index; ret 8, the type in AL): for these
+// types it is the node's position from the navigation table. Main thread only, between frames (the Present hook), like the
+// upkeep of the list.
+int CollectObjectives(Objective* out, int max) {
+    if (!g_accessorOk || !*(volatile u8*)(uintptr_t)kNavLoadedVa) return 0;
+    volatile u32* list = (volatile u32*)(uintptr_t)kSpotListVa;
+    const int n = *(volatile int*)(uintptr_t)kSpotCountVa;
+    if (n <= 0 || n > 0x1000) return 0;  // not a list (yet)
+    const u32 nodes = U(kNavCountVa);
+    float px = g_lastPx, py = g_lastPy, pz = g_lastPz;
+    if (u32 player = PlayerObjectNow()) {
+        px = F(player, 0x58);
+        py = F(player, 0x5C);
+        pz = F(player, 0x60);
+    }
+    int found = 0;
+    for (int i = 0; i < n && found < max; ++i) {
+        const u32 entry = list[i];
+        const u32 node = entry & 0xFFFFu;
+        const int type = (signed char)(entry >> 16);
+        if (node == 0xFFFFu || node >= nodes) continue;  // the waypoint's own entry (also type 10), or no node of this stage
+        if (type != 8 && type != 9 && type != 10) continue;
+        float p[4] = {0.f, 0.f, 0.f, 0.f};
+        const int got = ((SpotPosFn)(uintptr_t)kSiteSpotAccessor.va)((void*)(uintptr_t)kSpotManagerVa, p, i) & 0xFF;
+        if (got != type) continue;
+        const float dx = p[0] - px, dy = p[1] - py, dz = p[2] - pz;
+        Objective o = {{p[0], p[1], p[2]}, type, (int)node, dx * dx + dy * dy + dz * dz};
+        int at = found++;
+        for (; at > 0 && (out[at - 1].type > o.type || (out[at - 1].type == o.type && out[at - 1].distance2 > o.distance2)); --at)
+            out[at] = out[at - 1];
+        out[at] = o;
+    }
+    return found;
+}
+
+constexpr int kMaxObjectives = 16;
+
 }  // namespace
+
+// The waypoint goes to the game's current objective; when it already stands on one, to the next one. False when the map has none.
+bool WaypointToObjective() {
+    if (!g_installed || !g_cfg.waypoint) return false;
+    Objective list[kMaxObjectives];
+    const int n = CollectObjectives(list, kMaxObjectives);
+    if (n == 0) {
+        Log("waypoint: the game's map has no objective point now (types 8, 9, 10), nothing changed");
+        return false;
+    }
+    int pick = 0;
+    if (g_active && g_objNode >= 0)
+        for (int i = 0; i < n; ++i)
+            if (list[i].node == g_objNode) pick = (i + 1) % n;
+    const Objective& o = list[pick];
+    g_x = o.pos[0];
+    g_y = o.pos[1];
+    g_z = o.pos[2];
+    RememberArea();
+    g_objNode = o.node;
+    g_active = true;
+    Log("waypoint: set on the game's objective %d of %d (map point type %d, node %d) at %d %d, %d yards away (area %d)", pick + 1, n,
+        o.type, o.node, (int)g_x, (int)g_z, (int)(Sqrt(o.distance2) * kYardsPerUnit), g_area);
+    return true;
+}
+
+// For the Story page of the menu: how many objective points the game's map has now and the yards to the first one (the one the
+// objective key takes first). -1 = not known (the waypoint is off, or the accessor is not the one of 1.01b).
+int WaypointObjectives(int* yards) {
+    *yards = 0;
+    if (!g_installed || !g_accessorOk) return -1;
+    Objective list[kMaxObjectives];
+    const int n = CollectObjectives(list, kMaxObjectives);
+    if (n) *yards = (int)(Sqrt(list[0].distance2) * kYardsPerUnit);
+    return n;
+}
 
 // Replaces `call 00659B40` (the pause map draw, ECX = the object): the map is drawn, then the waypoint over it, in the same pass.
 __attribute__((naked)) void WaypointMapDrawStub() {
@@ -243,6 +482,41 @@ __attribute__((naked)) void WaypointSpotRebuildStub() {
         ".att_syntax\n");
 }
 
+// Replaces `call 005EE3F0` at 005D4A74, the whole 12h (2D draw) branch of the stage manager's handler: mov ecx,014375F4h / call /
+// pop edi / pop ebx / pop esi / mov ecx,[esp+18Ch] (the stack cookie). FUN_005EE3F0 takes ECX alone and ends in a plain ret
+// (005EE45D). The game's own target icons are drawn first, then the waypoint's beacon, in the same pass and render state. After
+// the call the game uses neither EAX, ECX, EDX nor the flags; everything but EAX (dead before the call too: it holds the index
+// of the handler's jump table, and FUN_005EE3F0 overwrites it at once) is handed back as the game's function left it.
+__attribute__((naked)) void WaypointBeaconStub() {
+    asm volatile(
+        ".intel_syntax noprefix\n"
+        "mov eax, 0x005EE3F0\n"
+        "call eax\n"
+        "pushfd\n"
+        "pushad\n"
+        "call _WaypointBeaconDraw\n"
+        "popad\n"
+        "popfd\n"
+        "ret\n"
+        ".att_syntax\n");
+}
+
+// The game's objective beacon over the waypoint: only when the call and the two icon functions are the ones of 1.01b.
+void InstallWaypointBeacon() {
+    const SiteDef& c = kSiteBeaconCall;
+    if (!BytesMatch(c.va, c.bytes, c.len) || !BytesMatch(kSiteBeaconDraw.va, kSiteBeaconDraw.bytes, kSiteBeaconDraw.len) ||
+        !BytesMatch(kSiteBeaconMove.va, kSiteBeaconMove.bytes, kSiteBeaconMove.len)) {
+        Log("waypoint: the target icon code differs from DP.exe 1.01b, no beacon (the text label stays)");
+        return;
+    }
+    if (!PatchCall(c.va + 5, c.bytes + 5, 5, (const void*)WaypointBeaconStub)) {
+        Log("waypoint: could not patch the target icon draw call at %08X, no beacon (the text label stays)", c.va + 5);
+        return;
+    }
+    g_beaconInstalled = true;
+    Log("waypoint: beacon ready (the game's objective arrows over the waypoint, drawn after the game's own target icons at %08X)", c.va + 5);
+}
+
 // The minimap chevrons and the pause map icon: the accessor hook first (an entry must never be read by the game's own code), then
 // the rebuild calls. Without the accessor nothing is ever added to the list.
 void InstallWaypointSpot() {
@@ -283,8 +557,14 @@ bool InstallWaypoint() {
     }
     if (!PatchCall(s.va, s.bytes, s.len, (const void*)WaypointMapDrawStub)) return false;
     g_installed = true;
+    // checked before our own jump goes in: the objective key calls the accessor, patched or not
+    g_accessorOk = BytesMatch(kSiteSpotAccessor.va, kSiteSpotAccessor.bytes, kSiteSpotAccessor.len);
+    if (!g_accessorOk) Log("waypoint: the map point accessor differs from DP.exe 1.01b, the objective key is off");
     if (g_cfg.waypointMinimap) InstallWaypointSpot();
-    Log("waypoint: ready (F7 sets a waypoint on the map or in the world, Shift+F7 removes it; drawn in the game's font)");
+    if (g_cfg.waypointBeacon) InstallWaypointBeacon();
+    else Log("waypoint: beacon off (Beacon=0), the text label is used");
+    Log("waypoint: ready (F7 sets a waypoint on the map or in the world, Shift+F7 removes it, Ctrl + key %d puts it on the game's objective; drawn in the game's font)",
+        g_cfg.waypointObjectiveKey);
     return true;
 }
 
@@ -302,9 +582,10 @@ void WaypointFrame(void* dev) {
         g_offscreenFrames = 0;
     }
     ++g_frame;
+    TrackOwnBeacon();
     static unsigned lastDraws = 0;
     static int sinceDraw = 100;
-    static bool prevKey = false, prevPad = false;
+    static bool prevKey = false, prevPad = false, prevObjective = false;
     if (g_wpMapDraws != lastDraws) { lastDraws = g_wpMapDraws; sinceDraw = 0; } else if (sinceDraw < 100) ++sinceDraw;
     const bool mapOpen = sinceDraw < 4 && g_wpMapObj;
     const bool inWorld = WorldActive() && !mapOpen && !ui::IsOpen();
@@ -322,10 +603,20 @@ void WaypointFrame(void* dev) {
     const bool key = front && g_cfg.waypointKey && (GetAsyncKeyState(g_cfg.waypointKey) & 0x8000) != 0;
     const bool pad = DsTouchpadDown();
     const bool shift = front && (GetAsyncKeyState(VK_SHIFT) & 0x8000) != 0;
-    const bool press = (key && !prevKey) || (pad && !prevPad);
+    // The objective key counts only with Ctrl held at the moment it goes down. By default it is the waypoint key itself: that
+    // press is then not a waypoint press, whatever is released first afterwards (the edges are taken from the keys alone).
+    const bool objectiveKey = front && g_cfg.waypointObjectiveKey && (GetAsyncKeyState(g_cfg.waypointObjectiveKey) & 0x8000) != 0;
+    const bool toObjective = objectiveKey && !prevObjective && (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
+    const bool press = (key && !prevKey && !(toObjective && g_cfg.waypointObjectiveKey == g_cfg.waypointKey)) || (pad && !prevPad);
     prevKey = key;
     prevPad = pad;
-    if (!press || ui::IsOpen()) return;
+    prevObjective = objectiveKey;
+    if (ui::IsOpen()) return;
+    if (toObjective) {
+        if (mapOpen || inWorld) WaypointToObjective();
+        return;
+    }
+    if (!press) return;
     if (shift) {
         g_active = false;
         Log("waypoint: removed");
@@ -340,6 +631,7 @@ void WaypointFrame(void* dev) {
             g_z = cz;
             g_y = g_haveLast ? g_lastPy : 0.f;
             RememberArea();
+            g_objNode = -1;
             g_active = true;
             Log("waypoint: set on the map at %d %d (area %d, floor %d)", (int)g_x, (int)g_z, g_area, g_floor);
         }
@@ -354,6 +646,7 @@ void WaypointFrame(void* dev) {
             g_z = F(player, 0x60);
         }
         RememberArea();
+        g_objNode = -1;
         g_active = true;
         Log("waypoint: set here at %d %d (area %d, floor %d)", (int)g_x, (int)g_z, g_area, g_floor);
     }
@@ -373,13 +666,24 @@ extern "C" void __cdecl WaypointSpotUpkeep() {
     volatile u32* list = (volatile u32*)(uintptr_t)kSpotListVa;
     const int n = *count;
     if (n < 0 || n > 0x1000) return;  // not a list (yet)
+    // The waypoint's own entry, and whether the game's list already has the place: a waypoint put on an objective (the objective
+    // key) needs no second point while the game's own point of that node is in the list.
     int found = -1;
-    for (int i = 0; i < n; ++i)
-        if ((list[i] & 0xFFFFu) == 0xFFFFu) { found = i; break; }
+    bool gameHasIt = false;
+    const int objNode = g_objNode;
+    for (int i = 0; i < n; ++i) {
+        const u32 id = list[i] & 0xFFFFu;
+        const int type = (signed char)(list[i] >> 16);
+        if (id == 0xFFFFu) {
+            if (found < 0) found = i;
+        } else if ((int)id == objNode && type >= 8 && type <= 10) {
+            gameHasIt = true;
+        }
+    }
     // g_haveLast: a game world has been played (the list belongs to a stage)
     u32 g = GameManager();
     const bool sameArea = g && *(volatile int*)(uintptr_t)(g + kAreaOff) == g_area;
-    const bool want = g_active && g_cfg.waypoint && g_cfg.waypointMinimap && g_haveLast && sameArea;
+    const bool want = g_active && g_cfg.waypoint && g_cfg.waypointMinimap && g_haveLast && sameArea && !gameHasIt;
     if (want && found < 0 && n < kSpotGuard) {
         list[n] = kSpotEntry | ((u32)(u8)g_floor << 24);
         *count = n + 1;
@@ -387,6 +691,35 @@ extern "C" void __cdecl WaypointSpotUpkeep() {
         for (int i = found; i + 1 < n; ++i) list[i] = list[i + 1];
         *count = n - 1;
     }
+}
+
+// The game's objective beacon over the waypoint. Called once per frame from the game's 2D pass (WaypointBeaconStub), on the game's
+// thread, right after the game drew its own target icons with the same function. The icon is the game's type 0: the red arrows of
+// GOAL.XPC, one to four by the distance, bobbing, with "%d Yards" under them in the game's font (green arrows within 15 yards, as
+// the label turns green there).
+extern "C" void __cdecl WaypointBeaconDraw() {
+    using namespace ufx;
+    const bool again = g_beaconPassSeen && g_beaconPass == g_frame;  // a second pass in one frame: the bobbing runs once per frame
+    g_beaconPass = g_frame;
+    g_beaconPassSeen = true;
+    if (again || g_inWorker || !g_active || !g_showWorld || !g_cfg.waypoint) return;
+    if (!GameIdle()) return;  // the test FUN_005EE3F0 makes before the game's own icons (005EE3F3..005EE40D)
+    if (g_ownIcon != kOwnNone || !BeaconInView()) return;  // the game's own arrows stand there
+    u32 texture;
+    const u32 g = GameManager();
+    if (!g || !BeaconReady(&texture)) return;
+    // the size FUN_005B19A0 gives an objective's icon: 128 while FUN_004508D0 says so (mask 2 of CGame+8C5ECh), else 102
+    const float size = (U(g + kGameFlagsOff) & 2u) ? 128.f : 102.f;
+    const u32 player = PlayerObjectNow();
+    const float* colour = player && YardsTo(F(player, 0x58), F(player, 0x5C), F(player, 0x60)) < 15 ? kGreen : kBeaconRed;
+    for (int i = 0; i < 4; ++i) g_icon.rgba[i] = colour[i];
+    const float pos[3] = {g_x, g_y, g_z};
+    g_icon.texture = texture;  // looked up in this frame, and taken away again below: the icon never keeps the pointer
+    g_inWorker = true;         // FUN_005B1120 prints through FUN_0045C540: the hooked text entry must not draw the label from inside
+    ((IconMoveFn)(uintptr_t)kIconMoveFn)(&g_icon, pos);
+    ((IconDrawFn)(uintptr_t)kIconDrawFn)(&g_icon, size);
+    g_inWorker = false;
+    g_icon.texture = 0;
 }
 
 // After the pause map is drawn (same pass, game font): a + in the middle (where F7 puts the waypoint) and an X on the waypoint.
