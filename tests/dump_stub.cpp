@@ -215,6 +215,35 @@ int main(int argc, char** argv) {
     Check(memcmp(th + 17, td.bytes, td.len) == 0, "text draw hook", "replayed entry bytes");
     Check(Rel32To(th, ehVa, 17 + td.len, td.va + td.len), "text draw hook", "jmp back");
 
+    // Resource read guard: the retry guard with its two ways out, and the stub that sets the output room of inflate().
+    uint8_t rg[48], ir[32];
+    const uint32_t rgVa = 0xC0000000, rgWorker = 0xC0001000, irVa = 0xC0000100, irWorker = 0xC0001100;
+    size_t nrg = BuildRetryGuard(rg, rgVa, rgWorker, kArchiveRetryTarget, kSiteArchiveMissing.va);
+    size_t nir = BuildInflateRoomStub(ir, irVa, irWorker, kInflateRoomFirstReturn);
+    printf("resource guard stubs %zu %zu bytes\n", nrg, nir);
+    Check(nrg == 28, "retry guard", "size 28 (the module allocates 32)");
+    Check(Rel32To(rg, rgVa, 3, rgWorker), "retry guard", "call worker");
+    Check(Rel8To(rg, 14, 22), "retry guard", "jz giveup");
+    Check(Rel32To(rg, rgVa, 17, kArchiveRetryTarget), "retry guard", "jmp retry");
+    Check(Rel32To(rg, rgVa, 23, kSiteArchiveMissing.va), "retry guard", "jmp missing exit");
+    Check(rg[0] == 0x9C && rg[1] == 0x60 && rg[13] == 0x61 && rg[16] == 0x9D && rg[22] == 0x9D, "retry guard", "pushfd/pushad, popad, popfd on both ways out");
+    // the jumps it replaces went where it sends a retry
+    Check(Rel32To(kSiteArchiveRetry.bytes, kSiteArchiveRetry.va, 0, kArchiveRetryTarget), "retry guard", "archive reader: the original jump target");
+    Check(Rel32To(kSiteLooseRetry.bytes, kSiteLooseRetry.va, 0, kLooseRetryTarget), "retry guard", "loose file reader: the original jump target");
+    Check(nir == 21, "inflate room", "size 21 (the module allocates 32)");
+    Check(Rel32To(ir, irVa, 3, irWorker), "inflate room", "call worker");
+    Check(ir[11] == 0x89 && ir[12] == 0x45 && ir[13] == 0xD4 && ir[14] == 0x61 && ir[15] == 0x9D, "inflate room", "mov [ebp-2Ch],eax / popad / popfd");
+    Check(Rel32To(ir, irVa, 16, kInflateRoomFirstReturn), "inflate room", "jmp back");
+    // both replaced instructions are `mov dword [ebp-2Ch], 20000h`, and execution continues right behind them
+    const SiteDef* const roomSites[2] = {&kSiteInflateRoomFirst, &kSiteInflateRoomRefill};
+    for (const SiteDef* s : roomSites)
+        Check(s->bytes[0] == 0xC7 && s->bytes[1] == 0x45 && s->bytes[2] == 0xD4 && Rd32(s->bytes + 3) == kInflateRoomStep, "inflate room", "replaced instruction");
+    Check(kInflateRoomFirstReturn == kSiteInflateRoomFirst.va + kSiteInflateRoomFirst.len &&
+          kInflateRoomRefillReturn == kSiteInflateRoomRefill.va + kSiteInflateRoomRefill.len, "inflate room", "return addresses");
+    // the size of the caller's buffer: the displacement of the `mov ecx,[ebp+disp32]` in front of its operator new
+    Check((int32_t)Rd32(kSiteArchiveBufferSize.bytes + 2) == kArchiveUnpackedSizeOffset, "inflate room", "archive reader: buffer size offset");
+    Check((int32_t)Rd32(kSiteLooseBufferSize.bytes + 2) == kLooseUnpackedSizeOffset, "inflate room", "loose file reader: buffer size offset");
+
     printf("%s\n", g_failures ? "STUB CHECKS FAILED" : "all stub checks passed");
     return g_failures ? 1 : 0;
 }

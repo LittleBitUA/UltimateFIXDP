@@ -421,4 +421,46 @@ inline size_t BuildNavNullGuard(uint8_t* out, uint32_t va, uint32_t continueVa) 
     return (size_t)(p - out);
 }
 
+// Resource read guard: stands in for the `jmp retry` a reader takes after a record did not unpack. The worker (cdecl, one
+// argument: the reader's frame pointer) answers non-zero for "read it again" (the original jump) and 0 for "give up", which
+// continues at the reader's own exit for a missing resource. Every register and the flags are as the game left them on
+// both ways out (popad does not touch the flags, so the test result survives it):
+//     pushfd / pushad / push ebp / call worker / add esp,4 / test eax,eax / popad / jz giveup
+//     popfd / jmp retry / giveup: popfd / jmp missing
+inline size_t BuildRetryGuard(uint8_t* out, uint32_t va, uint32_t workerVa, uint32_t retryVa, uint32_t missingVa) {
+    uint8_t* p = out;
+    *p++ = 0x9C;                            // pushfd
+    *p++ = 0x60;                            // pushad
+    *p++ = 0x55;                            // push ebp
+    *p++ = 0xE8;
+    StubPut32(p, workerVa - (va + (uint32_t)(p - out) + 4));  // call worker
+    *p++ = 0x83; *p++ = 0xC4; *p++ = 0x04;  // add esp, 4
+    *p++ = 0x85; *p++ = 0xC0;               // test eax, eax
+    *p++ = 0x61;                            // popad
+    *p++ = 0x74; *p++ = 0x06;               // jz giveup
+    *p++ = 0x9D;                            // popfd
+    StubJmp(p, out, va, retryVa);
+    *p++ = 0x9D;                            // giveup: popfd
+    StubJmp(p, out, va, missingVa);
+    return (size_t)(p - out);
+}
+
+// Resource read guard: stands in for `mov dword [ebp-2Ch], 20000h` (z_stream.avail_out) in FUN_006AF5B0. The worker
+// (cdecl, one argument: that function's frame pointer) returns the room to give; registers and flags are preserved:
+//     pushfd / pushad / push ebp / call worker / add esp,4 / mov [ebp-2Ch],eax / popad / popfd / jmp back
+inline size_t BuildInflateRoomStub(uint8_t* out, uint32_t va, uint32_t workerVa, uint32_t returnVa) {
+    uint8_t* p = out;
+    *p++ = 0x9C;                            // pushfd
+    *p++ = 0x60;                            // pushad
+    *p++ = 0x55;                            // push ebp
+    *p++ = 0xE8;
+    StubPut32(p, workerVa - (va + (uint32_t)(p - out) + 4));  // call worker
+    *p++ = 0x83; *p++ = 0xC4; *p++ = 0x04;  // add esp, 4
+    *p++ = 0x89; *p++ = 0x45; *p++ = 0xD4;  // mov [ebp-2Ch], eax
+    *p++ = 0x61;                            // popad
+    *p++ = 0x9D;                            // popfd
+    StubJmp(p, out, va, returnVa);
+    return (size_t)(p - out);
+}
+
 }  // namespace ufx

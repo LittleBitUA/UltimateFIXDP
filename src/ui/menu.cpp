@@ -344,6 +344,9 @@ Item g_pageFixes[] = {
      {L"Гра опитувала ґеймпад зі сміттям у пам'яті; це заморожувало стіки.", L"The game polled the joystick with garbage in memory; this froze the sticks."}, NOTR},
     {{L"Alt+Tab без зависання", L"Alt+Tab without freezing"}, &g_cfg.resetRefreshFix, kBool, 0, 1, 1, true, L"Fixes", L"ResetRefreshFix", nullptr, nullptr,
      {L"Частота оновлення не копіюється у параметри Reset: гра не вішається після Alt+Tab.", L"The refresh rate is not copied into the Reset parameters: the game does not hang after Alt+Tab."}, NOTR},
+    {{L"Захист читання файлів гри", L"Game file read guard"}, &g_cfg.resourceReadGuard, kBool, 0, 1, 1, true, L"Fixes", L"ResourceReadGuard", nullptr, nullptr,
+     {L"Запакований файл гри, який не розпаковується (пошкоджений або диск його не читає), гра читала знову й знову без кінця: мовчазне зависання на екрані завантаження. З цим пунктом спроб щонайбільше 5, далі файл вважається відсутнім, а його назва потрапляє в журнал; гра може піти далі без нього або зупинитися зі звітом про збій. Розпаковування також не виходить за межі відведеної пам'яті. Цілі файли читаються так само, як раніше. У грі ще не перевірено; у SafeMode вимкнено.",
+      L"A packed game file that does not unpack (damaged, or the disk cannot read it) was read again and again without end: a silent hang on a loading screen. With this on there are 5 attempts at most, then the file counts as missing and its name goes to the log; the game may go on without it or stop with a crash report. Unpacking also cannot write past its buffer. Files that are fine are read exactly as before. Not yet checked in the game; off in SafeMode."}, NOTR},
     {{L"Пропускати заставки", L"Skip the intro"}, &g_cfg.skipIntro, kBool, 0, 1, 1, true, L"Fixes", L"SkipIntro", nullptr, nullptr,
      {L"Одразу до титульного екрана.", L"Straight to the title screen."}, NOTR},
     {{L"Мова: примусово слот US (для перекладу)", L"Language: force the US slot (for translations)"}, &g_cfg.forceUsSlot, kBool, 0, 1, 1, true, L"Language", L"ForceUsSlot", nullptr, nullptr,
@@ -519,6 +522,34 @@ Item g_pageCheats[] = {
      NOTR, kOneValue, 1, kCameraNames, nullptr, false},
 };
 
+// ---- Diagnostics: the long-session hint and two buttons (the folder with the logs, a report file).
+int g_diagPick = 0;
+const Tr kOpenNames[1] = {{L"Відкрити", L"Open"}};
+const Tr kWriteNames[1] = {{L"Записати", L"Write"}};
+
+void FormatHours(int v, wchar_t* out) {
+    if (v < 1) lstrcpyW(out, g_cfg.language == 1 ? L"Off" : L"Вимк.");
+    else wsprintfW(out, g_cfg.language == 1 ? L"%d h" : L"%d год", v);
+}
+
+void DoOpenLogs() { g_diagPick = 0; OpenLogFolder(); }
+void DoReport() { g_diagPick = 0; WriteDiagnosticReport(); }
+
+Item g_pageDiag[] = {
+    {{L"Нагадування про довгу сесію", L"Long session reminder"}, &g_cfg.sessionReminderHours, kInt, 0, 24, 1, false, L"General", L"SessionReminderHours", nullptr, nullptr,
+     {L"Через стільки годин гри мод один раз покаже вгорі екрана коротку підказку: збережіться й перезапустіть гру, коли буде зручно. Довгі сесії цієї гри, за відгуками, бувають нестабільними; причини в коді гри ми не підтвердили. Та сама підказка з'явиться раніше, якщо звукова система гри зайняла 48 зі своїх 64 комірок завантаження (гра не перевіряє, чи вони скінчилися; кількість щогодини пишеться в журнал). «Вимк.»: ніколи. Змінюється одразу.",
+      L"After this many hours of play the mod shows a short hint at the top of the screen, once: save, and restart the game when convenient. Long sessions of this game are reported to become unstable; we did not confirm a cause in its code. The same hint comes earlier if the game's sound system holds 48 of its 64 load slots (the game does not check for running out; the number is logged every hour). Off: never. Changes at once."},
+     NOTR, nullptr, 0, nullptr, FormatHours},
+    {{L"Тека журналів", L"Log folder"}, &g_diagPick, kInt, 0, 1, 1, false, nullptr, nullptr, DoOpenLogs, nullptr,
+     {L"Відкриває в Провіднику теку UltimateFix поруч із DP.exe: журнали ufx.log і ufx-prev.log (попередній запуск), звіти про збої crash_*.dmp, резервні копії збережень, знімки екрана, діагностичний звіт. Гра при цьому згорнеться або сховається за вікном Провідника.",
+      L"Opens the UltimateFix folder next to DP.exe in Explorer: the logs ufx.log and ufx-prev.log (the previous run), crash dumps crash_*.dmp, save backups, screenshots, the diagnostic report. The game is minimised or goes behind the Explorer window."},
+     NOTR, kOneValue, 1, kOpenNames, nullptr, false},
+    {{L"Діагностичний звіт", L"Diagnostic report"}, &g_diagPick, kInt, 0, 1, 1, false, nullptr, nullptr, DoReport, nullptr,
+     {L"Записує файл UltimateFix\\ufx_report.txt: версія мода, Windows, пам'ять, DXVK чи звичайний Direct3D 9, прапор великої адресації (LAA), які місця гри змінено, а які лишилися як були, і ваші налаштування. У файлі немає імені користувача, назви комп'ютера й назв тек. Додавайте його разом з ufx.log, коли повідомляєте про помилку.",
+      L"Writes the file UltimateFix\\ufx_report.txt: the mod version, Windows, memory, DXVK or plain Direct3D 9, the large address flag (LAA), which places of the game are patched and which are untouched, and your settings. The file holds no user name, computer name or folder names. Attach it together with ufx.log when you report a problem."},
+     NOTR, kOneValue, 1, kWriteNames, nullptr, false},
+};
+
 struct Page {
     Tr title;
     Tr subtitle;
@@ -533,7 +564,7 @@ Page g_pages[] = {
     {{L"Керування", L"Controls"}, {L"Ґеймпад, стіки, вібрація", L"Gamepad, sticks, vibration"}, g_pageInput, (int)(sizeof(g_pageInput) / sizeof(Item)), false},
     {{L"Гра і світ", L"Game and world"}, {L"Складність, бій, дальність, мапа", L"Difficulty, combat, distance, map"}, nullptr, 0, false},
     {{L"Фоторежим і читкоди", L"Photo mode and cheats"}, {L"Камера, фільтри, знімок, гроші, час, погода", L"Camera, filters, picture, money, time, weather"}, nullptr, 0, false},
-    {{L"Виправлення", L"Fixes"}, {L"Час, помилки гри, мова, захист dp.sav", L"Time, game bugs, language, protection of dp.sav"}, nullptr, 0, false},
+    {{L"Виправлення", L"Fixes"}, {L"Час, помилки гри, мова, захист dp.sav, діагностика", L"Time, game bugs, language, protection of dp.sav, diagnostics"}, nullptr, 0, false},
     {{L"Про мод", L"About"}, {L"Автор і подяки", L"Author and credits"}, nullptr, 0, true},
 };
 constexpr int kPageCount = (int)(sizeof(g_pages) / sizeof(Page));
@@ -547,7 +578,7 @@ struct PageSource {
 constexpr int Count(int bytes) { return bytes / (int)sizeof(Item); }
 constexpr int kScreenMax = Count(sizeof(g_pageDisplay)) + Count(sizeof(g_pageGraphics));
 constexpr int kGameMax = Count(sizeof(g_pageWorld)) + Count(sizeof(g_pageGameplay)) + Count(sizeof(g_pageMapItems));
-constexpr int kFixesMax = Count(sizeof(g_pageFixes)) + Count(sizeof(g_pageSave));
+constexpr int kFixesMax = Count(sizeof(g_pageFixes)) + Count(sizeof(g_pageSave)) + Count(sizeof(g_pageDiag));
 constexpr int kPhotoMax = Count(sizeof(g_pagePhoto)) + Count(sizeof(g_pageCheats));
 alignas(Item) unsigned char g_photoStore[kPhotoMax * sizeof(Item)];
 alignas(Item) unsigned char g_screenStore[kScreenMax * sizeof(Item)];
@@ -590,14 +621,15 @@ void MergePages() {
     const PageSource game[3] = {{g_pageWorld, (int)(sizeof(g_pageWorld) / sizeof(Item)), {L"Світ", L"World"}},
                                 {g_pageGameplay, (int)(sizeof(g_pageGameplay) / sizeof(Item)), {L"Ґеймплей", L"Gameplay"}},
                                 {g_pageMapItems, (int)(sizeof(g_pageMapItems) / sizeof(Item)), {L"Мапа", L"Map"}}};
-    const PageSource fixes[2] = {{g_pageFixes, (int)(sizeof(g_pageFixes) / sizeof(Item)), {L"Виправлення", L"Fixes"}},
-                                 {g_pageSave, (int)(sizeof(g_pageSave) / sizeof(Item)), {L"Збереження", L"Saves"}}};
+    const PageSource fixes[3] = {{g_pageFixes, (int)(sizeof(g_pageFixes) / sizeof(Item)), {L"Виправлення", L"Fixes"}},
+                                 {g_pageSave, (int)(sizeof(g_pageSave) / sizeof(Item)), {L"Збереження", L"Saves"}},
+                                 {g_pageDiag, (int)(sizeof(g_pageDiag) / sizeof(Item)), {L"Діагностика", L"Diagnostics"}}};
     const PageSource photo[2] = {{g_pagePhoto, (int)(sizeof(g_pagePhoto) / sizeof(Item)), {L"Фоторежим", L"Photo mode"}},
                                  {g_pageCheats, (int)(sizeof(g_pageCheats) / sizeof(Item)), {L"Читкоди", L"Cheats"}}};
     MergeInto(g_pages[0], g_screenStore, screen, 2);
     MergeInto(g_pages[2], g_gameStore, game, 3);
     MergeInto(g_pages[kPhotoPage], g_photoStore, photo, 2);
-    MergeInto(g_pages[4], g_fixesStore, fixes, 2);
+    MergeInto(g_pages[4], g_fixesStore, fixes, 3);
 }
 
 int g_page = 0;

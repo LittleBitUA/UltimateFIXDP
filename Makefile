@@ -7,6 +7,7 @@ HOSTCXX  ?= c++
 OUT      := build
 SRC      := src/main.cpp src/proxy.cpp src/log.cpp src/config.cpp src/pe.cpp src/patch.cpp src/rt.cpp \
             src/modules/qpc_time.cpp src/modules/zero_delta.cpp src/modules/saves.cpp src/modules/small_fixes.cpp src/modules/display.cpp src/modules/output_resolution.cpp src/modules/render_scale.cpp src/modules/world_distance.cpp src/modules/sony_layout.cpp src/d3d/trace.cpp src/modules/graphics_tweaks.cpp src/modules/gameplay.cpp src/modules/frame_pacer.cpp src/modules/camera_trace.cpp src/modules/input_auto.cpp src/modules/stick_profile.cpp src/modules/input_extras.cpp src/modules/crash_handler.cpp src/modules/world_extra.cpp src/modules/vehicle_triggers.cpp src/modules/vibration.cpp src/modules/xinput_input.cpp src/modules/dualsense.cpp src/modules/dualsense_out.cpp src/modules/adaptive_triggers.cpp src/modules/crash_guards.cpp src/modules/map_fix.cpp src/modules/freecam.cpp src/modules/ssao.cpp src/modules/blur_look.cpp src/modules/combat_strafe.cpp src/modules/world_alt3d.cpp src/modules/phys_freeze.cpp src/modules/cheats.cpp src/modules/launcher_install.cpp src/modules/cpu_tweaks.cpp src/modules/waypoint.cpp src/modules/texture_override.cpp src/ui/overlay.cpp src/ui/menu.cpp
+SRC      += src/modules/resource_guard.cpp src/modules/diagnostics.cpp
 CXXFLAGS := -std=c++17 -O2 -Wall -Wextra -ffreestanding -fno-builtin -fno-exceptions -fno-rtti \
             -fno-threadsafe-statics -fno-asynchronous-unwind-tables -fno-unwind-tables \
             -fno-stack-protector -fno-tree-loop-distribute-patterns -fno-ident
@@ -64,6 +65,17 @@ test: $(OUT)/verify_sites $(OUT)/dump_stub $(OUT)/test_pacer $(OUT)/test_hash $(
 	$(OUT)/test_dsreport
 	$(OUT)/verify_sites "$(DPEXE)"
 	$(OUT)/dump_stub $(OUT)/zero_delta_stub.bin $(OUT)/scale_thunk.bin $(OUT)/backbuffer_thunk.bin $(OUT)/hud_stub.bin $(OUT)/diff_store.bin $(OUT)/title_dialog.bin $(OUT)/aim_h.bin $(OUT)/aim_v.bin $(OUT)/stick_orig.bin $(OUT)/aim_shape.bin $(OUT)/vis_bridge.bin $(OUT)/trig1.bin $(OUT)/trig2.bin $(OUT)/trig3.bin $(OUT)/nav1.bin $(OUT)/nav2.bin $(OUT)/cambridge.bin $(OUT)/strafebridge.bin $(OUT)/entryhook.bin
+
+# The resource read guard's decisions, the unpack loop against the host's zlib (runs before the other tests).
+$(OUT)/test_resguard: tests/test_resguard.cpp src/resguard.h
+	@mkdir -p $(OUT)
+	$(HOSTCXX) -std=c++17 -Isrc -o $@ tests/test_resguard.cpp -lz
+
+test_resguard: $(OUT)/test_resguard
+	$(OUT)/test_resguard
+
+test: test_resguard
+.PHONY: test_resguard
 
 clean:
 	rm -rf $(OUT)

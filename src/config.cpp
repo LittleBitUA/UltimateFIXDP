@@ -18,6 +18,11 @@ static const char kDefaultIni[] =
     "NoPowerThrottling=1\r\n"
     "; 1 = on a processor with performance and efficiency cores the game runs only on the performance cores (test for a low frame rate).\r\n"
     "PerformanceCoresOnly=0\r\n"
+    "; After this many hours of one session the mod shows a short hint once (top of the screen, 15 seconds): save, and restart the game\r\n"
+    "; when convenient. Long sessions of this game are reported to become unstable; no cause was confirmed in its code. The same hint\r\n"
+    "; comes earlier when 48 of the game's 64 sound load requests are in use (the game does not check for running out of them; the\r\n"
+    "; number is logged every hour). 0 = never. 0..24. Changes at once (F10 -> Fixes -> Diagnostics).\r\n"
+    "SessionReminderHours=3\r\n"
     "\r\n"
     "[Time]\r\n"
     "; QueryPerformanceCounter relative to the start of the game. Fixes the slowdown that\r\n"
@@ -62,6 +67,11 @@ static const char kDefaultIni[] =
     "\r\n"
     "; Windowed Reset() after Alt+Tab no longer fails (the game used to freeze).\r\n"
     "ResetRefreshFix=1\r\n"
+    "; A packed game file that does not unpack (damaged, or the disk cannot read it) was read again without end: a silent hang on a\r\n"
+    "; loading screen. 1 = it is read 5 times at most, then reported to the game as missing and named in the log; the game may then\r\n"
+    "; go on without it or stop with a crash report, but it does not hang silently. Unpacking also stops at the end of its buffer\r\n"
+    "; instead of writing past it. Files that unpack are read exactly as before. Off in SafeMode. Restart needed.\r\n"
+    "ResourceReadGuard=1\r\n"
     "\r\n"
     "[Display]\r\n"
     "; Borderless window over the whole monitor. The back buffer (1280x720, or OutputWidth) is presented as it is when it has the size\r\n"
@@ -594,6 +604,10 @@ void LoadConfig(const wchar_t* ini) {
     if (g_cfg.interiorVisibility < 0) g_cfg.interiorVisibility = 0;
     if (g_cfg.interiorVisibility > 2) g_cfg.interiorVisibility = 2;
     g_cfg.crashGuards = (int)GetPrivateProfileIntW(L"Debug", L"CrashGuards", 1, ini);
+    g_cfg.resourceReadGuard = (int)GetPrivateProfileIntW(L"Fixes", L"ResourceReadGuard", 1, ini);
+    g_cfg.sessionReminderHours = (int)GetPrivateProfileIntW(L"General", L"SessionReminderHours", 3, ini);
+    if (g_cfg.sessionReminderHours < 0) g_cfg.sessionReminderHours = 0;
+    if (g_cfg.sessionReminderHours > 24) g_cfg.sessionReminderHours = 24;
     g_cfg.photoSuitSet = 1;
     g_cfg.cheatClockSpeed = 10;
     if (g_cfg.safeMode) {  // one switch to find what broke the picture or the camera: everything added lately is off (the file is not changed)

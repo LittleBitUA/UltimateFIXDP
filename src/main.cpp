@@ -139,6 +139,7 @@ static void Startup() {
     if (InstallGameplay()) ++on;
     if (InstallStickProfile()) ++on;
     if (g_cfg.crashGuards && InstallCrashGuards()) ++on;
+    if (g_cfg.resourceReadGuard && !g_cfg.safeMode && InstallResourceGuard()) ++on;
     if (g_cfg.mapFix && InstallMapFix()) ++on;
     if ((g_cfg.textureOverride || g_cfg.dumpTextures || g_cfg.glyphTheme) && InstallTextureOverride()) ++on;
     if (g_cfg.nativeDualSense && InstallDualSense()) ++on;
