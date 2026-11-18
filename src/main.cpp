@@ -120,6 +120,7 @@ static void Startup() {
         }
     }
     if (g_cfg.crashDump && InstallCrashHandler()) ++on;
+    if (InstallAudioGuard()) ++on;  // always: it only acts on values that would break the sound
     if (g_cfg.relativeQpc && InstallQpcTime()) ++on;
     if (InstallFramePacer()) ++on;
     if (g_cfg.zeroDeltaGuard && InstallZeroDelta()) ++on;

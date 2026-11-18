@@ -54,11 +54,16 @@ $(OUT)/test_pacer: tests/test_pacer.cpp src/pacer.h
 	@mkdir -p $(OUT)
 	$(HOSTCXX) -std=c++17 -Isrc -o $@ tests/test_pacer.cpp
 
+$(OUT)/test_surround: tests/test_surround.cpp src/surround.h
+	@mkdir -p $(OUT)
+	$(HOSTCXX) -std=c++17 -Isrc -o $@ tests/test_surround.cpp
+
 $(OUT)/dump_stub: tests/dump_stub.cpp src/stubs.h src/sites.h
 	@mkdir -p $(OUT)
 	$(HOSTCXX) -std=c++17 -Isrc -o $@ tests/dump_stub.cpp
 
-test: $(OUT)/verify_sites $(OUT)/dump_stub $(OUT)/test_pacer $(OUT)/test_hash $(OUT)/test_dsreport
+test: $(OUT)/verify_sites $(OUT)/dump_stub $(OUT)/test_pacer $(OUT)/test_hash $(OUT)/test_dsreport $(OUT)/test_surround
+	$(OUT)/test_surround
 	$(OUT)/test_pacer
 	$(OUT)/test_hash
 	$(OUT)/test_dsreport
