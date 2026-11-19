@@ -180,6 +180,9 @@ static const char kDefaultIni[] =
     "ShadowBiasFix=1\r\n"
     "; 1 = world textures stored without mipmaps get them built when they load: far textures stop shimmering. Restart needed.\r\n"
     "GenerateMips=1\r\n"
+    "; A photo mode filter applied all the time: 0 none, 1 warm, 2 cold, 3 B&W, 4 cinema, 5 vintage, 6 sepia, 7 noir, 8 film,\r\n"
+    "; 9 bleach bypass, 10 dream, 11 VHS, 12 night, 13 fog, 14..17 your presets Mine 1..4 ([PhotoPresets]). Changes at once.\r\n"
+    "GameLook=0\r\n"
     "; The PC port darkens the picture by 0.85 (and 0.75 more in one cutscene state); the console did not.\r\n"
     "; 1 = remove the factors (about 15% brighter). Changes at once.\r\n"
     "XboxExposure=0\r\n"
@@ -731,6 +734,8 @@ void LoadConfig(const wchar_t* ini) {
     if (g_cfg.nearPlane > 200) g_cfg.nearPlane = 200;
     g_cfg.shadowBiasFix = GetPrivateProfileIntW(L"Graphics", L"ShadowBiasFix", 1, ini) ? 1 : 0;
     g_cfg.generateMips = GetPrivateProfileIntW(L"Graphics", L"GenerateMips", 1, ini) ? 1 : 0;
+    g_cfg.gameLook = (int)GetPrivateProfileIntW(L"Graphics", L"GameLook", 0, ini);
+    if (g_cfg.gameLook < 0 || g_cfg.gameLook > 17) g_cfg.gameLook = 0;
     if (g_cfg.gameFov < 70) g_cfg.gameFov = 70;
     if (g_cfg.gameFov > 150) g_cfg.gameFov = 150;
     if (g_cfg.anisotropy < 1) g_cfg.anisotropy = 1;

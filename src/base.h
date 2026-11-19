@@ -89,6 +89,7 @@ struct Config {
     int scalePostBuffers;    // also enlarge the blur/bloom storage buffers with the scene
     int anisotropy;          // maximum anisotropic filtering, 1..16 (the game uses 8)
     int nearPlane;           // near plane of the play camera in tenths (game 10 = 1.0), 10..60: depth precision far away
+    int gameLook;            // a photo filter applied all the time (0 = none), [Graphics] GameLook
     int generateMips;        // build the mipmaps of world textures stored without them (far shimmer), at load
     int shadowBiasFix;       // more depth bias on the two far sun shadow cascades (crawling stripes far away)
     int gameFov;             // field of view in play, percent of the game's own (100 = unchanged), 70..150
@@ -384,7 +385,8 @@ void PerfOverlayFrame(void* device, double fps, double frameMs, double presentMs
 void FrameStatsPush(double frameMs);  // one finished frame for the graph
 void FrameStatsPanel(void* device, double totalMs, double gameMs, double physicsMs, double presentMs, double worstMs, double busyMs);
 bool PhotoPageOpen();  // the menu is open on the photo mode page
-void PhotoLookReset();  // menu.cpp: the filter and every slider of the look back to none (own presets stay in the ini)
+void PhotoLookReset();
+bool GameLookValues(int* out);  // menu.cpp: the in-game look in the order of the photo sliders (11 values), false = none  // menu.cpp: the filter and every slider of the look back to none (own presets stay in the ini)
 void ScreenshotFrame(void* device);
 void ReleasePostResources();
 }  // namespace ui

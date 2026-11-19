@@ -764,18 +764,24 @@ void FinalImagePass(void* dev, void** shader, bool* failed, const char* name, co
 }
 
 void ColorFrame(void* dev) {
-    if (!g_cfg.photoActive && !PhotoPageOpen()) return;  // the filters belong to photo mode: the camera flies, or its page is open for a preview
-    if (!g_cfg.photoBright && !g_cfg.photoContrast && !g_cfg.photoSat && !g_cfg.photoVignette && !g_cfg.photoTemp && !g_cfg.photoTint &&
-        !g_cfg.photoSepia && !g_cfg.photoFade && !g_cfg.photoGrain && !g_cfg.photoAberration && !g_cfg.photoBars)
+    // photo mode (the camera flies, or its page is open for a preview): its sliders; otherwise the in-game look, if one is chosen
+    int v[11];
+    if (g_cfg.photoActive || PhotoPageOpen()) {
+        const int* src[11] = {&g_cfg.photoBright, &g_cfg.photoContrast, &g_cfg.photoSat, &g_cfg.photoVignette, &g_cfg.photoTemp, &g_cfg.photoTint,
+                              &g_cfg.photoSepia, &g_cfg.photoFade, &g_cfg.photoGrain, &g_cfg.photoAberration, &g_cfg.photoBars};
+        for (int i = 0; i < 11; ++i) v[i] = *src[i];
+    } else if (!ui::GameLookValues(v)) {
         return;
+    }
+    bool any = false;
+    for (int i = 0; i < 11; ++i) any = any || v[i] != 0;
+    if (!any) return;
     static u32 frame = 0;
     ++frame;
-    const float t = (float)g_cfg.photoTemp / 100.0f, m = (float)g_cfg.photoTint / 100.0f;  // warm +, magenta +
-    const float extra[16] = {1.0f + 0.12f * t + 0.04f * m, 1.0f - 0.08f * m, 1.0f - 0.12f * t + 0.04f * m, (float)g_cfg.photoVignette / 100.0f,
-                             (float)g_cfg.photoBright / 200.0f, 1.0f + (float)g_cfg.photoContrast / 100.0f,
-                             1.0f + (float)g_cfg.photoSat / 100.0f, (float)g_cfg.photoSepia / 100.0f,
-                             (float)g_cfg.photoFade / 100.0f, (float)g_cfg.photoGrain / 100.0f, (float)g_cfg.photoAberration / 10.0f,
-                             (float)g_cfg.photoBars / 100.0f * 0.12f,
+    const float t = (float)v[4] / 100.0f, m = (float)v[5] / 100.0f;  // warm +, magenta +
+    const float extra[16] = {1.0f + 0.12f * t + 0.04f * m, 1.0f - 0.08f * m, 1.0f - 0.12f * t + 0.04f * m, (float)v[3] / 100.0f,
+                             (float)v[0] / 200.0f, 1.0f + (float)v[1] / 100.0f, 1.0f + (float)v[2] / 100.0f, (float)v[6] / 100.0f,
+                             (float)v[7] / 100.0f, (float)v[8] / 100.0f, (float)v[9] / 10.0f, (float)v[10] / 100.0f * 0.12f,
                              (float)(frame % 997), 0.f, 0.f, 0.f};
     RunPass(dev, &g_colorShader, &g_colorFailed, "photo filter", kColorSource, sizeof(kColorSource) - 1, kProfilesColor, 100, extra, 4);
 }

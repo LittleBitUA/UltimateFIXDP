@@ -196,6 +196,9 @@ Item g_pageDisplay[] = {
      {L"У кутку: FPS, час кадру, скільки Present чекає (чим більше, тим сильніше впирається відеокарта) і скільки відеокарта витрачає на проходи мода (SSAO, фільтри). Для пошуку, що гальмує.", L"In the corner: FPS, frame time, how long Present waits (the more, the more the video card is the limit) and how much video time the mod's passes take (SSAO, filters). For finding what slows things down."}, {L"Діагностика", L"Diagnostics"}},
     RESET_ITEM
 };
+constexpr int kFilterCountForMenu = 18;  // kFilterCount of the photo page below (14 filters + 4 own presets)
+void FormatFilterForMenu(int v, wchar_t* out);
+
 Item g_pageGraphics[] = {
     {{L"Швидкий вибір якості", L"Quick quality preset"}, &g_qualityPick, kInt, 0, 3, 1, false, nullptr, nullptr, ApplyQuality, nullptr,
      {L"Клік по кнопці (або вибір стрілками й Enter) виставляє весь блок картинки під ваш монітор: вихід стає найбільшою роздільністю 16:9, що вміщується в монітор (до 3840), а «Крок часу і ліміт кадрів» стає «Ліміт 60 к/с». Легкий: слабкі відеокарти; Баланс: суперсемплінг 125%; Якість: 200% (на моніторі 1920×1080 це точно 2×2, на 1440p і 4K набагато важче). Роздільність, тіні й розмиття підхопляться після перезапуску; різкість, згладжування, SSAO й анізотропія працюють одразу. Потім усе можна підправити нижче.",
@@ -240,6 +243,10 @@ Item g_pageGraphics[] = {
     {{L"Різкість фінальної картинки, %", L"Sharpening of the final picture, %"}, &g_cfg.sharpen, kInt, 0, 100, 10, false, L"Graphics", L"Sharpen", nullptr, nullptr,
      {L"Підвищення різкості готового кадру. Починайте з 30–50, більше дає ореоли. Змінюється одразу.", L"Sharpens the finished frame. Start with 30–50, more gives halos. Changes at once."},
      {L"Чіткість і вигляд", L"Sharpness and look"}},
+    {{L"Вигляд кадру в грі", L"Look of the picture in play"}, &g_cfg.gameLook, kInt, 0, kFilterCountForMenu - 1, 1, false, L"Graphics", L"GameLook", nullptr, nullptr,
+     {L"Фільтр фоторежиму, що діє весь час, не лише у фоторежимі: тепла, холодна, кіно, плівка, нуар, ваші пресети «Мій 1..4» тощо. «Без» = картинка гри. У фоторежимі діють його власні повзунки. Змінюється одразу.",
+      L"A photo mode filter that stays on all the time, not only in photo mode: warm, cold, cinema, film, noir, your presets \"Mine 1..4\" and more. \"None\" = the game's picture. In photo mode its own sliders apply. Changes at once."},
+     NOTR, nullptr, 0, nullptr, FormatFilterForMenu},
     {{L"Анізотропна фільтрація текстур (макс.)", L"Anisotropic texture filtering (max)"}, &g_cfg.anisotropy, kInt, 1, 16, 1, false, L"Graphics", L"Anisotropy", ApplyGraphicsTweaks, nullptr,
      {L"Чіткість текстур під кутом (дорога, стіни). Гра за замовчуванням 8.", L"Sharpness of textures at an angle (road, walls). The game uses 8."}, NOTR},
     {{L"Ближня площина камери", L"Camera near plane"}, &g_cfg.nearPlane, kInt, 10, 200, 5, false, L"Graphics", L"NearPlane", nullptr, nullptr,
@@ -531,6 +538,29 @@ bool ReadOwnPreset(int slot, int* out) {
     return true;
 }
 
+// The look of the picture outside photo mode ([Graphics] GameLook): one of the filters or own presets, values in kLook order.
+// An own preset is read from the ini when the choice changes (or after a preset is saved), not every frame.
+int g_gameLookCached = -1;
+int g_gameLookValues[kLookCount];
+bool g_gameLookValid = false;
+
+bool GameLookValuesImpl(int* out) {
+    const int f = g_cfg.gameLook;
+    if (f <= 0 || f >= kFilterCount) return false;
+    if (f != g_gameLookCached) {
+        g_gameLookCached = f;
+        if (f < kBuiltinFilters) {
+            for (int i = 0; i < kLookCount; ++i) g_gameLookValues[i] = kFilterLook[f][i];
+            g_gameLookValid = true;
+        } else {
+            g_gameLookValid = ReadOwnPreset(f - kBuiltinFilters + 1, g_gameLookValues);
+        }
+    }
+    if (!g_gameLookValid) return false;
+    for (int i = 0; i < kLookCount; ++i) out[i] = g_gameLookValues[i];
+    return true;
+}
+
 void ResetLook() {
     g_cfg.photoFilter = 0;
     for (int i = 0; i < kLookCount; ++i) *kLook[i] = 0;
@@ -564,6 +594,7 @@ void SaveOwnPreset() {
     wsprintfW(text, L"%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d", *kLook[0], *kLook[1], *kLook[2], *kLook[3], *kLook[4], *kLook[5], *kLook[6],
               *kLook[7], *kLook[8], *kLook[9], *kLook[10]);
     WritePrivateProfileStringW(L"PhotoPresets", key, text, g_paths.iniFile);
+    g_gameLookCached = -1;  // the in-game look may use this preset
     g_cfg.photoFilter = kBuiltinFilters + slot - 1;
     Log("photo mode: own preset %d saved (%S)", slot, text);
 }
@@ -575,6 +606,10 @@ void FormatFilter(int v, wchar_t* out) {
     if (f >= kBuiltinFilters && !ReadOwnPreset(f - kBuiltinFilters + 1, dummy))
         lstrcatW(out, g_cfg.language == 1 ? L" (empty)" : L" (порожній)");
 }
+
+void FormatFilterForMenu(int v, wchar_t* out) { FormatFilter(v, out); }
+static_assert(kFilterCountForMenu == kFilterCount, "the in-game look lists every filter");
+
 
 void FormatSet(int v, wchar_t* out) { wsprintfW(out, g_cfg.language == 1 ? L"Set %d" : L"Набір %d", v); }
 
@@ -2244,6 +2279,7 @@ void OnFrame(void* device) {
 }
 
 void PhotoLookReset() { ResetLook(); }
+bool GameLookValues(int* out) { return GameLookValuesImpl(out); }
 
 }  // namespace ui
 }  // namespace ufx
