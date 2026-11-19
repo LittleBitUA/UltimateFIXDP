@@ -431,8 +431,8 @@ static const char kDefaultIni[] =
     "[Save]\r\n"
     "; dp.sav is written to a temporary file and replaced atomically.\r\n"
     "Guard=1\r\n"
-    "; How many dated backups of dp.sav to keep (1..200).\r\n"
-    "Backups=20\r\n"
+    "; How many dated backups of dp.sav to keep (1..200). Each is named by when it was made and where the story stood in it.\r\n"
+    "Backups=60\r\n"
     "; If dp.sav has the wrong size at load time, restore the newest good backup.\r\n"
     "RestoreDamaged=1\r\n"
     "; Show a message when a save could not be committed or was restored.\r\n"
@@ -828,7 +828,14 @@ void LoadConfig(const wchar_t* ini) {
         g_cfg.language = (lang == LANG_UKRAINIAN || lang == LANG_RUSSIAN) ? 0 : 1;
     }
     g_cfg.saveGuard = (int)GetPrivateProfileIntW(L"Save", L"Guard", 1, ini);
-    g_cfg.saveBackups = (int)GetPrivateProfileIntW(L"Save", L"Backups", 20, ini);
+    g_cfg.saveBackups = (int)GetPrivateProfileIntW(L"Save", L"Backups", 60, ini);
+    if (GetPrivateProfileIntW(L"Save", L"BackupsMigrated", 0, ini) == 0) {  // 20 was the old default: an untouched file gets the new one
+        WritePrivateProfileStringW(L"Save", L"BackupsMigrated", L"1", ini);
+        if (g_cfg.saveBackups == 20) {
+            g_cfg.saveBackups = 60;
+            WritePrivateProfileStringW(L"Save", L"Backups", L"60", ini);
+        }
+    }
     g_cfg.saveRestoreDamaged = (int)GetPrivateProfileIntW(L"Save", L"RestoreDamaged", 1, ini);
     g_cfg.saveWarnings = (int)GetPrivateProfileIntW(L"Save", L"Warnings", 1, ini);
     if (g_cfg.saveBackups < 1) g_cfg.saveBackups = 1;

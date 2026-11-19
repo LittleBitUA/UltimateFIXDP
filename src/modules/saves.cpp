@@ -93,7 +93,7 @@ void Preserve(const wchar_t* path, const wchar_t* tag) {
 
 struct BackupEntry {
     FILETIME time;
-    wchar_t name[48];
+    wchar_t name[112];
 };
 BackupEntry g_entries[260];
 
@@ -109,7 +109,7 @@ int ListBackups(bool onlyGoodSize) {
         if (onlyGoodSize && (fd.nFileSizeHigh != 0 || fd.nFileSizeLow != kSaveFileSize)) continue;
         if (n >= 260) break;
         int len = lstrlenW(fd.cFileName);
-        if (len >= 48) continue;
+        if (len >= 112) continue;
         lstrcpyW(g_entries[n].name, fd.cFileName);
         g_entries[n].time = fd.ftLastWriteTime;
         ++n;
@@ -142,6 +142,31 @@ bool NewestGoodBackup(wchar_t* out) {
     return true;
 }
 
+// Where the story stood in a save file: record 0 (the state the game was in when it wrote the file) gives the episode (+A0h),
+// the chapter (+A1h) and the play time in seconds (+42800h), as in docs/engine/06. They go into the backup's name:
+// "dp_<date>_епізод 8, розділ 25, 19 год 30 хв.sav". A file that cannot be read keeps the plain name.
+void LabelBackup(const wchar_t* live, wchar_t* dest) {
+    HANDLE f = CreateFileW(live, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return;
+    u8 story[2] = {};
+    u32 seconds = 0;
+    DWORD got1 = 0, got2 = 0;
+    const bool ok = SetFilePointer(f, 0x120 + 0xA0, nullptr, FILE_BEGIN) != INVALID_SET_FILE_POINTER && ReadFile(f, story, 2, &got1, nullptr) &&
+                    SetFilePointer(f, 0x120 + 0x42800, nullptr, FILE_BEGIN) != INVALID_SET_FILE_POINTER &&
+                    ReadFile(f, &seconds, 4, &got2, nullptr) && got1 == 2 && got2 == 4;
+    CloseHandle(f);
+    if (!ok || story[0] > 20 || seconds > 3600u * 9999u) return;
+    const int len = lstrlenW(dest);
+    if (len < 4 || len > MAX_PATH - 64) return;
+    dest[len - 4] = 0;  // drop ".sav"
+    wchar_t tail[64];
+    if (g_cfg.language == 1)
+        wsprintfW(tail, L"_episode %d, chapter %d, %u h %02u min.sav", story[0], story[1], seconds / 3600, seconds / 60 % 60);
+    else
+        wsprintfW(tail, L"_епізод %d, розділ %d, %u год %02u хв.sav", story[0], story[1], seconds / 3600, seconds / 60 % 60);
+    lstrcatW(dest, tail);
+}
+
 void BackupLive(const wchar_t* live) {
     DWORD size;
     bool big;
@@ -152,6 +177,7 @@ void BackupLive(const wchar_t* live) {
     }
     wchar_t dest[MAX_PATH];
     BackupName(L"dp", dest);
+    LabelBackup(live, dest);
     if (CopyFileW(live, dest, FALSE))
         Log("save: backup %S", dest);
     else

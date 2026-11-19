@@ -987,9 +987,13 @@ bool HbaoPass(void* dev, void* hdr, void* depth, UINT w, UINT h, int strengthPer
         Log("ssao: the horizon-based shaders could not be built, the plain pass is used");
         return false;
     }
-    if (!AoTargets(dev, w, h)) {
+    // The occlusion is worked out on at most 1080 rows: on a scene of 5760x3240 (render scale 300%) a full-size pass cost
+    // 11 ms. The depth is still read at full size; the result is stretched over the scene with bilinear filtering.
+    const UINT div = (h + 1079) / 1080;
+    const UINT aw = (w + div - 1) / div, ah = (h + div - 1) / div;
+    if (!AoTargets(dev, aw, ah)) {
         g_hbaoFailed = true;
-        Log("ssao: two %ux%u textures for the horizon-based pass could not be made, the plain pass is used", w, h);
+        Log("ssao: two %ux%u textures for the horizon-based pass could not be made, the plain pass is used", aw, ah);
         return false;
     }
     void* hdrSurf = nullptr;
@@ -1004,7 +1008,7 @@ bool HbaoPass(void* dev, void* hdr, void* depth, UINT w, UINT h, int strengthPer
     const float radius = (float)radiusPixels * (float)h / 720.0f;
     const float c0[4] = {1.0f / (float)w, 1.0f / (float)h, (float)(strengthPercent > 100 ? 100 : strengthPercent) / 100.0f, radius};
     const float c1[4] = {(float)w, (float)h, 0.8284271f / (float)h, 0.f};
-    Viewport vp = {0, 0, w, h, 0.f, 1.f};
+    Viewport vp = {0, 0, w, h, 0.f, 1.f}, avp = {0, 0, aw, ah, 0.f, 1.f};
     Method<SetDsFn>(dev, 39)(dev, nullptr);
     for (u32 stage = 0; stage < 2; ++stage) {
         Method<Dword3Fn>(dev, kSetSamplerState)(dev, stage, SAMP_MINFILTER, 1);  // POINT: exact depth and occlusion values
@@ -1017,26 +1021,30 @@ bool HbaoPass(void* dev, void* hdr, void* depth, UINT w, UINT h, int strengthPer
     // 1: the occlusion into texture 0
     SetRS(RS_ALPHABLENDENABLE, 0);
     Method<SetRtFn2>(dev, kSetRenderTarget)(dev, 0, g_aoSurf[0]);
-    Method<SetViewportFn2>(dev, kSetViewport)(dev, &vp);
+    Method<SetViewportFn2>(dev, kSetViewport)(dev, &avp);
     Method<SetPsFn>(dev, kSetPixelShader)(dev, g_hbaoShader);
     Method<SetTexFn2>(dev, kSetTexture)(dev, 0, depth);
     Method<SetPsConstFn>(dev, 109)(dev, 0, c0, 1);
     Method<SetPsConstFn>(dev, 109)(dev, 1, c1, 1);
-    Quad(0.f, 0.f, (float)w, (float)h, 0xFFFFFFFF, 0.f, 0.f, 1.f, 1.f);
-    // 2: blurred across into texture 1
-    const float across[4] = {1.0f / (float)w, 0.f, 0.f, 0.f}, down[4] = {0.f, 1.0f / (float)h, 0.f, 0.f};
+    Quad(0.f, 0.f, (float)aw, (float)ah, 0xFFFFFFFF, 0.f, 0.f, 1.f, 1.f);
+    // 2: blurred across into texture 1 (one step = one texel of the occlusion textures)
+    const float across[4] = {1.0f / (float)aw, 0.f, 0.f, 0.f}, down[4] = {0.f, 1.0f / (float)ah, 0.f, 0.f};
     Method<SetRtFn2>(dev, kSetRenderTarget)(dev, 0, g_aoSurf[1]);
-    Method<SetViewportFn2>(dev, kSetViewport)(dev, &vp);
+    Method<SetViewportFn2>(dev, kSetViewport)(dev, &avp);
     Method<SetPsFn>(dev, kSetPixelShader)(dev, g_aoBlurShader);
     Method<SetTexFn2>(dev, kSetTexture)(dev, 0, g_aoTex[0]);
     Method<SetTexFn2>(dev, kSetTexture)(dev, 1, depth);
     Method<SetPsConstFn>(dev, 109)(dev, 2, across, 1);
-    Quad(0.f, 0.f, (float)w, (float)h, 0xFFFFFFFF, 0.f, 0.f, 1.f, 1.f);
+    Quad(0.f, 0.f, (float)aw, (float)ah, 0xFFFFFFFF, 0.f, 0.f, 1.f, 1.f);
     // 3: blurred down, multiplied into the scene
     Method<SetRtFn2>(dev, kSetRenderTarget)(dev, 0, hdrSurf);
     Method<SetViewportFn2>(dev, kSetViewport)(dev, &vp);
     Method<SetTexFn2>(dev, kSetTexture)(dev, 0, g_aoTex[1]);
     Method<SetPsConstFn>(dev, 109)(dev, 2, down, 1);
+    if (div > 1) {  // the smaller occlusion stretched smoothly over the scene
+        Method<Dword3Fn>(dev, kSetSamplerState)(dev, 0, SAMP_MINFILTER, 2 /*LINEAR*/);
+        Method<Dword3Fn>(dev, kSetSamplerState)(dev, 0, SAMP_MAGFILTER, 2);
+    }
     SetRS(RS_ALPHABLENDENABLE, 1);
     SetRS(RS_SRCBLEND, 9);   // DESTCOLOR: result = scene * occlusion
     SetRS(RS_DESTBLEND, 1);  // ZERO
@@ -1051,7 +1059,8 @@ bool HbaoPass(void* dev, void* hdr, void* depth, UINT w, UINT h, int strengthPer
     static bool logged = false;
     if (!logged) {
         logged = true;
-        Log("ssao: horizon-based pass with a depth-aware blur running on a %ux%u scene (strength %d%%, radius %d px)", w, h, strengthPercent, radiusPixels);
+        Log("ssao: horizon-based pass with a depth-aware blur running on a %ux%u scene, occlusion worked out at %ux%u (strength %d%%, radius %d px)",
+            w, h, aw, ah, strengthPercent, radiusPixels);
     }
     return true;
 }
