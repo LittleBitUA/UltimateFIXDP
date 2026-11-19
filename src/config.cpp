@@ -173,9 +173,9 @@ static const char kDefaultIni[] =
     "; The game keeps its own zoom (aiming, the car); cutscenes and the photo mode keep their own view. Changes at once.\r\n"
     "FieldOfView=100\r\n"
     "; Near plane of the play camera in tenths of a unit (the game: 10 = 1.0, about 10 cm). Higher gives the depth buffer more\r\n"
-    "; precision far away: far surfaces that lie on each other (roads, roofs, decals) stop flickering. Too high cuts what is very\r\n"
+    "; precision far away (default 200 = 20.0): far surfaces that lie on each other (roads, roofs, decals) stop flickering. Too high cuts what is very\r\n"
     "; close to the camera. 10..200; cutscenes keep their own. Changes at once.\r\n"
-    "NearPlane=30\r\n"
+    "NearPlane=200\r\n"
     "; 1 = more depth bias on the two far sun shadow cascades: no crawling shadow stripes in the distance. Changes at once.\r\n"
     "ShadowBiasFix=1\r\n"
     "; 1 = world textures stored without mipmaps get them built when they load: far textures stop shimmering. Restart needed.\r\n"
@@ -717,7 +717,14 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.scalePostBuffers = (int)GetPrivateProfileIntW(L"Graphics", L"ScalePostBuffers", 0, ini);
     g_cfg.anisotropy = (int)GetPrivateProfileIntW(L"Graphics", L"Anisotropy", 16, ini);
     g_cfg.gameFov = (int)GetPrivateProfileIntW(L"Graphics", L"FieldOfView", 100, ini);
-    g_cfg.nearPlane = (int)GetPrivateProfileIntW(L"Graphics", L"NearPlane", 30, ini);
+    g_cfg.nearPlane = (int)GetPrivateProfileIntW(L"Graphics", L"NearPlane", 200, ini);
+    if (GetPrivateProfileIntW(L"Graphics", L"NearPlaneMigrated", 0, ini) == 0) {  // 30 was the default of 0.7.0-test20..24
+        WritePrivateProfileStringW(L"Graphics", L"NearPlaneMigrated", L"1", ini);
+        if (g_cfg.nearPlane == 30) {
+            g_cfg.nearPlane = 200;
+            WritePrivateProfileStringW(L"Graphics", L"NearPlane", L"200", ini);
+        }
+    }
     if (g_cfg.nearPlane < 10) g_cfg.nearPlane = 10;
     if (g_cfg.nearPlane > 200) g_cfg.nearPlane = 200;
     g_cfg.shadowBiasFix = GetPrivateProfileIntW(L"Graphics", L"ShadowBiasFix", 1, ini) ? 1 : 0;
