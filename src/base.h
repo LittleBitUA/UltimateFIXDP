@@ -24,6 +24,8 @@ struct Config {
     int saveGuard;           // atomic dp.sav writes, backups, restore of a damaged file
     int saveBackups;         // how many backups to keep (1..200)
     int saveRestoreDamaged;  // restore dp.sav from the newest backup if its size is wrong
+    int serialSetThread;     // the main thread waits for SetThread at once (no world objects built during the update)
+    int routeFlushWait;      // a level change lets RouteThread finish its request before the queue is cleared
     int fasterLoading;       // the loader thread waits 1 ms instead of 16 between requests
     int compressBackups;     // the backup folder is NTFS-compressed (60 copies of 8 MB would be about 480 MB)
     int saveWarnings;        // show a message box when a save could not be committed

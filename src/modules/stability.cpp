@@ -53,6 +53,60 @@ namespace ufx {
 
 bool MemoryIsLow() { return g_memLow; }
 
+}  // namespace ufx
+
+// ---- the game's worker threads ----------------------------------------------------------------------------------------
+// SerialSetThread: at 00401C9D the main thread wakes SetThread and then waits for it at once, so world objects are never
+// built while the next frame updates the world. The game's own wait at 00401C7D then finds nothing to wait for.
+extern "C" __attribute__((naked)) void SetThreadSerialStub() {
+    asm volatile(
+        ".intel_syntax noprefix\n"
+        "mov eax, 0x0040CC90\n"
+        "call eax\n"
+        "mov eax, 0x0040CC60\n"
+        "jmp eax\n"
+        ".att_syntax\n");
+}
+
+// RouteFlushWait: the queue flush of a level change first lets RouteThread finish the request it is working on, so it never
+// writes into a resident that is being cleared, and no new request is lost behind the flag. At most 250 ms.
+extern "C" void __cdecl RouteFlushWorker() {
+    using namespace ufx;
+    HANDLE mutex = *(volatile HANDLE*)(uintptr_t)kRouteMutexVa;
+    u32 pending = 0;
+    if (mutex && WaitForSingleObject(mutex, 1000) == WAIT_OBJECT_0) {
+        pending = (*(volatile u32*)(uintptr_t)kRouteQueueEnd - *(volatile u32*)(uintptr_t)kRouteQueueBegin) >> 3;
+        ReleaseMutex(mutex);
+    }
+    *(volatile u32*)(uintptr_t)kRouteFlushFlag = 1;  // what the game's function does
+    if (!pending) return;                            // the thread works on nothing: it removes a request only after it
+    ((void(__cdecl*)())(uintptr_t)kRouteWakeFn)();
+    const DWORD start = GetTickCount();
+    while (*(volatile u32*)(uintptr_t)kRouteFlushFlag) {
+        if (GetTickCount() - start > 250) {
+            Log("stability: the route thread did not finish its request within 250 ms of a level change (the queue is cleared anyway)");
+            return;
+        }
+        Sleep(1);
+    }
+    static int said = 0;
+    if (++said <= 5) Log("stability: a level change waited for the route thread (%u requests queued, %u ms)", pending, GetTickCount() - start);
+}
+
+extern "C" __attribute__((naked)) void RouteFlushStub() {
+    asm volatile(
+        ".intel_syntax noprefix\n"
+        "pushfd\n"
+        "pushad\n"
+        "call _RouteFlushWorker\n"
+        "popad\n"
+        "popfd\n"
+        "ret\n"
+        ".att_syntax\n");
+}
+
+namespace ufx {
+
 bool InstallStability() {
     bool any = false;
     if (g_cfg.fasterLoading) {
@@ -64,6 +118,21 @@ bool InstallStability() {
         } else {
             Log("stability: the loader wait at %08X differs from DP.exe 1.01b, left as it is", s.va);
         }
+    }
+    if (g_cfg.serialSetThread) {
+        const SiteDef& s = kSiteSetThreadWake;
+        if (PatchCall(s.va, s.bytes, s.len, (const void*)SetThreadSerialStub)) {
+            Log("stability: the main thread waits for SetThread right after waking it (no world objects built during the update)");
+            any = true;
+        } else {
+            Log("stability: the SetThread wake at %08X differs from DP.exe 1.01b, left as it is", s.va);
+        }
+    }
+    if (g_cfg.routeFlushWait && BytesMatch(kSiteRouteFlushFn.va, kSiteRouteFlushFn.bytes, kSiteRouteFlushFn.len)) {
+        const bool a = PatchCall(kSiteRouteFlush1.va, kSiteRouteFlush1.bytes, kSiteRouteFlush1.len, (const void*)RouteFlushStub);
+        const bool b = PatchCall(kSiteRouteFlush2.va, kSiteRouteFlush2.bytes, kSiteRouteFlush2.len, (const void*)RouteFlushStub);
+        Log("stability: a level change waits for the route thread (%d of 2 places)", (int)a + (int)b);
+        any = any || a || b;
     }
     // The window is not swapped for a white "not responding" ghost while a long load keeps the game thread busy.
     typedef void(WINAPI * GhostFn)();

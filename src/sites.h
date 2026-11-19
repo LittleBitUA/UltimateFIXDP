@@ -838,6 +838,19 @@ constexpr uint32_t kRouteLookupFn = 0x4D8980;
 constexpr SiteDef kSiteRouteCall1 = {"resident route lookup (rider)", 0x4CCD50, 5, {0xE8, 0x2B, 0xBC, 0x00, 0x00}};
 constexpr SiteDef kSiteRouteCall2 = {"resident route lookup", 0x4D1363, 5, {0xE8, 0x18, 0x76, 0x00, 0x00}};
 
+// Threads of the game that share data without locks (docs/crashes/11, 2.5). SetThread builds world objects while the main thread
+// already updates the next frame: the call at 00401C9D wakes it, and only the next tick (00401C7D) waits for it. RouteThread
+// works out a resident's path while a level change clears the queue (call 0040BE10 at 004B1B2F and 004B6A6D) without waiting.
+constexpr SiteDef kSiteSetThreadWake = {"SetThread wake", 0x401C9D, 5, {0xE8, 0xEE, 0xAF, 0x00, 0x00}};
+constexpr uint32_t kSetThreadWakeFn = 0x40CC90, kSetThreadWaitFn = 0x40CC60;
+constexpr SiteDef kSiteRouteFlush1 = {"route queue flush (residents cleared)", 0x4B1B2F, 5, {0xE8, 0xDC, 0xA2, 0xF5, 0xFF}};
+constexpr SiteDef kSiteRouteFlush2 = {"route queue flush (level change)", 0x4B6A6D, 5, {0xE8, 0x9E, 0x53, 0xF5, 0xFF}};
+constexpr SiteDef kSiteRouteFlushFn = {"route queue flush function", 0x40BE10, 11, {0xC7, 0x05, 0xDC, 0x80, 0x88, 0x00, 0x01, 0x00, 0x00, 0x00, 0xC3}};
+constexpr uint32_t kRouteWakeFn = 0x40BE50;          // cdecl: marks the thread busy and wakes it
+constexpr uint32_t kRouteMutexVa = 0x8880B4;         // HANDLE of the queue mutex
+constexpr uint32_t kRouteQueueBegin = 0x8880D0, kRouteQueueEnd = 0x8880D4;  // std::vector of 8-byte requests
+constexpr uint32_t kRouteFlushFlag = 0x8880DC;       // 1 = clear the queue; the thread sets it back to 0 after its request
+
 // Loader thread idle wait (FUN_006B3CB0): with its queue empty it sleeps 16 ms at a time, and every synchronous load waits on
 // it, so each one can cost a timer quantum. 1 ms instead (the mod sets the 1 ms timer resolution). docs/crashes/04 V1.
 constexpr SiteDef kSiteLoaderSleep = {"loader idle sleep", 0x6B3CDD, 8, {0x85, 0xC0, 0x75, 0x08, 0x6A, 0x10, 0xFF, 0x15}};
@@ -864,7 +877,7 @@ constexpr uint32_t kNanTrapNumber = 0x409EA8;
 
 constexpr const SiteDef* kAllSites[] = {
     &kSiteNanTrap,
-    &kSiteMouseX, &kSiteMouseY, &kSiteLoaderSleep, &kSiteRouteCall1, &kSiteRouteCall2,
+    &kSiteMouseX, &kSiteMouseY, &kSiteLoaderSleep, &kSiteRouteCall1, &kSiteRouteCall2, &kSiteSetThreadWake, &kSiteRouteFlush1, &kSiteRouteFlush2, &kSiteRouteFlushFn,
     &kSiteGameFileBranch, &kSiteGameFileAddon, &kSiteGameFileArchive, &kSiteGameFileStore, &kSiteGameFileHave,
     &kSiteBeaconCall, &kSiteBeaconDraw, &kSiteBeaconMove, &kStorySites[0], &kStorySites[1], &kStorySites[2], &kStorySites[3], &kStorySites[4],
     &kStorySites[5], &kStorySites[6], &kStorySites[7], &kStorySites[8], &kStorySites[9], &kStorySites[10],
