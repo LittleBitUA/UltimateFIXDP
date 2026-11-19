@@ -859,6 +859,8 @@ void LoadConfig(const wchar_t* ini) {
         }
     }
     g_cfg.traceResources = (int)GetPrivateProfileIntW(L"Debug", L"TraceResources", 0, ini);
+    g_cfg.traceWater = (int)GetPrivateProfileIntW(L"Debug", L"TraceWater", 0, ini);
+    g_cfg.waterTest = (int)GetPrivateProfileIntW(L"Debug", L"WaterTest", 0, ini);
     g_cfg.menu = (int)GetPrivateProfileIntW(L"Menu", L"Enabled", 1, ini);
     g_cfg.startHint = (int)GetPrivateProfileIntW(L"Menu", L"StartHint", 1, ini);
     g_cfg.checkUpdates = GetPrivateProfileIntW(L"Menu", L"CheckUpdates", 1, ini) ? 1 : 0;

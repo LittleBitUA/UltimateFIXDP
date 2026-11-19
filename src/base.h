@@ -44,6 +44,8 @@ struct Config {
     int menuOpacity;         // how opaque the F10 panel is, percent 20..100
     int language;            // language of the menu: 0 Ukrainian, 1 English
     int menu;                // F10 settings menu inside the game
+    int traceWater;
+    int waterTest;           // experiment: 1 = the river's own texture shows at least 60 % (c10.z) on water draws          // log what every distinct water draw has bound (textures, c10/c13) (diagnostic)
     int traceResources;      // log every texture/render target/depth surface the game creates (diagnostic)
     int forceUsSlot;         // language slot US (6) regardless of config.cnf: where translations live
     int textOverlay;         // replace records of MES_ALL.MES in memory from UltimateFix\\text (mes_all.json of the SWERY tool, *.txt); inert without files

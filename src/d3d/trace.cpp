@@ -14,7 +14,7 @@ bool g_d3dWrapper = false;  // a d3d9.dll that is neither DXVK nor the Windows o
 namespace {
 
 enum { kSetTexture = 65, kSetVertexShaderConstantF = 94, kSetPixelShaderConstantF = 109, kCreateDevice = 16, kCreateTexture = 23, kCreateRenderTarget = 28, kCreateDepthStencil = 29,
-       kStretchRect = 34, kSetViewport = 47 };
+       kStretchRect = 34, kSetViewport = 47, kDrawPrimitive = 81, kDrawIndexedPrimitive = 82, kCreatePixelShader = 106, kSetPixelShader = 107 };
 
 typedef void*(WINAPI* CreateD3dFn)(UINT);
 typedef HRESULT(WINAPI* CreateDeviceFn)(void*, UINT, DWORD, HWND, DWORD, void*, void**);
@@ -172,9 +172,133 @@ HRESULT WINAPI H_StretchRect(void* dev, void* src, const RECT* sr, void* dst, co
     return r_StretchRect(dev, src, sr, dst, dr, filter);
 }
 
+
+// ---- water diagnostic ([Debug] TraceWater=1) ----
+// The water pixel shaders (272 of the 544 in the pack at ADCE20h) are the only ones whose constant table names g_vMirror:
+// s0 diffuse, s1 normal map, s5 reflection, s6 refraction; c10 = (distortion, reflection mix, alpha bias, alpha scale),
+// c13 = an added colour. The river shows as one flat colour on PC; this lists what each distinct water draw really has bound.
+typedef HRESULT(WINAPI* CreatePsFn)(void*, const DWORD*, void**);
+typedef HRESULT(WINAPI* SetPsFn)(void*, void*);
+typedef HRESULT(WINAPI* DrawIpFn)(void*, DWORD, INT, UINT, UINT, UINT, UINT);
+CreatePsFn r_CreatePs = nullptr;
+SetPsFn r_SetPs = nullptr;
+DrawIpFn r_DrawIp = nullptr;
+typedef HRESULT(WINAPI* DrawPFn)(void*, DWORD, UINT, UINT);
+DrawPFn r_DrawP = nullptr;
+void* g_waterShaders[64];
+int g_waterShaderCount = 0;
+void* g_curPs = nullptr;
+void* g_stageTex[8];
+float g_psC[16][4];  // c0..c15 as last set
+float g_vsC243[4];
+u32 g_waterKeys[40];
+int g_waterKeyCount = 0;
+
+bool NamesMirror(const DWORD* code) {
+    // the CTAB comment block comes first: 0xFFFE token with its length in DWORDs
+    if (!code || (code[0] & 0xFFFF0000u) != 0xFFFF0000u) return false;
+    const DWORD tok = code[1];
+    if ((tok & 0xFFFF) != 0xFFFE) return false;
+    const DWORD len = (tok >> 16) & 0x7FFF;
+    const char* b = (const char*)(code + 2);
+    for (DWORD i = 0; i + 9 <= len * 4; ++i)
+        if (b[i] == 'g' && b[i + 1] == '_' && b[i + 2] == 'v' && b[i + 3] == 'M' && b[i + 4] == 'i' && b[i + 5] == 'r' &&
+            b[i + 6] == 'r' && b[i + 7] == 'o' && b[i + 8] == 'r')
+            return true;
+    return false;
+}
+
+HRESULT WINAPI H_CreatePs(void* dev, const DWORD* code, void** out) {
+    HRESULT hr = r_CreatePs(dev, code, out);
+    if (SUCCEEDED(hr) && out && *out && NamesMirror(code) && g_waterShaderCount < 64) {
+        g_waterShaders[g_waterShaderCount++] = *out;
+        if (g_waterShaderCount == 1) Log("water: water pixel shaders recognised (g_vMirror); the first is from %08X", (u32)(uintptr_t)code);
+    }
+    return hr;
+}
+
+HRESULT WINAPI H_SetPs(void* dev, void* ps) {
+    g_curPs = ps;
+    return r_SetPs(dev, ps);
+}
+
+void DescribeTexture(void* tex, char* out) {
+    if (!tex) { lstrcpyA(out, "none"); return; }
+    void** vt = *(void***)tex;
+    typedef DWORD(WINAPI * TypeFn)(void*);
+    const DWORD type = ((TypeFn)vt[10])(tex);
+    if (type != 3) { wsprintfA(out, "type %u", type); return; }  // not a 2D texture
+    u32 desc[8] = {0};
+    typedef HRESULT(WINAPI * DescFn)(void*, UINT, void*);
+    if (FAILED(((DescFn)vt[17])(tex, 0, desc))) { lstrcpyA(out, "?"); return; }
+    wsprintfA(out, "%ux%u fmt %u%s", desc[6], desc[7], desc[0], (desc[2] & 1) ? " target" : "");
+}
+
+int Milli(float f) { return (int)(f * 1000.f + (f < 0 ? -0.5f : 0.5f)); }
+
+bool NoteWaterDraw(UINT count, u32 from) {
+    if (!g_curPs) return false;
+    bool water = false;
+    for (int i = 0; i < g_waterShaderCount && !water; ++i) water = g_waterShaders[i] == g_curPs;
+    if (water && g_waterKeyCount < 40) {
+        {
+            u32 key = (u32)(uintptr_t)g_curPs * 31u + (u32)(uintptr_t)g_stageTex[0] * 7u + (u32)(uintptr_t)g_stageTex[1] * 13u +
+                      (u32)(uintptr_t)g_stageTex[5] * 17u + (u32)(uintptr_t)g_stageTex[6] * 19u + (u32)Milli(g_psC[10][2]) * 23u;
+            bool seen = false;
+            for (int i = 0; i < g_waterKeyCount && !seen; ++i) seen = g_waterKeys[i] == key;
+            if (!seen) {
+                g_waterKeys[g_waterKeyCount++] = key;
+                char t0[48], t1[48], t5[48], t6[48];
+                DescribeTexture(g_stageTex[0], t0);
+                DescribeTexture(g_stageTex[1], t1);
+                DescribeTexture(g_stageTex[5], t5);
+                DescribeTexture(g_stageTex[6], t6);
+                Log("water: draw of %u triangles from %08X: s0 %s | s1 %s | s5 %s | s6 %s", count, from, t0, t1, t5, t6);
+                Log("water:   c10 %d %d %d %d  c13 %d %d %d %d  c12 %d %d %d %d  vs c243 %d %d %d %d (thousandths)", Milli(g_psC[10][0]),
+                    Milli(g_psC[10][1]), Milli(g_psC[10][2]), Milli(g_psC[10][3]), Milli(g_psC[13][0]), Milli(g_psC[13][1]),
+                    Milli(g_psC[13][2]), Milli(g_psC[13][3]), Milli(g_psC[12][0]), Milli(g_psC[12][1]), Milli(g_psC[12][2]),
+                    Milli(g_psC[12][3]), Milli(g_vsC243[0]), Milli(g_vsC243[1]), Milli(g_vsC243[2]), Milli(g_vsC243[3]));
+            }
+        }
+    }
+    return water;
+}
+
+// [Debug] WaterTest=1: for the draw only, the share of the river's own texture (c10.z) is at least 0.6.
+template <typename Draw> HRESULT WaterDraw(void* dev, bool water, Draw draw) {
+    if (!water || g_cfg.waterTest != 1 || !r_SetPsConstF) return draw();
+    float v[4] = {g_psC[10][0], g_psC[10][1], g_psC[10][2] < 0.6f ? 0.6f : g_psC[10][2], g_psC[10][3]};
+    r_SetPsConstF(dev, 10, v, 1);
+    const HRESULT hr = draw();
+    r_SetPsConstF(dev, 10, g_psC[10], 1);
+    return hr;
+}
+HRESULT WINAPI H_DrawIp(void* dev, DWORD prim, INT base, UINT minIdx, UINT verts, UINT start, UINT count) __attribute__((noinline));
+HRESULT WINAPI H_DrawIp(void* dev, DWORD prim, INT base, UINT minIdx, UINT verts, UINT start, UINT count) {
+    const bool w = NoteWaterDraw(count, Caller());
+    return WaterDraw(dev, w, [&] { return r_DrawIp(dev, prim, base, minIdx, verts, start, count); });
+}
+HRESULT WINAPI H_DrawP(void* dev, DWORD prim, UINT start, UINT count) __attribute__((noinline));
+HRESULT WINAPI H_DrawP(void* dev, DWORD prim, UINT start, UINT count) {
+    const bool w = NoteWaterDraw(count, Caller());
+    return WaterDraw(dev, w, [&] { return r_DrawP(dev, prim, start, count); });
+}
+
+void NotePsConst(UINT start, const float* data, UINT count) {
+    if (!data) return;
+    for (UINT i = 0; i < count; ++i)
+        if (start + i < 16)
+            for (int k = 0; k < 4; ++k) g_psC[start + i][k] = data[i * 4 + k];
+}
+void NoteVsConst(UINT start, const float* data, UINT count) {
+    if (data && start <= 243 && start + count > 243)
+        for (int k = 0; k < 4; ++k) g_vsC243[k] = data[(243 - start) * 4 + k];
+}
+
 // The shadow pass hands its map size to the pixel shader as register c0 = {512 or 1024, 0, 0, 0}. When the
 // maps are enlarged the value has to follow, or the filtering steps no longer match the texels.
 HRESULT WINAPI H_SetPsConstF(void* dev, UINT start, const float* data, UINT count) {
+    if (g_cfg.traceWater || g_cfg.waterTest) NotePsConst(start, data, count);
     if (start == 0 && count >= 1 && data && g_cfg.shadowScale > 100) {
         const u32* b = (const u32*)data;
         int base = b[0] == 0x44000000u ? 512 : (b[0] == 0x44800000u ? 1024 : 0);  // 512.0f, 1024.0f
@@ -190,6 +314,7 @@ HRESULT WINAPI H_SetPsConstF(void* dev, UINT start, const float* data, UINT coun
 // drawn at the real output resolution the offset has to be half a pixel of THAT viewport, or sprites sample their
 // neighbours in the atlas (icons show a strip of the next icon). Only calls made at the output viewport are changed.
 HRESULT WINAPI H_SetVsConstF(void* dev, UINT start, const float* data, UINT count) {
+    if (g_cfg.traceWater || g_cfg.waterTest) NoteVsConst(start, data, count);
     if (start == 0 && count == 1 && data && g_cfg.pixelOffsetFix && g_outputW && g_vpW == (u32)g_outputW &&
         g_vpH == (u32)g_outputH) {
         const u32* b = (const u32*)data;
@@ -207,7 +332,8 @@ HRESULT WINAPI H_SetVsConstF(void* dev, UINT start, const float* data, UINT coun
 }
 
 HRESULT WINAPI H_SetTexture(void* dev, DWORD stage, void* tex) {
-    if (stage == 0 && tex) tex = GlyphAtlasFor(dev, tex);
+    if (stage == 0 && tex && g_cfg.glyphTheme) tex = GlyphAtlasFor(dev, tex);
+    if (stage < 8) g_stageTex[stage] = tex;
     return r_SetTexture(dev, stage, tex);
 }
 
@@ -229,6 +355,16 @@ void PatchDevice(void* dev) {
     if (g_cfg.glyphTheme) {
         bool t = PatchSlot(vt, kSetTexture, (void*)H_SetTexture, (void**)&r_SetTexture);
         Log("d3d: icon atlas swap hooked (%d)", t);
+    }
+    if (g_cfg.traceWater || g_cfg.waterTest) {
+        const bool a = PatchSlot(vt, kSetPixelShaderConstantF, (void*)H_SetPsConstF, (void**)&r_SetPsConstF);
+        const bool b = PatchSlot(vt, kSetVertexShaderConstantF, (void*)H_SetVsConstF, (void**)&r_SetVsConstF);
+        const bool c = PatchSlot(vt, kSetTexture, (void*)H_SetTexture, (void**)&r_SetTexture);
+        const bool d = PatchSlot(vt, kCreatePixelShader, (void*)H_CreatePs, (void**)&r_CreatePs);
+        const bool e = PatchSlot(vt, kSetPixelShader, (void*)H_SetPs, (void**)&r_SetPs);
+        const bool f = PatchSlot(vt, kDrawIndexedPrimitive, (void*)H_DrawIp, (void**)&r_DrawIp);
+        const bool g = PatchSlot(vt, kDrawPrimitive, (void*)H_DrawP, (void**)&r_DrawP);
+        Log("water: diagnostic hooked (%d%d%d%d%d%d%d): each distinct water draw goes to the log once", a, b, c, d, e, f, g);
     }
     if (g_cfg.shadowPrecision && !g_cfg.traceResources)
         PatchSlot(vt, kCreateTexture, (void*)H_CreateTexture, (void**)&r_CreateTexture);
