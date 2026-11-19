@@ -1045,7 +1045,7 @@ bool HbaoPass(void* dev, void* hdr, void* depth, UINT w, UINT h, int strengthPer
         Method<Dword3Fn>(dev, kSetSamplerState)(dev, 0, SAMP_MINFILTER, 2 /*LINEAR*/);
         Method<Dword3Fn>(dev, kSetSamplerState)(dev, 0, SAMP_MAGFILTER, 2);
     }
-    SetRS(RS_ALPHABLENDENABLE, 1);
+    SetRS(RS_ALPHABLENDENABLE, g_cfg.aoView ? 0 : 1);  // the check view: the occlusion alone in place of the scene
     SetRS(RS_SRCBLEND, 9);   // DESTCOLOR: result = scene * occlusion
     SetRS(RS_DESTBLEND, 1);  // ZERO
     Quad(0.f, 0.f, (float)w, (float)h, 0xFFFFFFFF, 0.f, 0.f, 1.f, 1.f);
@@ -1125,7 +1125,7 @@ void AmbientOcclusionPass(void* dev, int strengthPercent, int radiusPixels) {
     Method<SetDsFn>(dev, 39)(dev, nullptr);
     Method<SetPsFn>(dev, kSetPixelShader)(dev, g_aoShader);
     Method<SetTexFn2>(dev, kSetTexture)(dev, 0, depth);
-    SetRS(RS_ALPHABLENDENABLE, 1);
+    SetRS(RS_ALPHABLENDENABLE, g_cfg.aoView ? 0 : 1);
     SetRS(RS_SRCBLEND, 9);   // DESTCOLOR: result = scene * occlusion
     SetRS(RS_DESTBLEND, 1);  // ZERO
     SetRS(RS_COLORWRITEENABLE, 7);
