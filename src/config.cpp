@@ -77,6 +77,8 @@ static const char kDefaultIni[] =
     "; Keep the x87 precision of the main thread at 24 bits, as a plain Direct3D 9 device sets it. The port compares float values\r\n"
     "; for equality (the aim limit), which holds only at 24 bits; DXVK or a Windows compatibility mode can leave 53. Changes at once.\r\n"
     "PinFpu=1\r\n"
+    "; 1 = the loader thread waits 1 ms instead of 16 between requests: shorter hitches while the world streams in. Restart needed.\r\n"
+    "FasterLoading=1\r\n"
     "; Correct byte order of HOUSE_LIST.NOD (day/night state of buildings).\r\n"
     "HouseListFix=1\r\n"
     "; Drop the per-frame joyGetPosEx call that passes uninitialised memory.\r\n"
@@ -866,6 +868,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.saveRestoreDamaged = (int)GetPrivateProfileIntW(L"Save", L"RestoreDamaged", 1, ini);
     g_cfg.saveWarnings = (int)GetPrivateProfileIntW(L"Save", L"Warnings", 1, ini);
     g_cfg.compressBackups = GetPrivateProfileIntW(L"Save", L"CompressBackups", 1, ini) ? 1 : 0;
+    g_cfg.fasterLoading = GetPrivateProfileIntW(L"Fixes", L"FasterLoading", 1, ini) ? 1 : 0;
     if (g_cfg.saveBackups < 1) g_cfg.saveBackups = 1;
     if (g_cfg.saveBackups > 200) g_cfg.saveBackups = 200;
 }

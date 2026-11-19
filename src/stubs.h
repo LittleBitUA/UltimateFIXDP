@@ -417,7 +417,7 @@ inline size_t BuildNavLookupGuard(uint8_t* out, uint32_t va, uint32_t continueVa
     jne[1] = (uint8_t)(p - (jne + 2));                      // active:
     *p++ = 0x8B; *p++ = 0x44; *p++ = 0x24; *p++ = 0x08;     // mov eax, [esp+8]
     *p++ = 0x3B; *p++ = 0x41; *p++ = 0x08;                  // cmp eax, [ecx+8]
-    StubJcc(p, out, va, 0x6 /*jbe*/, continueVa);           // jbe original (in range)
+    StubJcc(p, out, va, 0x2 /*jb*/, continueVa);            // jb original (in range: [ecx+8] is the count, loops run i < count)
     *p++ = 0x3D; StubPut32(p, 0x7FFFFE);                    // cmp eax, 7FFFFEh
     StubJcc(p, out, va, kCcE, continueVa);                  // je original
     *p++ = 0x3D; StubPut32(p, 0x7FFFF7);                    // cmp eax, 7FFFF7h

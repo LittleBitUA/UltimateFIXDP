@@ -52,6 +52,19 @@ namespace ufx {
 
 bool InstallStability() {
     bool any = false;
+    if (g_cfg.fasterLoading) {
+        const SiteDef& s = kSiteLoaderSleep;
+        static const u8 one = 0x01;
+        if (BytesMatch(s.va, s.bytes, s.len) && WriteCode(s.va + 5, &one, 1)) {
+            Log("stability: the loader thread waits 1 ms instead of 16 between requests");
+            any = true;
+        } else {
+            Log("stability: the loader wait at %08X differs from DP.exe 1.01b, left as it is", s.va);
+        }
+    }
+    // The window is not swapped for a white "not responding" ghost while a long load keeps the game thread busy.
+    typedef void(WINAPI * GhostFn)();
+    if (GhostFn ghost = (GhostFn)(void*)GetProcAddress(GetModuleHandleW(L"user32.dll"), "DisableProcessWindowsGhosting")) ghost();
     if (g_cfg.nanTrapGuard) {
         const SiteDef& s = kSiteNanTrap;
         if (!BytesMatch(s.va, s.bytes, s.len)) {
@@ -68,7 +81,30 @@ bool InstallStability() {
     return any;
 }
 
+// Once a minute: free address space and its largest block. A 32-bit game runs out of address space long before RAM; the
+// line shows whether a crash late in a session was memory (docs/crashes/05).
+void MemoryLine() {
+    static DWORD last = 0;
+    const DWORD now = GetTickCount();
+    if (last && now - last < 60000) return;
+    last = now ? now : 1;
+    MEMORYSTATUSEX ms;
+    ms.dwLength = sizeof(ms);
+    if (!GlobalMemoryStatusEx(&ms)) return;
+    SIZE_T largest = 0;
+    MEMORY_BASIC_INFORMATION mbi;
+    for (uintptr_t a = 0x10000; a < (uintptr_t)UserAddressEnd() && VirtualQuery((const void*)a, &mbi, sizeof(mbi)) == sizeof(mbi);) {
+        if (mbi.State == MEM_FREE && mbi.RegionSize > largest) largest = mbi.RegionSize;
+        const uintptr_t next = (uintptr_t)mbi.BaseAddress + mbi.RegionSize;
+        if (next <= a) break;
+        a = next;
+    }
+    Log("memory: %u MB of %u MB address space free, largest block %u MB", (unsigned)(ms.ullAvailVirtual >> 20),
+        (unsigned)(ms.ullTotalVirtual >> 20), (unsigned)(largest >> 20));
+}
+
 void StabilityFrame() {
+    MemoryLine();
     if (g_cfg.pinAudio && !g_audioPinned && g_pinTries < 600) {  // the sound engine exists by the first frame; ten seconds of tries at most
         ++g_pinTries;
         const bool x2 = Pin(L"XAudio2_7.dll"), xact = Pin(L"xactengine3_7.dll");

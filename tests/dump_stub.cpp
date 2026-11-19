@@ -170,7 +170,7 @@ int main(int argc, char** argv) {
     }
     Check(ng1 == 86, "nav lookup guard", "size 86");
     Check(Rel8To(g1, 4, 11), "nav lookup guard", "jne active");
-    Check(Rel32To(g1, g1Va, 18, kNavLookupContinue), "nav lookup guard", "jbe original");
+    Check(Rel32To(g1, g1Va, 18, kNavLookupContinue) && g1[19] == 0x82, "nav lookup guard", "jb original (index below the count)");
     Check(Rel32To(g1, g1Va, 29, kNavLookupContinue), "nav lookup guard", "je original (7FFFFEh)");
     Check(Rel32To(g1, g1Va, 40, kNavLookupContinue), "nav lookup guard", "je original (7FFFF7h)");
     Check(Rel8To(g1, 52, 81), "nav lookup guard", "jz noout");

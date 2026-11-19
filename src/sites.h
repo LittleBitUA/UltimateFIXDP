@@ -832,6 +832,10 @@ struct TailDef {
 // test eax,eax / jz 409EA8 / jmp $ (EB FE), so a NaN angle hangs the game for good. docs/crashes/03_nan_spin_loops.md.
 constexpr SiteDef kSiteNanTrap = {"angle NaN trap", 0x409EA2, 6, {0x85, 0xC0, 0x74, 0x02, 0xEB, 0xFE}};
 
+// Loader thread idle wait (FUN_006B3CB0): with its queue empty it sleeps 16 ms at a time, and every synchronous load waits on
+// it, so each one can cost a timer quantum. 1 ms instead (the mod sets the 1 ms timer resolution). docs/crashes/04 V1.
+constexpr SiteDef kSiteLoaderSleep = {"loader idle sleep", 0x6B3CDD, 8, {0x85, 0xC0, 0x75, 0x08, 0x6A, 0x10, 0xFF, 0x15}};
+
 // Mouse look (input_extras.cpp): the two readers of the mouse movement, FUN_0070AF50 (x) and FUN_0070B000 (y), do
 // `fild sens / fmul dword [movement] / call _ftol2`; the fmul becomes a call to a stub that also multiplies by our scale.
 constexpr SiteDef kSiteMouseX = {"mouse x reader: fmul [dx]", 0x70AFE8, 6, {0xD8, 0x0D, 0x40, 0x00, 0x4B, 0x01}};
@@ -854,7 +858,7 @@ constexpr uint32_t kNanTrapNumber = 0x409EA8;
 
 constexpr const SiteDef* kAllSites[] = {
     &kSiteNanTrap,
-    &kSiteMouseX, &kSiteMouseY,
+    &kSiteMouseX, &kSiteMouseY, &kSiteLoaderSleep,
     &kSiteGameFileBranch, &kSiteGameFileAddon, &kSiteGameFileArchive, &kSiteGameFileStore, &kSiteGameFileHave,
     &kSiteBeaconCall, &kSiteBeaconDraw, &kSiteBeaconMove, &kStorySites[0], &kStorySites[1], &kStorySites[2], &kStorySites[3], &kStorySites[4],
     &kStorySites[5], &kStorySites[6], &kStorySites[7], &kStorySites[8], &kStorySites[9], &kStorySites[10],
