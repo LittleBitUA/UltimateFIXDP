@@ -94,6 +94,7 @@ struct Config {
     int nearPlane;           // near plane of the play camera in tenths (game 10 = 1.0), 10..60: depth precision far away
     int bloomStrength;       // percent of the game's own bloom (100 = as the game)
     int exposureComp;        // exposure compensation in tenths of a stop (-30..30)
+    int fullscreenEdgeFix;   // full-screen 2D quads (fades, item notice) cover the last pixel row and column above 720p
     int gameLook;            // a photo filter applied all the time (0 = none), [Graphics] GameLook
     int generateMips;        // build the mipmaps of world textures stored without them (far shimmer), at load
     int shadowBiasFix;       // more depth bias on the two far sun shadow cascades (crawling stripes far away)
@@ -352,7 +353,8 @@ bool FreeCamBlocksInput();  // true while the camera flies and the game must see
 void ApplyWorldExtra();  // writes the current settings (also called from the menu)
 float MouseLookSpeed();   // input_extras.cpp: the mouse look speed, 1 = the game's
 void ApplyInputExtras();
-void ApplyShadowBias();   // graphics_tweaks.cpp: writes the cascade bias table (also from the menu)  // writes the current input settings (also called from the menu)
+void ApplyShadowBias();
+void ApplyEdgeFix();      // graphics_tweaks.cpp: follows FullscreenEdgeFix   // graphics_tweaks.cpp: writes the cascade bias table (also from the menu)  // writes the current input settings (also called from the menu)
 void PadCapture(const void* joyInfoEx);  // pad 0 data as the game is about to receive it, null = none
 void AutoInputTick(unsigned id, const void* joyInfoEx, unsigned result, SHORT(WINAPI* getKey)(int));  // called by the joyGetPosEx hook
 bool InstallRenderScale();

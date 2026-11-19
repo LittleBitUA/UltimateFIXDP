@@ -299,6 +299,9 @@ Item g_pageGraphics[] = {
     {{L"Іконки кнопок ґеймпада", L"Gamepad button icons"}, &g_cfg.glyphTheme, kInt, 0, 3, 1, true, L"Graphics", L"GlyphTheme", nullptr, kGlyphTr,
      {L"Іконки підказок при грі з ґеймпадом. Авто: PlayStation для DualSense, інакше Xbox.\nПотрібні файли в UltimateFix\\glyphs\\gamepad.", L"Hint icons when playing with a gamepad. Auto: PlayStation for a DualSense, else Xbox.\nThe files must be in UltimateFix\\glyphs\\gamepad."},
      {L"Інтерфейс", L"Interface"}},
+    {{L"Затемнення до останнього пікселя", L"Fades to the last pixel"}, &g_cfg.fullscreenEdgeFix, kBool, 0, 1, 1, false, L"Graphics", L"FullscreenEdgeFix", ApplyEdgeFix, nullptr,
+     {L"На роздільності понад 1280×720 затемнення, екрани завантаження й сповіщення про предмет лишали смужку в 1 піксель справа й знизу. Тепер вони накривають екран повністю. Змінюється одразу.",
+      L"Above 1280x720 fades, loading screens and the item notice left a 1-pixel strip at the right and the bottom. Now they cover the whole screen. Changes at once."}, NOTR},
     {{L"Півпіксельний зсув 2D", L"2D half-pixel offset"}, &g_cfg.pixelOffsetFix, kBool, 0, 1, 1, false, L"Graphics", L"FixPixelOffset", nullptr, nullptr,
      {L"Для чіткого 2D у вищій роздільності: підтискає сусідні спрайти атласу. Якщо інтерфейс поплив, вимкніть. Діє лише тоді, коли задано вихідну роздільність (не 1280×720). Змінюється одразу.", L"For sharp 2D at a higher resolution: stops neighbouring atlas sprites from bleeding in. If the interface drifts, turn it off. Works only when an output resolution is set (not 1280×720). Changes at once."}, NOTR},
     RESET_ITEM

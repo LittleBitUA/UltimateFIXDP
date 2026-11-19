@@ -37,6 +37,46 @@ void ApplyGraphicsTweaks() {
     }
 }
 
+// Full-screen 2D quads: a rect of the whole 2D layer, given or 0, is drawn one unit larger to the right and the bottom, so the
+// half-unit shift of the quad never leaves an edge uncovered on a back buffer above 1280x720. What lies beyond the screen is
+// clipped. Other rects are passed on as they are.
+extern "C" {
+volatile unsigned char g_edgeFixOn = 0;
+float g_edgeRect[4] = {0.0f, 0.0f, 1281.0f, 721.0f};
+}
+extern "C" __attribute__((naked)) void FullQuadStub() {
+    asm volatile(
+        ".intel_syntax noprefix\n"
+        "cmp byte ptr [_g_edgeFixOn], 0\n"
+        "je 9f\n"
+        "mov eax, dword ptr [esp + 4]\n"
+        "test eax, eax\n"
+        "jnz 1f\n"
+        "cmp dword ptr [0x01480974], 0x44A00000\n"   // the 2D layer is 1280.0
+        "jne 9f\n"
+        "cmp dword ptr [0x01480970], 0x44340000\n"   // x 720.0
+        "jne 9f\n"
+        "jmp 2f\n"
+        "1:\n"
+        "cmp dword ptr [eax], 0\n"
+        "jne 9f\n"
+        "cmp dword ptr [eax + 4], 0\n"
+        "jne 9f\n"
+        "cmp dword ptr [eax + 8], 0x44A00000\n"
+        "jne 9f\n"
+        "cmp dword ptr [eax + 12], 0x44340000\n"
+        "jne 9f\n"
+        "2:\n"
+        "lea eax, [_g_edgeRect]\n"
+        "mov dword ptr [esp + 4], eax\n"
+        "9:\n"
+        "mov eax, 0x006E3360\n"
+        "jmp eax\n"
+        ".att_syntax\n");
+}
+
+void ApplyEdgeFix() { g_edgeFixOn = (g_cfg.fullscreenEdgeFix && g_outputW > 1280) ? 1 : 0; }
+
 // Sun shadow cascades (16-bit depth): the bias table at A00148h, per cascade {float constant, float slope}, for the outdoor
 // mode. The game gives all three 2e-5 / 2.0, about one step of D16: the far cascades (50..200, 200..1000 units, one texel
 // covers most of a unit) crawl with stripes as the camera moves. With the fix the middle and the far one get more.
@@ -59,6 +99,13 @@ void ApplyShadowBias() {
 
 bool InstallGraphicsTweaks() {
     bool any = false;
+    {
+        int n = 0;
+        for (const SiteDef& q : kSiteFullQuad) n += PatchCall(q.va, q.bytes, q.len, (const void*)FullQuadStub) ? 1 : 0;
+        ApplyEdgeFix();
+        Log("graphics: full-screen 2D quads cover the whole screen above 1280x720 (%d of 3 places, now %s)", n, g_edgeFixOn ? "on" : "off");
+        any = any || n > 0;
+    }
     if (BytesMatch(kShadowBiasVa, kShadowBiasOriginal, sizeof(kShadowBiasOriginal))) {
         g_shadowReady = true;
         ApplyShadowBias();

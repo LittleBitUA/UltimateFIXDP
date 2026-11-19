@@ -838,6 +838,17 @@ constexpr uint32_t kRouteLookupFn = 0x4D8980;
 constexpr SiteDef kSiteRouteCall1 = {"resident route lookup (rider)", 0x4CCD50, 5, {0xE8, 0x2B, 0xBC, 0x00, 0x00}};
 constexpr SiteDef kSiteRouteCall2 = {"resident route lookup", 0x4D1363, 5, {0xE8, 0x18, 0x76, 0x00, 0x00}};
 
+// Full-screen 2D quads (fades, the item notice): FUN_006E3360 (thiscall, the rect {x0, y0, x1, y1} or 0 = the 2D layer's
+// 1280x720 as the first stack argument, ret 14h) moves every corner half a unit to the left and up. Units are 1280x720, so
+// on a 4K back buffer that is 1.5 pixels: a 1-pixel strip stays uncovered at the right and the bottom (ZachFix issue 10).
+// The three full-screen callers ZachFix found: 0044A119 and 0044ACC0 (the fade manager), 0061BF43 (the item notice).
+constexpr uint32_t kQuadFn = 0x6E3360;
+constexpr SiteDef kSiteFullQuad[3] = {
+    {"full-screen quad (fade)", 0x44A119, 5, {0xE8, 0x42, 0x92, 0x29, 0x00}},
+    {"full-screen quad (fade 2)", 0x44ACC0, 5, {0xE8, 0x9B, 0x86, 0x29, 0x00}},
+    {"full-screen quad (item notice)", 0x61BF43, 5, {0xE8, 0x18, 0x74, 0x0C, 0x00}},
+};
+
 // Threads of the game that share data without locks (docs/crashes/11, 2.5). SetThread builds world objects while the main thread
 // already updates the next frame: the call at 00401C9D wakes it, and only the next tick (00401C7D) waits for it. RouteThread
 // works out a resident's path while a level change clears the queue (call 0040BE10 at 004B1B2F and 004B6A6D) without waiting.
@@ -877,7 +888,7 @@ constexpr uint32_t kNanTrapNumber = 0x409EA8;
 
 constexpr const SiteDef* kAllSites[] = {
     &kSiteNanTrap,
-    &kSiteMouseX, &kSiteMouseY, &kSiteLoaderSleep, &kSiteRouteCall1, &kSiteRouteCall2, &kSiteSetThreadWake, &kSiteRouteFlush1, &kSiteRouteFlush2, &kSiteRouteFlushFn,
+    &kSiteMouseX, &kSiteMouseY, &kSiteLoaderSleep, &kSiteRouteCall1, &kSiteRouteCall2, &kSiteFullQuad[0], &kSiteFullQuad[1], &kSiteFullQuad[2], &kSiteSetThreadWake, &kSiteRouteFlush1, &kSiteRouteFlush2, &kSiteRouteFlushFn,
     &kSiteGameFileBranch, &kSiteGameFileAddon, &kSiteGameFileArchive, &kSiteGameFileStore, &kSiteGameFileHave,
     &kSiteBeaconCall, &kSiteBeaconDraw, &kSiteBeaconMove, &kStorySites[0], &kStorySites[1], &kStorySites[2], &kStorySites[3], &kStorySites[4],
     &kStorySites[5], &kStorySites[6], &kStorySites[7], &kStorySites[8], &kStorySites[9], &kStorySites[10],
