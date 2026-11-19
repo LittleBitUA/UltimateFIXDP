@@ -832,6 +832,12 @@ struct TailDef {
 // test eax,eax / jz 409EA8 / jmp $ (EB FE), so a NaN angle hangs the game for good. docs/crashes/03_nan_spin_loops.md.
 constexpr SiteDef kSiteNanTrap = {"angle NaN trap", 0x409EA2, 6, {0x85, 0xC0, 0x74, 0x02, 0xEB, 0xFE}};
 
+// The two callers of the resident route lookup FUN_004D8980 that copy its result into the resident's position (ESI = resident).
+// docs/crashes/07 F3a. The third one (0047D804, the walking target) changes the AI and is left alone.
+constexpr uint32_t kRouteLookupFn = 0x4D8980;
+constexpr SiteDef kSiteRouteCall1 = {"resident route lookup (rider)", 0x4CCD50, 5, {0xE8, 0x2B, 0xBC, 0x00, 0x00}};
+constexpr SiteDef kSiteRouteCall2 = {"resident route lookup", 0x4D1363, 5, {0xE8, 0x18, 0x76, 0x00, 0x00}};
+
 // Loader thread idle wait (FUN_006B3CB0): with its queue empty it sleeps 16 ms at a time, and every synchronous load waits on
 // it, so each one can cost a timer quantum. 1 ms instead (the mod sets the 1 ms timer resolution). docs/crashes/04 V1.
 constexpr SiteDef kSiteLoaderSleep = {"loader idle sleep", 0x6B3CDD, 8, {0x85, 0xC0, 0x75, 0x08, 0x6A, 0x10, 0xFF, 0x15}};
@@ -858,7 +864,7 @@ constexpr uint32_t kNanTrapNumber = 0x409EA8;
 
 constexpr const SiteDef* kAllSites[] = {
     &kSiteNanTrap,
-    &kSiteMouseX, &kSiteMouseY, &kSiteLoaderSleep,
+    &kSiteMouseX, &kSiteMouseY, &kSiteLoaderSleep, &kSiteRouteCall1, &kSiteRouteCall2,
     &kSiteGameFileBranch, &kSiteGameFileAddon, &kSiteGameFileArchive, &kSiteGameFileStore, &kSiteGameFileHave,
     &kSiteBeaconCall, &kSiteBeaconDraw, &kSiteBeaconMove, &kStorySites[0], &kStorySites[1], &kStorySites[2], &kStorySites[3], &kStorySites[4],
     &kStorySites[5], &kStorySites[6], &kStorySites[7], &kStorySites[8], &kStorySites[9], &kStorySites[10],

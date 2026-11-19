@@ -590,4 +590,45 @@ inline size_t BuildMouseScaleStub(uint8_t* out, uint32_t movementVa, uint32_t sc
     return (size_t)(p - out);
 }
 
+// Called in place of `call 004D8980` (the route node of a resident: cdecl-like, out at [esp+4], index at [esp+8], ret 8,
+// result in AL) at 004CCD50 and 004D1363. ESI is the resident there. When the lookup fails (AL = 0: the table is not active,
+// or the mod's guard found the index out of range) `out` holds zeros or stack garbage, and the caller copies it into the
+// resident's position: a jump to (0, 0, 0). The stub copies the resident's own position into `out` instead, so the
+// resident stays where it stood. With `rider` (004CCD50) the caller writes to the ridden object when [esi+627h] = 1 and
+// [esi+684h] is set; then that object's position is taken. EAX is clobbered (the callers do not read it), AL stays 0.
+inline size_t BuildRouteKeepStub(uint8_t* out, uint32_t va, uint32_t fnVa, bool rider) {
+    uint8_t* p = out;
+    *p++ = 0xFF; *p++ = 0x74; *p++ = 0x24; *p++ = 0x08;   // push dword [esp+8]  (index)
+    *p++ = 0xFF; *p++ = 0x74; *p++ = 0x24; *p++ = 0x08;   // push dword [esp+8]  (out)
+    *p++ = 0xE8; StubPut32(p, fnVa - (va + (uint32_t)(p - out) + 4));  // call the route lookup (pops 8)
+    *p++ = 0x84; *p++ = 0xC0;                             // test al, al
+    uint8_t* jnz = p; *p++ = 0x75; *p++ = 0;              // jnz done
+    *p++ = 0x8B; *p++ = 0x4C; *p++ = 0x24; *p++ = 0x04;   // mov ecx, [esp+4]  (out)
+    *p++ = 0x85; *p++ = 0xC9;                             // test ecx, ecx
+    uint8_t* jz = p; *p++ = 0x74; *p++ = 0;               // jz done
+    *p++ = 0x8D; *p++ = 0x56; *p++ = 0x58;                // lea edx, [esi+58h]
+    uint8_t* jne = nullptr; uint8_t* jz2 = nullptr;
+    if (rider) {
+        *p++ = 0x80; *p++ = 0xBE; StubPut32(p, 0x627); *p++ = 0x01;  // cmp byte [esi+627h], 1
+        jne = p; *p++ = 0x75; *p++ = 0;                              // jne copy
+        *p++ = 0x8B; *p++ = 0x86; StubPut32(p, 0x684);               // mov eax, [esi+684h]
+        *p++ = 0x85; *p++ = 0xC0;                                    // test eax, eax
+        jz2 = p; *p++ = 0x74; *p++ = 0;                              // jz copy
+        *p++ = 0x8D; *p++ = 0x50; *p++ = 0x58;                       // lea edx, [eax+58h]
+    }
+    uint8_t* copy = p;
+    if (jne) jne[1] = (uint8_t)(copy - (jne + 2));
+    if (jz2) jz2[1] = (uint8_t)(copy - (jz2 + 2));
+    for (uint8_t k = 0; k < 16; k += 4) {
+        *p++ = 0x8B; if (k) { *p++ = 0x42; *p++ = k; } else { *p++ = 0x02; }   // mov eax, [edx+k]
+        *p++ = 0x89; if (k) { *p++ = 0x41; *p++ = k; } else { *p++ = 0x01; }   // mov [ecx+k], eax
+    }
+    *p++ = 0x31; *p++ = 0xC0;                             // xor eax, eax  (AL = 0 as the lookup said)
+    uint8_t* done = p;
+    jnz[1] = (uint8_t)(done - (jnz + 2));
+    jz[1] = (uint8_t)(done - (jz + 2));
+    *p++ = 0xC2; *p++ = 0x08; *p++ = 0x00;                // ret 8
+    return (size_t)(p - out);
+}
+
 }  // namespace ufx

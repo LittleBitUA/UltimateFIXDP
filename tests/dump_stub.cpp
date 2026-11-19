@@ -311,6 +311,23 @@ int main(int argc, char** argv) {
         Check(kSiteNanTrap.bytes[4] == 0xEB && kSiteNanTrap.bytes[5] == 0xFE, "nan trap", "the replaced jmp $");
     }
 
+    // resident route keep: the lookup is called with copies of both arguments; on AL = 0 the position goes into `out`
+    {
+        uint8_t rk[96];
+        const uint32_t rkVa = 0xC0000400;
+        for (int rider = 0; rider < 2; ++rider) {
+            size_t n = BuildRouteKeepStub(rk, rkVa, kRouteLookupFn, rider != 0);
+            printf("route keep stub (rider %d) %zu bytes\n", rider, n);
+            Check(n <= 96, "route keep", "fits in 96 bytes");
+            Check(rk[0] == 0xFF && rk[1] == 0x74 && rk[3] == 0x08 && rk[4] == 0xFF && rk[7] == 0x08, "route keep", "push [esp+8] twice");
+            Check(Rel32To(rk, rkVa, 8, kRouteLookupFn), "route keep", "call the lookup");
+            Check(rk[13] == 0x84 && rk[14] == 0xC0 && rk[15] == 0x75 && Rel8To(rk, 15, n - 3), "route keep", "test al / jnz done");
+            Check(rk[n - 3] == 0xC2 && rk[n - 2] == 0x08 && rk[n - 1] == 0x00, "route keep", "ret 8");
+            Check(rk[n - 5] == 0x31 && rk[n - 4] == 0xC0, "route keep", "AL stays 0");
+        }
+        Check(kSiteRouteCall1.va + 5 + Rd32(kSiteRouteCall1.bytes + 1) == kRouteLookupFn &&
+              kSiteRouteCall2.va + 5 + Rd32(kSiteRouteCall2.bytes + 1) == kRouteLookupFn, "route keep", "both sites call 004D8980");
+    }
     // mouse scale: the original fmul, then ours
     {
         uint8_t ms[16];
