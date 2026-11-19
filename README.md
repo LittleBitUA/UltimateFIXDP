@@ -9,6 +9,7 @@
 _Універсальний фікс для_ **Deadly Premonition: The Director's Cut**
 
 [![GitHub release](https://img.shields.io/github/v/release/LittleBitUA/UltimateFIXDP?include_prereleases&style=for-the-badge&color=c4192b)](https://github.com/LittleBitUA/UltimateFIXDP/releases)
+[![Downloads](https://img.shields.io/github/downloads/LittleBitUA/UltimateFIXDP/total?style=for-the-badge&color=c4192b&label=downloads)](https://github.com/LittleBitUA/UltimateFIXDP/releases)
 [![License](https://img.shields.io/badge/license-MIT-c4192b?style=for-the-badge)](LICENSE)
 [![Steam 1.01b](https://img.shields.io/badge/Steam-1.01b-c4192b?style=for-the-badge&logo=steam)](https://store.steampowered.com/app/247660/)
 [![Made by Little Bit](https://img.shields.io/badge/by-%C2%ABLittle%20Bit%C2%BB-c4192b?style=for-the-badge)](https://t.me/LittleBitUA)
