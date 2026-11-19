@@ -145,6 +145,11 @@ void NoteOtherComposite(void* shader) {
         const u32 h = Fnv1a(code, size);
         bool known = false;
         for (int i = 0; i < g_otherCount; ++i) known = known || g_otherSeen[i] == h;
+        if (!known && h == 0xD730D051u) {  // the game's plain copy (texld oC0, v0, s0): frames with no post effects, e.g. the title
+            g_otherSeen[g_otherCount < 8 ? g_otherCount++ : 7] = h;
+            Log("xboxlook: a frame with the game's plain copy instead of the tone map (no post effects there in the game either)");
+            known = true;
+        }
         if (!known && g_otherCount < 8) {
             g_otherSeen[g_otherCount++] = h;
             wchar_t path[MAX_PATH + 40];
