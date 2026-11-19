@@ -421,7 +421,7 @@ static const char kDefaultIni[] =
     "TraceResources=0\r\n"
     "; 1 = after 300 slow frames in a row (over 20 ms each, over 40 ms in the 30 frames/s mode, under 120 ms; about 7 s at 40 frames/s)\r\n"
     "; the sampling profiler runs by itself for 10 seconds (twice at most per start) and\r\n"
-    "; writes where the game spends its time to the log (profile: lines). F9 starts it by hand.\r\n"
+    "; writes where the game spends its time to the log (profile: lines). Ctrl+F9 starts it by hand.\r\n"
     "AutoProfile=1\r\n"
     "; Guards against a known crash: an NPC after a cutscene is sent to a navigation node that does not exist and\r\n"
     "; the game reads outside its table. 1 = refuse such lookups instead of crashing.\r\n"

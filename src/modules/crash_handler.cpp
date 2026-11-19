@@ -252,8 +252,8 @@ void ReportHang(DWORD tid) {
     WriteHangDump(tid);  // MiniDumpWriteDump stops the threads itself for as long as it needs them
 }
 
-// ---- sampling profiler (F9) ---------------------------------------------------------------------------------------------------
-// Press F9 in the game: for 10 seconds the picture thread is stopped for a moment about every 2 ms and where it stands is noted. Then the log
+// ---- sampling profiler (Ctrl+F9) ------------------------------------------------------------------------------------------------
+// Press Ctrl+F9 in the game: for 10 seconds the picture thread is stopped for a moment about every 2 ms and where it stands is noted. Then the log
 // gets the share per module (game, video driver, PhysX, Windows) and the busiest places of the game code (blocks of 128 bytes of DP.exe;
 // for time spent in a driver, the game code that called it). Reading the addresses against the engine map tells what costs the CPU time.
 struct Sample {
@@ -275,7 +275,7 @@ void SortU32(u32* a, int n) {  // shell sort: no C runtime
 void RunProfile(DWORD tid) {
     HANDLE th = OpenThread(THREAD_SUSPEND_RESUME | THREAD_GET_CONTEXT | THREAD_QUERY_INFORMATION, FALSE, tid);
     if (!th) { Log("profile: the picture thread cannot be opened"); return; }
-    Log("profile: sampling for 10 seconds (F9)");
+    Log("profile: sampling for 10 seconds (Ctrl+F9)");
     int n = 0;
     DWORD start = GetTickCount();
     while (GetTickCount() - start < 10000 && n < 6000) {
@@ -395,10 +395,11 @@ DWORD WINAPI WatchdogThread(void*) {
             SetEvent(g_crashDone);
             continue;
         }
-        {   // F9 (the game in front): the sampling profiler
+        {   // Ctrl+F9 (the game in front): the sampling profiler (plain F9 is the update key)
             HWND gw = GameWindowHandle();
             static bool prevF9 = false;
-            bool f9 = gw && GetForegroundWindow() == gw && (GetAsyncKeyState(VK_F9) & 0x8000) != 0;
+            bool f9 = gw && GetForegroundWindow() == gw && (GetAsyncKeyState(VK_F9) & 0x8000) != 0 &&
+                      (GetAsyncKeyState(VK_CONTROL) & 0x8000) != 0;
             if ((f9 && !prevF9 && g_windowThread) || (g_wantProfile && g_windowThread)) {
                 g_wantProfile = 0;
                 RunProfile(g_windowThread);
