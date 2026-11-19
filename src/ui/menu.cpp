@@ -104,6 +104,8 @@ void RunningScene(wchar_t* out) {
 }
 
 // "200%  ·  3840×2160": the size of the scene that percent gives.
+void FormatTenths(int v, wchar_t* out) { wsprintfW(out, L"%d.%d", v / 10, v % 10); }
+
 void FormatScale(int v, wchar_t* out) {
     int base = g_cfg.outputWidth ? g_cfg.outputWidth : 1280;
     int baseH = g_cfg.outputWidth ? WantedHeight(base) : 720;
@@ -237,6 +239,13 @@ Item g_pageGraphics[] = {
      {L"Чіткість і вигляд", L"Sharpness and look"}},
     {{L"Анізотропна фільтрація текстур (макс.)", L"Anisotropic texture filtering (max)"}, &g_cfg.anisotropy, kInt, 1, 16, 1, false, L"Graphics", L"Anisotropy", ApplyGraphicsTweaks, nullptr,
      {L"Чіткість текстур під кутом (дорога, стіни). Гра за замовчуванням 8.", L"Sharpness of textures at an angle (road, walls). The game uses 8."}, NOTR},
+    {{L"Ближня площина камери", L"Camera near plane"}, &g_cfg.nearPlane, kInt, 10, 60, 5, false, L"Graphics", L"NearPlane", nullptr, nullptr,
+     {L"Проти блимання далеких поверхонь (дорога, дахи, написи «перебивають» одне одного). Більше = точніша глибина вдалині, але занадто велике значення зрізає те, що впритул до камери. Гра: 1.0; типово 3.0. Катсцени не змінюються. Діє одразу.",
+      L"Against far surfaces flickering (roads, roofs, decals fighting each other). Higher = more depth precision far away, but too high cuts what is right at the camera. Game: 1.0; default 3.0. Cutscenes are not changed. Changes at once."},
+     NOTR, nullptr, 0, nullptr, FormatTenths},
+    {{L"Стабільніші далекі тіні", L"Steadier far shadows"}, &g_cfg.shadowBiasFix, kBool, 0, 1, 1, false, L"Graphics", L"ShadowBiasFix", ApplyShadowBias, nullptr,
+     {L"Більше зміщення глибини для двох дальніх каскадів тіней: вдалині не повзуть смуги тіней, коли рухається камера. Діє одразу.",
+      L"More depth bias on the two far shadow cascades: no crawling shadow stripes in the distance as the camera moves. Changes at once."}, NOTR},
     {{L"Кут огляду в грі, %", L"Field of view in play, %"}, &g_cfg.gameFov, kInt, 70, 150, 5, false, L"Graphics", L"FieldOfView", nullptr, nullptr,
      {L"У відсотках від кута самої гри (близько 65°): 100 як у грі, 120 приблизно 78°, 140 приблизно 91°. Наближення при прицілюванні й камера в машині зберігаються, лише ширші. Катсцени й фоторежим не змінюються. Змінюється одразу.",
       L"In percent of the game's own angle (about 65°): 100 as the game, 120 about 78°, 140 about 91°. The zoom when aiming and the car camera stay, only wider. Cutscenes and the photo mode are not changed. Changes at once."}, NOTR},

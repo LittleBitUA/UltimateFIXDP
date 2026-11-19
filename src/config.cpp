@@ -172,6 +172,12 @@ static const char kDefaultIni[] =
     "; Field of view while playing, in percent of the game's own (about 65 degrees): 100 = as the game, 120 = about 78 degrees.\r\n"
     "; The game keeps its own zoom (aiming, the car); cutscenes and the photo mode keep their own view. Changes at once.\r\n"
     "FieldOfView=100\r\n"
+    "; Near plane of the play camera in tenths of a unit (the game: 10 = 1.0, about 10 cm). Higher gives the depth buffer more\r\n"
+    "; precision far away: far surfaces that lie on each other (roads, roofs, decals) stop flickering. Too high cuts what is very\r\n"
+    "; close to the camera. 10..60; cutscenes keep their own. Changes at once.\r\n"
+    "NearPlane=30\r\n"
+    "; 1 = more depth bias on the two far sun shadow cascades: no crawling shadow stripes in the distance. Changes at once.\r\n"
+    "ShadowBiasFix=1\r\n"
     "; The PC port darkens the picture by 0.85 (and 0.75 more in one cutscene state); the console did not.\r\n"
     "; 1 = remove the factors (about 15% brighter). Changes at once.\r\n"
     "XboxExposure=0\r\n"
@@ -709,6 +715,10 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.scalePostBuffers = (int)GetPrivateProfileIntW(L"Graphics", L"ScalePostBuffers", 0, ini);
     g_cfg.anisotropy = (int)GetPrivateProfileIntW(L"Graphics", L"Anisotropy", 16, ini);
     g_cfg.gameFov = (int)GetPrivateProfileIntW(L"Graphics", L"FieldOfView", 100, ini);
+    g_cfg.nearPlane = (int)GetPrivateProfileIntW(L"Graphics", L"NearPlane", 30, ini);
+    if (g_cfg.nearPlane < 10) g_cfg.nearPlane = 10;
+    if (g_cfg.nearPlane > 60) g_cfg.nearPlane = 60;
+    g_cfg.shadowBiasFix = GetPrivateProfileIntW(L"Graphics", L"ShadowBiasFix", 1, ini) ? 1 : 0;
     if (g_cfg.gameFov < 70) g_cfg.gameFov = 70;
     if (g_cfg.gameFov > 150) g_cfg.gameFov = 150;
     if (g_cfg.anisotropy < 1) g_cfg.anisotropy = 1;

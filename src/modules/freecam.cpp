@@ -83,6 +83,27 @@ bool InCutscene() {
     return (*(volatile u32*)(uintptr_t)(ev + 0x44) & 0x40000u) != 0 || *(volatile u32*)(uintptr_t)(ev + 0x34) != 0;
 }
 
+// The near plane (+64h): the game writes 1.0 every frame in play (005D361A), event cameras their own. A higher one in play only
+// (not in cutscenes), put back after the frame like the angle.
+float g_nearGame = 0.f, g_nearWritten = 0.f;
+bool g_nearSwapped = false;
+
+void GameNearBeforeBuild() {
+    volatile float* nearPlane = (volatile float*)(uintptr_t)(kRenderCameraVa + 0x64);
+    float v = *nearPlane;
+    if (g_nearSwapped && v == g_nearWritten) v = g_nearGame;
+    g_nearSwapped = false;
+    const float want = (float)g_cfg.nearPlane / 10.f;
+    if (want <= v || v <= 0.f || v > 50.f || InCutscene()) {
+        *nearPlane = v;
+        return;
+    }
+    g_nearGame = v;
+    *nearPlane = want;
+    g_nearWritten = *nearPlane;
+    g_nearSwapped = true;
+}
+
 void GameFovBeforeBuild() {
     volatile float* fov = (volatile float*)(uintptr_t)(kRenderCameraVa + 0x54);
     float v = *fov;
@@ -103,7 +124,7 @@ void GameFovBeforeBuild() {
 
 // Runs once per frame in the game thread, in front of the camera matrix build.
 void __attribute__((cdecl)) CameraWorker() {
-    {   // the near plane of the main camera (a float in its context), logged once for diagnostics; it is never changed
+    {   // the near plane of the main camera (a float in its context) as the game set it, logged once (NearPlane raises it in play)
         static bool logged = false;
         if (!logged) {
             logged = true;
@@ -142,6 +163,7 @@ void __attribute__((cdecl)) CameraWorker() {
         Log("freecam: %s", g_active ? "on" : "off");
     }
     GameFovBeforeBuild();
+    GameNearBeforeBuild();
     if (!g_active) return;
 
     float* eye = (float*)(uintptr_t)(kRenderCameraVa + 0x04);
@@ -221,6 +243,11 @@ void __attribute__((cdecl)) CameraWorker() {
 bool FreeCamBlocksInput() { return g_active && g_cfg.freeCamFreeze; }
 
 void GameFovAfterFrame() {
+    if (g_nearSwapped) {
+        volatile float* nearPlane = (volatile float*)(uintptr_t)(kRenderCameraVa + 0x64);
+        if (*nearPlane == g_nearWritten) *nearPlane = g_nearGame;
+        g_nearSwapped = false;
+    }
     if (!g_fovSwapped) return;
     volatile float* fov = (volatile float*)(uintptr_t)(kRenderCameraVa + 0x54);
     if (*fov == g_fovWritten) *fov = g_fovGame;  // the game's next camera update eases from its own angle

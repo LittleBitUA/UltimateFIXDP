@@ -37,8 +37,36 @@ void ApplyGraphicsTweaks() {
     }
 }
 
+// Sun shadow cascades (16-bit depth): the bias table at A00148h, per cascade {float constant, float slope}, for the outdoor
+// mode. The game gives all three 2e-5 / 2.0, about one step of D16: the far cascades (50..200, 200..1000 units, one texel
+// covers most of a unit) crawl with stripes as the camera moves. With the fix the middle and the far one get more.
+namespace {
+constexpr u32 kShadowBiasVa = 0x00A00148;
+const u8 kShadowBiasOriginal[24] = {0xAC, 0xC5, 0xA7, 0x37, 0x00, 0x00, 0x00, 0x40, 0xAC, 0xC5, 0xA7, 0x37,
+                                    0x00, 0x00, 0x00, 0x40, 0xAC, 0xC5, 0xA7, 0x37, 0x00, 0x00, 0x00, 0x40};
+bool g_shadowReady = false;
+}  // namespace
+
+void ApplyShadowBias() {
+    if (!g_shadowReady) return;
+    volatile float* t = (volatile float*)(uintptr_t)kShadowBiasVa;
+    const bool on = g_cfg.shadowBiasFix != 0;
+    t[2] = on ? 6e-5f : 2e-5f;
+    t[3] = on ? 2.5f : 2.0f;
+    t[4] = on ? 1.5e-4f : 2e-5f;
+    t[5] = on ? 3.0f : 2.0f;
+}
+
 bool InstallGraphicsTweaks() {
     bool any = false;
+    if (BytesMatch(kShadowBiasVa, kShadowBiasOriginal, sizeof(kShadowBiasOriginal))) {
+        g_shadowReady = true;
+        ApplyShadowBias();
+        Log("graphics: shadow cascade bias %s (switchable in the menu)", g_cfg.shadowBiasFix ? "raised on the far cascades" : "as the game");
+        any = true;
+    } else {
+        Log("graphics: the shadow bias table differs from DP.exe 1.01b, left alone");
+    }
     // Anisotropy sites also match when we already changed them: accept any value in the `push` immediate.
     const SiteDef* aniso[2] = {&kSiteAniso1, &kSiteAniso2};
     bool ok = true;

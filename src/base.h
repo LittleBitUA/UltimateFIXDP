@@ -86,6 +86,8 @@ struct Config {
     int shadowScale;         // shadow map size in percent (100 = original 512/1024)
     int scalePostBuffers;    // also enlarge the blur/bloom storage buffers with the scene
     int anisotropy;          // maximum anisotropic filtering, 1..16 (the game uses 8)
+    int nearPlane;           // near plane of the play camera in tenths (game 10 = 1.0), 10..60: depth precision far away
+    int shadowBiasFix;       // more depth bias on the two far sun shadow cascades (crawling stripes far away)
     int gameFov;             // field of view in play, percent of the game's own (100 = unchanged), 70..150
     int xboxExposure;        // no 0.85 / 0.75 exposure factors, as on the console
     int xboxLook;            // master switch of the Xbox 360 look: scene grading in the final composite and the display gamma
@@ -339,7 +341,8 @@ extern int g_sceneWidth;  // width of the 3D scene after the render scale (0 = n
 bool FreeCamBlocksInput();  // true while the camera flies and the game must see no input
 void ApplyWorldExtra();  // writes the current settings (also called from the menu)
 float MouseLookSpeed();   // input_extras.cpp: the mouse look speed, 1 = the game's
-void ApplyInputExtras();  // writes the current input settings (also called from the menu)
+void ApplyInputExtras();
+void ApplyShadowBias();   // graphics_tweaks.cpp: writes the cascade bias table (also from the menu)  // writes the current input settings (also called from the menu)
 void PadCapture(const void* joyInfoEx);  // pad 0 data as the game is about to receive it, null = none
 void AutoInputTick(unsigned id, const void* joyInfoEx, unsigned result, SHORT(WINAPI* getKey)(int));  // called by the joyGetPosEx hook
 bool InstallRenderScale();
