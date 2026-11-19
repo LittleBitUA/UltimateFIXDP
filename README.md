@@ -109,7 +109,7 @@ port with the Xbox 360 original:
   - The loader waits 1 ms instead of 16 between requests: fewer hitches while the town streams in.
   - No white "not responding" window during long loads.
   - A memory line in the log every minute, and a notice to save and restart when memory runs low.
-- **4 GB of memory by itself**: the mod gives `DP.exe` the 4 GB flag (from the next start); `ufx_laa.exe` is no longer needed.
+- **4 GB of memory by itself**: the mod gives `DP.exe` the 4 GB flag (from the next start), no separate tool needed.
 - **The stick-waggle QTE works at high FPS** again (every swap counts as at 60 FPS).
 - **Saves.**
   - Every save is checked: the money, the story position and the play time must agree between the header and the record, or the mod warns.
@@ -168,7 +168,6 @@ The code is our own (MIT). The ideas, facts and addresses came from earlier comm
 | **[CrashFix](https://github.com/Behelit09/DeadlyPremonition-CrashFix)** · **[MapFix](https://github.com/Behelit09/Deadly-Premonition-The-Director-s-Cut-MapFix)** · **[FreeCam](https://github.com/Behelit09/DeadlyPremonition-FreeCam)** | Behelit09 | Navigation crash, the full map, free camera |
 | **[DPRecomp](https://github.com/LittleBitUA/DPRecomp)** | «Little Bit» | Our Xbox 360 recompilation: the reference the PC port is compared with |
 | **[Kenney Input Prompts](https://kenney.nl/assets/input-prompts)** | Kenney | Gamepad button icons (CC0) |
-| **[DXVK](https://github.com/doitsujin/dxvk)** | Philip "doitsujin" Rebohle | Optional Vulkan renderer, bundled under its own license |
 
 🧪 **Testers:** **Gold flin** and **Tree Fan**. Thank you for playing the unfinished builds and reporting everything that broke.
 
@@ -184,9 +183,9 @@ The code is our own (MIT). The ideas, facts and addresses came from earlier comm
 > <br>**Do not combine** with DPfix, ZachFix or DPStabilityFix: UltimateFIXDP replaces them.
 > <br>**Coming from DP1 Launcher?** This is its successor: remove DPfix (`d3d9.dll`, `DPfix.ini`) first.
 
-Optional extras in the release: `ufx_laa.exe` (the 4 GB flag by hand; the mod now sets it by itself, `--undo` reverts), `ufx_play.exe` (start without the launcher window; the mod installs it by itself, hold **Shift** for the old launcher), `dxvk\Install_DXVK.bat` (Vulkan renderer, _experimental_).
+The release archive holds only the mod: `X3DAudio1_7.dll`, the `UltimateFix` folder and a short `README_UA.txt`. The source code is this repository. Newer versions: the mod asks GitHub at the start and offers **F9** to update itself (`[Menu] CheckUpdates=0` turns that off).
 
-To uninstall, delete `X3DAudio1_7.dll`.
+To uninstall, delete `X3DAudio1_7.dll` (and, for the 4 GB flag, put `DP.exe.bak` back as `DP.exe` or let Steam verify the files).
 
 ### Keys
 
@@ -307,7 +306,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
   - Потік завантаження чекає між запитами 1 мс замість 16: менше ривків, коли місто підвантажується.
   - Під час довгих завантажень немає білого вікна «не відповідає».
   - Раз на хвилину в журналі рядок про пам'ять, а коли її бракує, повідомлення «збережіться й перезапустіть».
-- **4 ГБ пам'яті самі собою**: мод ставить `DP.exe` прапор 4 ГБ (діє з наступного запуску), `ufx_laa.exe` більше не потрібен.
+- **4 ГБ пам'яті самі собою**: мод ставить `DP.exe` прапор 4 ГБ (діє з наступного запуску), окрема програма не потрібна.
 - **QTE «розхитування» знову проходиться на високому FPS** (кожне перемикання рахується, як на 60 FPS).
 - **Збереження.**
   - Кожне збереження перевіряється: гроші, місце в сюжеті й час гри мають збігатися в заголовку й записі, інакше мод попереджає.
@@ -353,7 +352,6 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 | **[CrashFix](https://github.com/Behelit09/DeadlyPremonition-CrashFix)** · **[MapFix](https://github.com/Behelit09/Deadly-Premonition-The-Director-s-Cut-MapFix)** · **[FreeCam](https://github.com/Behelit09/DeadlyPremonition-FreeCam)** | Behelit09 | Виліт навігації, повна мапа, вільна камера |
 | **[DPRecomp](https://github.com/LittleBitUA/DPRecomp)** | «Little Bit» | Наша рекомпіляція версії для Xbox 360: еталон, з яким порівнюємо PC-порт |
 | **[Kenney Input Prompts](https://kenney.nl/assets/input-prompts)** | Kenney | Іконки кнопок ґеймпада (CC0) |
-| **[DXVK](https://github.com/doitsujin/dxvk)** | Philip «doitsujin» Rebohle | Необов'язковий Vulkan-рендерер, під власною ліцензією |
 
 🧪 **Тестувальники:** **Gold flin** і **Tree Fan**. Дякуємо, що грали в недороблені збірки й повідомляли про все, що ламалось.
 
@@ -369,9 +367,9 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 > <br>**Не поєднуйте** з DPfix, ZachFix і DPStabilityFix: UltimateFIXDP їх замінює.
 > <br>**Користувались DP1 Launcher?** Це його наступник: спершу приберіть DPfix (`d3d9.dll`, `DPfix.ini`).
 
-Необов'язкові додатки в релізі: `ufx_laa.exe` (прапор 4 ГБ вручну; тепер мод ставить його сам, `--undo` повертає як було), `ufx_play.exe` (запуск без вікна лаунчера; мод ставить його сам, утримуйте **Shift**, щоб відкрити старий лаунчер), `dxvk\Install_DXVK.bat` (Vulkan-рендерер, _експериментально_).
+В архіві релізу лише мод: `X3DAudio1_7.dll`, тека `UltimateFix` і коротка `README_UA.txt`. Вихідний код — у цьому репозиторії. Нові версії: на старті мод питає GitHub і пропонує **F9**, щоб оновитися самому (`[Menu] CheckUpdates=0` вимикає це).
 
-Щоб видалити мод, видаліть `X3DAudio1_7.dll`.
+Щоб видалити мод, видаліть `X3DAudio1_7.dll` (а щоб прибрати прапор 4 ГБ, поверніть `DP.exe.bak` як `DP.exe` або перевірте файли в Steam).
 
 ### Клавіші
 

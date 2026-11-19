@@ -1,5 +1,5 @@
-// A small zlib / DEFLATE decoder (RFC 1950/1951), freestanding: stored, fixed and dynamic Huffman blocks. Used to read the
-// game's own XPC pictures (the pad icon atlas). No Windows headers here, so the host tests run it against zlib.
+// A small zlib / DEFLATE decoder (RFC 1950/1951) and zip reader, freestanding: stored, fixed and dynamic Huffman blocks.
+// Used to read the game's own XPC pictures (the pad icon atlas) and the release archive of an update. No Windows headers here, so the host tests run it against zlib.
 #pragma once
 #include <stddef.h>
 #include <stdint.h>
@@ -93,10 +93,9 @@ inline bool InflateCodes(InflateState& s, const Huffman& lit, const Huffman& dis
     }
 }
 
-// Inflates a zlib stream (2-byte header) into dst; returns the bytes written, 0 on any error.
-inline size_t ZlibInflate(const uint8_t* src, size_t srcLen, uint8_t* dst, size_t dstLen) {
-    if (srcLen < 2 || (src[0] & 0x0F) != 8 || ((src[0] << 8) | src[1]) % 31 != 0 || (src[1] & 0x20)) return 0;
-    InflateState s = {src, srcLen, 2, 0, 0, dst, dstLen, 0, false};
+// Inflates raw DEFLATE data (a zip entry) into dst; returns the bytes written, 0 on any error.
+inline size_t RawInflate(const uint8_t* src, size_t srcLen, uint8_t* dst, size_t dstLen) {
+    InflateState s = {src, srcLen, 0, 0, 0, dst, dstLen, 0, false};
     static Huffman lit, dist;  // big for the stack of a game thread
     int last = 0;
     do {
@@ -160,6 +159,76 @@ inline size_t ZlibInflate(const uint8_t* src, size_t srcLen, uint8_t* dst, size_
         }
     } while (!last);
     return s.out;
+}
+
+// Inflates a zlib stream (2-byte header) into dst; returns the bytes written, 0 on any error.
+inline size_t ZlibInflate(const uint8_t* src, size_t srcLen, uint8_t* dst, size_t dstLen) {
+    if (srcLen < 2 || (src[0] & 0x0F) != 8 || ((src[0] << 8) | src[1]) % 31 != 0 || (src[1] & 0x20)) return 0;
+    return RawInflate(src + 2, srcLen - 2, dst, dstLen);
+}
+
+// CRC-32 (zip, IEEE 802.3), bitwise.
+inline uint32_t Crc32(const uint8_t* p, size_t n) {
+    uint32_t c = 0xFFFFFFFFu;
+    for (size_t i = 0; i < n; ++i) {
+        c ^= p[i];
+        for (int k = 0; k < 8; ++k) c = (c >> 1) ^ (0xEDB88320u & (0u - (c & 1u)));
+    }
+    return ~c;
+}
+
+// One entry of a zip archive in memory: its name, method and sizes from the central directory, and its data.
+struct ZipEntry {
+    const char* name;
+    uint16_t nameLen, method;
+    uint32_t crc, packed, size;
+    const uint8_t* data;  // the packed bytes in the archive
+};
+
+inline uint32_t ZipRd32(const uint8_t* p) { return (uint32_t)p[0] | ((uint32_t)p[1] << 8) | ((uint32_t)p[2] << 16) | ((uint32_t)p[3] << 24); }
+inline uint16_t ZipRd16(const uint8_t* p) { return (uint16_t)(p[0] | (p[1] << 8)); }
+
+// Calls `fn(entry, ctx)` for each entry; false when the archive is not a zip this reader understands.
+template <typename Fn>
+inline bool ZipForEach(const uint8_t* z, size_t len, Fn fn) {
+    if (len < 22) return false;
+    size_t eocd = len - 22;
+    for (size_t back = 0; back < 65557 && eocd > 0 && ZipRd32(z + eocd) != 0x06054B50u; ++back) --eocd;
+    if (ZipRd32(z + eocd) != 0x06054B50u) return false;
+    const uint16_t count = ZipRd16(z + eocd + 10);
+    size_t cd = ZipRd32(z + eocd + 16);
+    for (uint16_t i = 0; i < count; ++i) {
+        if (cd + 46 > len || ZipRd32(z + cd) != 0x02014B50u) return false;
+        ZipEntry e;
+        e.method = ZipRd16(z + cd + 10);
+        e.crc = ZipRd32(z + cd + 16);
+        e.packed = ZipRd32(z + cd + 20);
+        e.size = ZipRd32(z + cd + 24);
+        e.nameLen = ZipRd16(z + cd + 28);
+        const uint16_t extra = ZipRd16(z + cd + 30), comment = ZipRd16(z + cd + 32);
+        const uint32_t local = ZipRd32(z + cd + 42);
+        if (cd + 46 + e.nameLen > len || local + 30 > len || ZipRd32(z + local) != 0x04034B50u) return false;
+        e.name = (const char*)(z + cd + 46);
+        const size_t dataAt = local + 30 + ZipRd16(z + local + 26) + ZipRd16(z + local + 28);
+        if (dataAt > len || e.packed > len - dataAt) return false;
+        e.data = z + dataAt;
+        if (!fn(e)) return false;
+        cd += 46 + e.nameLen + extra + comment;
+    }
+    return true;
+}
+
+// Unpacks one entry into dst (e.size bytes) and checks its CRC.
+inline bool ZipExtract(const ZipEntry& e, uint8_t* dst) {
+    if (e.method == 0) {
+        if (e.packed != e.size) return false;
+        for (uint32_t i = 0; i < e.size; ++i) dst[i] = e.data[i];
+    } else if (e.method == 8) {
+        if (RawInflate(e.data, e.packed, dst, e.size) != e.size) return false;
+    } else {
+        return false;
+    }
+    return Crc32(dst, e.size) == e.crc;
 }
 
 // The first picture of an XPC2 container (the game's picture format): entry 0 at +40h, +10h offset, +14h packed size,

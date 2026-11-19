@@ -193,6 +193,9 @@ Item g_pageDisplay[] = {
     {{L"Прозорість панелі меню, %", L"Menu panel opacity, %"}, &g_cfg.menuOpacity, kInt, 20, 100, 5, false, L"Menu", L"Opacity", nullptr, nullptr,
      {L"Чим менше, тим більше крізь меню видно гру. Текст лишається чітким. Змінюється одразу.", L"The lower, the more of the game shows through the menu. The text stays sharp. Changes at once."},
      {L"Вигляд меню", L"Look of the menu"}},
+    {{L"Перевіряти оновлення", L"Check for updates"}, &g_cfg.checkUpdates, kBool, 0, 1, 1, true, L"Menu", L"CheckUpdates", nullptr, nullptr,
+     {L"На старті один анонімний запит до GitHub: чи вийшла нова версія. Якщо так, плашка на старті й сторінка «Про мод» пропонують F9: мод сам завантажить її, замінить X3DAudio1_7.dll та іконки й перезапустить гру. Налаштування, моди й копії збережень лишаються.",
+      L"One anonymous request to GitHub at the start: is a new version out. If so, the start card and the About page offer F9: the mod downloads it, replaces X3DAudio1_7.dll and the icons and restarts the game. Settings, mods and save backups stay."}, NOTR},
     {{L"Панель статистики кадру", L"Frame statistics panel"}, &g_cfg.frameStats, kBool, 0, 1, 1, false, L"Debug", L"FrameStats", nullptr, nullptr,
      {L"Окрема панель справа вгорі, як у Windows: всього, гра (процесор), з них фізика, Present (драйвер, очікування відеокарти й екрана), найгірший кадр за 30 кадрів, час проходів мода, FPS, частота екрана й графік останніх 120 кадрів. Червоні стовпчики: кадри, що помітно довші за середній. Для пошуку лагів.",
       L"A separate panel top right, like the Windows one: total, game (CPU), of which physics, Present (driver, waiting for the video card and screen), the worst frame of 30, the time of the mod's passes, FPS, screen refresh rate and a graph of the last 120 frames. Red bars: frames clearly longer than average. For finding lag."}, {L"Діагностика", L"Diagnostics"}},
@@ -318,9 +321,9 @@ Item g_pageWorld[] = {
     {{L"Дальність деталей LOD (×, гра 1)", L"Model detail distance, LOD (×, game: 1)"}, &g_cfg.lodScale, kInt, 1, 4, 1, false, L"World", L"LodScale", ApplyWorldExtra, nullptr,
      {L"Детальні моделі лишаються далі від камери. Більше значення: більше трикутників.", L"Detailed models stay farther from the camera. More: more triangles."}, NOTR},
     {{L"Повні далекі моделі (×, гра 1)", L"Full model of far objects (×, game: 1)"}, &g_cfg.alt3dScale, kInt, 1, 3, 1, false, L"World", L"Alternate3DScale", nullptr, nullptr,
-     {L"Проти появи будинків і предметів перед носом: далекі об'єкти, які гра малює спрощеними, отримують повну модель з більшої відстані. 2 це ще одне кільце клітинок, 3 вся завантажена область. Потребує памʼяті (ufx_laa.exe). ЕКСПЕРИМЕНТАЛЬНО: далекі об'єкти можуть мерехтіти; тоді поставте 1. Змінюється одразу.", L"Against buildings and props popping in right in front of you: far objects that the game draws in a simplified form get their full model from farther away. 2 is one more ring of cells, 3 the whole loaded area. Needs memory (ufx_laa.exe). EXPERIMENTAL: far objects may flicker; if so, set 1. Changes at once."}, NOTR},
+     {L"Проти появи будинків і предметів перед носом: далекі об'єкти, які гра малює спрощеними, отримують повну модель з більшої відстані. 2 це ще одне кільце клітинок, 3 вся завантажена область. Потребує памʼяті (4 ГБ, мод ставить сам). ЕКСПЕРИМЕНТАЛЬНО: далекі об'єкти можуть мерехтіти; тоді поставте 1. Змінюється одразу.", L"Against buildings and props popping in right in front of you: far objects that the game draws in a simplified form get their full model from farther away. 2 is one more ring of cells, 3 the whole loaded area. Needs memory (4 GB, set by the mod). EXPERIMENTAL: far objects may flicker; if so, set 1. Changes at once."}, NOTR},
     {{L"Повна деталізація зовнішніх клітинок", L"Full detail in the outer cells"}, &g_cfg.highDetail, kBool, 0, 1, 1, false, L"World", L"HighDetail", ApplyWorldExtra, nullptr,
-     {L"Зовнішнє кільце світу вантажиться з повним набором ресурсів. Потребує багато пам'яті (ufx_laa.exe).", L"The outer ring of the world loads the full resource set. Needs a lot of memory (ufx_laa.exe)."}, NOTR},
+     {L"Зовнішнє кільце світу вантажиться з повним набором ресурсів. Потребує багато пам'яті (4 ГБ, мод ставить сам).", L"The outer ring of the world loads the full resource set. Needs a lot of memory (4 GB, set by the mod)."}, NOTR},
     {{L"Видимість в інтер'єрах", L"Visibility indoors"}, &g_cfg.interiorVisibility, kInt, 0, 2, 1, false, L"World", L"InteriorVisibility", ApplyWorldExtra, nullptr,
      {L"Подушки й речі біля стін і дзеркал зникали через хибний тест. 0 як у грі, 1 міст на першому місці, 2 на обох.", L"Pillows and props near walls and mirrors vanished because of a faulty test. 0 as the game, 1 bridge at the first place, 2 at both."},
      {L"Інтер'єри", L"Interiors"}},
@@ -461,9 +464,12 @@ Item g_pageFixes[] = {
     {{L"Швидше підвантаження світу", L"Faster world streaming"}, &g_cfg.fasterLoading, kBool, 0, 1, 1, true, L"Fixes", L"FasterLoading", nullptr, nullptr,
      {L"Потік завантаження гри між запитами чекав 16 мс, і кожне підвантаження могло коштувати цілий такт таймера. Тепер 1 мс: менше ривків, коли світ підвантажується. Потрібен перезапуск.",
       L"The game's loader thread waited 16 ms between requests, so every load could cost a whole timer tick. Now 1 ms: fewer hitches while the world streams in. Restart needed."}, NOTR},
+    {{L"QTE на високому FPS", L"QTE at high FPS"}, &g_cfg.qteFix, kBool, 0, 1, 1, true, L"Fixes", L"QteFix", nullptr, nullptr,
+     {L"У QTE «розхитування» (A↔D або стік) гра множила рух на час кадру, тож вище 60 FPS кожне перемикання рахувалось менше. З цим перемикання рахується як на 60 FPS. Потрібен перезапуск.",
+      L"In the waggle QTE (A/D or the stick) the game multiplied the travel by the frame time, so above 60 FPS every swap counted less. With this a swap counts as at 60 FPS. Restart needed."}, NOTR},
     {{L"4 ГБ пам'яті автоматично", L"4 GB of memory automatically"}, &g_cfg.autoLargeAddress, kBool, 0, 1, 1, true, L"Fixes", L"AutoLargeAddress", nullptr, nullptr,
-     {L"Гра 32-бітна і бачить лише 2 ГБ: з великим масштабом рендеру їх бракує. Мод сам ставить DP.exe прапор 4 ГБ (як ufx_laa.exe), діє з наступного запуску. Оригінал лишається як DP.exe.bak; після перевірки файлів у Steam мод зробить це знову.",
-      L"The game is 32-bit and sees only 2 GB: a big render scale runs out of it. The mod gives DP.exe the 4 GB flag itself (as ufx_laa.exe does), from the next start. The original stays as DP.exe.bak; after Steam verifies the files the mod does it again."}, NOTR},
+     {L"Гра 32-бітна і бачить лише 2 ГБ: з великим масштабом рендеру їх бракує. Мод сам ставить DP.exe прапор 4 ГБ, діє з наступного запуску. Оригінал лишається як DP.exe.bak; після перевірки файлів у Steam мод зробить це знову.",
+      L"The game is 32-bit and sees only 2 GB: a big render scale runs out of it. The mod gives DP.exe the 4 GB flag itself, from the next start. The original stays as DP.exe.bak; after Steam verifies the files the mod does it again."}, NOTR},
     {{L"Потоки гри по черзі (світ)", L"Game threads in turn (world)"}, &g_cfg.serialSetThread, kBool, 0, 1, 1, true, L"Fixes", L"SerialSetThread", nullptr, nullptr,
      {L"Фоновий потік гри будує об'єкти світу, поки головний вже оновлює наступний кадр, без жодного замка. Тепер головний чекає, поки той закінчить (до 1 мс на кадр, лише коли є що будувати). Те, що давав режим сумісності Windows 98, без втрати швидкості. Потрібен перезапуск.",
       L"A worker thread of the game builds world objects while the main thread already updates the next frame, with no lock. Now the main thread waits for it to finish (up to 1 ms a frame, only when there is something to build). What the Windows 98 compatibility mode gave, without the slowdown. Restart needed."}, NOTR},
@@ -1074,7 +1080,7 @@ bool Pressed(int vk) {
 
 void RememberKeys() {
     static const int keys[] = {VK_F10, VK_ESCAPE, VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT, VK_RETURN, VK_SPACE, VK_TAB,
-                               VK_PRIOR, VK_NEXT, VK_LBUTTON, VK_BACK, 'Y', 'N'};
+                               VK_PRIOR, VK_NEXT, VK_LBUTTON, VK_BACK, 'Y', 'N', VK_F9};
     for (int vk : keys) g_prev[vk] = Down(vk) ? 1 : 0;
     for (int d = 0; d < 10; ++d) {
         g_prev[0x30 + d] = Down(0x30 + d) ? 1 : 0;
@@ -1753,7 +1759,24 @@ void DrawLanguageChips() {
     }
 }
 
+DWORD g_aboutDrawnAt = 0;  // the About page was drawn in the last frames: F9 there updates
+
+// One line under the version: a newer release and F9, the download, or a failure.
+void DrawUpdateLine(float x, float y, float width, bool en) {
+    const int st = UpdateState();
+    if (st == 0) return;
+    wchar_t t[200];
+    u32 c = 0xFFF2F2F5;
+    if (st == 1) wsprintfW(t, en ? L"Version %S is out: F9 updates (the game restarts, save first)" : L"Вийшла версія %S: F9 оновлює (гра перезапуститься, спершу збережіться)", UpdateVersion());
+    else if (st == 2) wsprintfW(t, en ? L"Downloading version %S..." : L"Завантажується версія %S...", UpdateVersion());
+    else if (st == 3) wsprintfW(t, en ? L"Version %S is installed, restarting" : L"Версію %S встановлено, перезапуск", UpdateVersion());
+    else { wsprintfW(t, en ? L"The update failed: F9 tries again" : L"Оновлення не вдалося: F9 пробує ще раз"); c = 0xFFFF8A80; }
+    FillRect(x, y + 3, 4, 14, 0xFFD0343C);
+    DrawFitted(t, x + 12, y, c, 15, width - 12);
+}
+
 void DrawAbout() {
+    g_aboutDrawnAt = GetTickCount();
     const bool en = g_cfg.language == 1;
     // Everything below fits between the top of the list and the closing hint: on a small panel the gaps shrink (never the letters)
     // and long lines are cut to the panel's width.
@@ -1766,7 +1789,8 @@ void DrawAbout() {
     DrawText(L"UltimateFIXDP", kCx, y, kText, 30);
     wchar_t ver[48];
     wsprintfW(ver, en ? L"version %S" : L"версія %S", kVersion);
-    DrawText(ver, kCx, y + 40 * s, kDim, 15);
+    const float vw = DrawText(ver, kCx, y + 40 * s, kDim, 15);
+    DrawUpdateLine(kCx + vw + 24, y + 40 * s, width - vw - 24, en);
     y += 84 * s;
     DrawText(en ? L"Author" : L"Автор", kCx, y, kAccent, 13);
     DrawFitted(en ? L"Dmytro Bydlov, the \"Little Bit\" team" : L"Дмитро Бидлов, команда «Little Bit»", kCx, y + 20, kText, 20, width);
@@ -2262,12 +2286,18 @@ void OpenPhotoPage() { g_wantPhoto = true; }
 bool g_everOpened = false;
 DWORD g_hintStart = 0;
 
+bool g_hintVisible = false;  // the card is on screen this frame: F9 on it updates
+
 void StartHint(void* device) {
+    g_hintVisible = false;
     if (!g_cfg.startHint || g_everOpened) return;
     const DWORD now = GetTickCount();
     if (!g_hintStart) g_hintStart = now ? now : 1;
     const DWORD t = now - g_hintStart;
-    const DWORD kShow = 15000, kFade = 1000;
+    const int st = UpdateState();
+    const bool update = st >= 1;
+    // with a newer release the card stays 40 seconds, and as long as the download runs
+    const DWORD kShow = st == 2 || st == 3 ? t + 2000 : update ? 40000 : 15000, kFade = 1000;
     if (t >= kShow) {
         g_everOpened = true;  // shown once per start
         return;
@@ -2276,29 +2306,57 @@ void StartHint(void* device) {
     if (t < 250) a = (float)t / 250.0f;  // a quick fade in
     auto alpha = [a](u32 c) { return ((u32)((float)(c >> 24) * a) << 24) | (c & 0xFFFFFF); };
     if (!OverlayBegin(device)) return;
+    g_hintVisible = true;
     const bool en = g_cfg.language == 1;
     const wchar_t* title = L"UltimateFIXDP";
     const wchar_t* line = en ? L"Settings, photo mode and mods" : L"Налаштування, фоторежим і моди";
     const wchar_t* press = en ? L"press" : L"натисніть";
     const float w = 480, h = 84, x = 1280 - w - 28, y = 28;
-    FillRect(x + 3, y + 4, w, h, alpha(0x60000000));  // shadow
-    FillRect(x, y, w, h, alpha(0xEE15151B));
-    FillRect(x, y, 4, h, alpha(0xFFD0343C));
+    const float uh = update ? 64 : 0;  // the update strip under the card
+    FillRect(x + 3, y + 4, w, h + uh, alpha(0x60000000));  // shadow
+    FillRect(x, y, w, h + uh, alpha(0xEE15151B));
+    FillRect(x, y, 4, h + uh, alpha(0xFFD0343C));
     FillRect(x + 4, y, w - 4, 1, alpha(0xFF2A2A34));
     wchar_t ver[64];
     wsprintfW(ver, L"%S", kVersion);
     const float tw = DrawText(title, x + 22, y + 14, alpha(0xFFF2F2F5), 20);
     DrawText(ver, x + 22 + tw + 10, y + 19, alpha(0xFF9696A4), 14);
     DrawText(line, x + 22, y + 48, alpha(0xFFC4C4CE), 15);
-    // the key cap on the right
-    const float kw = 64, kh = 40, kx = x + w - kw - 18, ky = y + (h - kh) / 2;
-    const float pw = TextWidth(press, 13);
-    DrawText(press, kx - pw - 10, ky + 13, alpha(0xFF9696A4), 13);
-    FillRect(kx, ky + 3, kw, kh, alpha(0xFF0B0B0F));
-    FillRect(kx, ky, kw, kh, alpha(0xFF2E2E3A));
-    FillRect(kx, ky, kw, 1, alpha(0xFF4A4A58));
-    const float fw = TextWidth(L"F10", 20);
-    DrawText(L"F10", kx + (kw - fw) / 2, ky + 9, alpha(0xFFF2F2F5), 20);
+    auto keycap = [&](const wchar_t* key, const wchar_t* label, float cy) {
+        const float kw = 64, kh = 40, kx = x + w - kw - 18, ky = cy;
+        const float pw = TextWidth(label, 13);
+        DrawText(label, kx - pw - 10, ky + 13, alpha(0xFF9696A4), 13);
+        FillRect(kx, ky + 3, kw, kh, alpha(0xFF0B0B0F));
+        FillRect(kx, ky, kw, kh, alpha(0xFF2E2E3A));
+        FillRect(kx, ky, kw, 1, alpha(0xFF4A4A58));
+        const float fw = TextWidth(key, 20);
+        DrawText(key, kx + (kw - fw) / 2, ky + 9, alpha(0xFFF2F2F5), 20);
+    };
+    keycap(L"F10", press, y + (h - 40) / 2);
+    if (update) {
+        const float uy = y + h;
+        FillRect(x + 4, uy, w - 4, 1, alpha(0xFF2A2A34));
+        wchar_t t1[96];
+        const wchar_t* t2;
+        u32 c1 = 0xFFF2F2F5;
+        if (st == 1) {
+            wsprintfW(t1, en ? L"Version %S is out" : L"Вийшла версія %S", UpdateVersion());
+            t2 = en ? L"the game restarts by itself" : L"гра перезапуститься сама";
+        } else if (st == 2) {
+            wsprintfW(t1, en ? L"Downloading %S..." : L"Завантажується %S...", UpdateVersion());
+            t2 = en ? L"a few seconds" : L"кілька секунд";
+        } else if (st == 3) {
+            wsprintfW(t1, en ? L"%S is installed" : L"%S встановлено", UpdateVersion());
+            t2 = en ? L"restarting" : L"перезапуск";
+        } else {
+            wsprintfW(t1, en ? L"The update failed" : L"Оновлення не вдалося");
+            t2 = en ? L"details in ufx.log" : L"подробиці в ufx.log";
+            c1 = 0xFFFF8A80;
+        }
+        DrawText(t1, x + 22, uy + 12, alpha(c1), 17);
+        DrawText(t2, x + 22, uy + 38, alpha(0xFF9696A4), 13);
+        if (st == 1 || st == 4) keycap(L"F9", en ? (st == 4 ? L"retry" : L"update") : (st == 4 ? L"ще раз" : L"оновити"), uy + 12);
+    }
     OverlayEnd();
 }
 
@@ -2327,6 +2385,8 @@ void OnFrame(void* device) {
             BuildRows();
         }
     }
+    // F9: the update, only while the start card shows it or the About page is open (never a stray key in the middle of a game)
+    if (foreground && Pressed(VK_F9) && (g_hintVisible || (g_open && GetTickCount() - g_aboutDrawnAt < 500))) UpdateStart();
     if (g_open) SyncDifficultyFromGame();
     if (g_open) EnsureCursorVisible();
     if (g_open) HandleInput(foreground);

@@ -296,6 +296,7 @@ HRESULT WINAPI OurPresent(void* dev, const RECT* src, const RECT* dst, HWND wnd,
             DetectD3dLibrary();
         }
         StabilityFrame();
+        UpdateFrame();
         VibrationFrame();
         AdaptiveTriggerFrame();
         TraceCameraFrame();  // diagnostic, does nothing unless [Debug] TraceCamera=1

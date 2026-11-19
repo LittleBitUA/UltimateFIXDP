@@ -136,6 +136,7 @@ static void Startup() {
     if (InstallZeroDelta()) ++on;
     if (InstallStability()) ++on;
     InstallAutoLargeAddress();
+    InstallUpdater();
     if (g_cfg.saveGuard && InstallSaveGuard()) ++on;
     if (g_cfg.houseListFix && InstallHouseList()) ++on;
     if (g_cfg.removeExtraJoyPoll && InstallJoyPoll()) ++on;

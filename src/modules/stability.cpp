@@ -135,7 +135,7 @@ bool InstallStability() {
         any = any || a || b;
     }
     // the stick-waggle QTE counts each swap as at 60 FPS (above 60 the frame delta made every swap count less)
-    {
+    if (g_cfg.qteFix) {
         const SiteDef& s = kSiteQteGauge;
         u8* stub = BytesMatch(s.va, s.bytes, s.len) ? AllocStub(32) : nullptr;
         if (stub) {

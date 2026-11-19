@@ -8,11 +8,11 @@ static const char kDefaultIni[] =
     "; UltimateFIXDP settings. 1 = on, 0 = off. Delete this file to restore the defaults.\r\n"
     "\r\n"
     "[General]\r\n"
-    "; 1 = the mod puts a small quick-start program in place of DPLauncher.exe by itself (what ufx_play.exe does), so the game starts at once\r\n"
+    "; 1 = the mod puts a small quick-start program in place of DPLauncher.exe by itself, so the game starts at once\r\n"
     "; without the launcher window. The first start after installing still shows the stock launcher. The original is kept as\r\n"
     "; DPLauncher_original.exe; hold Shift when starting to open it. 0 = leave the launcher alone (and put the original back).\r\n"
     "; With Borderless=0, or with DPfix next to the game, the stock launcher stays (or comes back): real fullscreen comes only from\r\n"
-    "; its Full Screen box. ufx_play.exe writes 1 here, ufx_play.exe --undo writes 0.\r\n"
+    "; its Full Screen box.\r\n"
     "ReplaceLauncher=1\r\n"
     "; 1 = the game is exempt from Windows efficiency mode (EcoQoS: slow cores and low clocks for programs Windows does not know).\r\n"
     "NoPowerThrottling=1\r\n"
@@ -79,9 +79,11 @@ static const char kDefaultIni[] =
     "PinFpu=1\r\n"
     "; 1 = the loader thread waits 1 ms instead of 16 between requests: shorter hitches while the world streams in. Restart needed.\r\n"
     "FasterLoading=1\r\n"
-    "; 1 = the mod gives DP.exe the 4 GB flag itself (as ufx_laa.exe does): it prepares the file while the game runs, the next\r\n"
+    "; 1 = the mod gives DP.exe the 4 GB flag itself: it prepares the file while the game runs, the next\r\n"
     "; start has 4 GB of address space instead of 2. The original stays as DP.exe.bak. Done again after Steam restores the file.\r\n"
     "AutoLargeAddress=1\r\n"
+    "; 1 = the stick-waggle QTE (alternate A/D) counts every swap as at 60 FPS; above 60 the game counted each swap less. Restart needed.\r\n"
+    "QteFix=1\r\n"
     "; Threads of the game that share data without locks (what the Windows 98 compatibility mode hid by one CPU core):\r\n"
     "; SerialSetThread=1 the main thread waits for the world builder at once, RouteFlushWait=1 a level change waits for the\r\n"
     "; resident route thread (at most 250 ms). Restart needed.\r\n"
@@ -255,7 +257,7 @@ static const char kDefaultIni[] =
     "ActivationScale=1\r\n"
     "; Detailed models stay visible farther away, as a multiple of the game's distance: 1..4.\r\n"
     "LodScale=1\r\n"
-    "; The outer cells of the world also load full detail. Needs a lot of memory (patch DP.exe with ufx_laa.exe).\r\n"
+    "; The outer cells of the world also load full detail. Needs a lot of memory (the 4 GB flag, AutoLargeAddress).\r\n"
     "HighDetail=0\r\n"
     "; Props vanish near walls and mirrors indoors (a faulty visibility test of the port). 0 = as the game,\r\n"
     "; 1 = bypass the test at the first place (what ZachFix does), 2 = at both places.\r\n"
@@ -437,6 +439,9 @@ static const char kDefaultIni[] =
     "[Menu]\r\n"
     "; 1 = a small card in the top right corner for the first seconds of a start: the mod's settings are on F10.\r\n"
     "StartHint=1\r\n"
+    "; 1 = ask GitHub once at the start whether a newer release is out (one anonymous request). F9 on the start card or on the About\r\n"
+    "; page then downloads it, replaces X3DAudio1_7.dll and UltimateFix\\glyphs, keeps this file, mods and backups, and restarts the game.\r\n"
+    "CheckUpdates=1\r\n"
     "; How opaque the F10 panel is, percent 20..100 (lower: the game shows through). Changes at once.\r\n"
     "Opacity=80\r\n"
     "; Place and size of the F10 panel in the 1280x720 picture. Drag the header to move it, the corner to resize it, double-click\r\n"
@@ -856,6 +861,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.traceResources = (int)GetPrivateProfileIntW(L"Debug", L"TraceResources", 0, ini);
     g_cfg.menu = (int)GetPrivateProfileIntW(L"Menu", L"Enabled", 1, ini);
     g_cfg.startHint = (int)GetPrivateProfileIntW(L"Menu", L"StartHint", 1, ini);
+    g_cfg.checkUpdates = GetPrivateProfileIntW(L"Menu", L"CheckUpdates", 1, ini) ? 1 : 0;
     g_cfg.menuX = (int)GetPrivateProfileIntW(L"Menu", L"X", 100, ini);
     g_cfg.menuY = (int)GetPrivateProfileIntW(L"Menu", L"Y", 52, ini);
     g_cfg.menuW = (int)GetPrivateProfileIntW(L"Menu", L"Width", 1080, ini);
@@ -881,6 +887,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.saveWarnings = (int)GetPrivateProfileIntW(L"Save", L"Warnings", 1, ini);
     g_cfg.compressBackups = GetPrivateProfileIntW(L"Save", L"CompressBackups", 1, ini) ? 1 : 0;
     g_cfg.fasterLoading = GetPrivateProfileIntW(L"Fixes", L"FasterLoading", 1, ini) ? 1 : 0;
+    g_cfg.qteFix = GetPrivateProfileIntW(L"Fixes", L"QteFix", 1, ini) ? 1 : 0;
     g_cfg.autoLargeAddress = GetPrivateProfileIntW(L"Fixes", L"AutoLargeAddress", 1, ini) ? 1 : 0;
     g_cfg.serialSetThread = GetPrivateProfileIntW(L"Fixes", L"SerialSetThread", 1, ini) ? 1 : 0;
     g_cfg.routeFlushWait = GetPrivateProfileIntW(L"Fixes", L"RouteFlushWait", 1, ini) ? 1 : 0;
