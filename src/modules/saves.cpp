@@ -91,6 +91,87 @@ void Preserve(const wchar_t* path, const wchar_t* tag) {
         Log("save: kept %S", dest);
 }
 
+// ---- the content check ----------------------------------------------------------------------------------------------
+// A save of the right size can still be broken (a half-written page, a bad disk). The game keeps a few values twice, in the
+// header and in record 0 (the state it was in when it wrote the file), and they must agree (the rules are ZachFix's
+// save_diag, checked on a real dp.sav): the money (+20h / rec+88h), the story word (+3Ch / rec+A0h), 16 bytes (+110h /
+// rec+439B4h), and the play time (hours, minutes, seconds at +30h.. against the seconds at rec+42800h). A mismatch is
+// reported; nothing is refused for it, since the previous file is in the backups anyway.
+bool ReadAt(HANDLE f, DWORD at, void* out, DWORD n) {
+    DWORD got = 0;
+    return SetFilePointer(f, (LONG)at, nullptr, FILE_BEGIN) != INVALID_SET_FILE_POINTER && ReadFile(f, out, n, &got, nullptr) && got == n;
+}
+
+bool SaveContentLooksRight(const wchar_t* path, const char** why) {
+    *why = "cannot be read";
+    HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return false;
+    const DWORD rec = 0x120;
+    u32 money[2] = {}, story[2] = {}, hms[3] = {};
+    u8 a[16] = {}, b[16] = {};
+    unsigned long long secs = 0;
+    bool ok = ReadAt(f, 0x20, &money[0], 4) && ReadAt(f, rec + 0x88, &money[1], 4) && ReadAt(f, 0x3C, &story[0], 4) &&
+              ReadAt(f, rec + 0xA0, &story[1], 4) && ReadAt(f, 0x110, a, 16) && ReadAt(f, rec + 0x439B4, b, 16) &&
+              ReadAt(f, 0x30, hms, 12) && ReadAt(f, rec + 0x42800, &secs, 8);
+    CloseHandle(f);
+    if (!ok) return false;
+    if (money[0] != money[1]) { *why = "the money differs between the header and the record"; return false; }
+    if (story[0] != story[1]) { *why = "the story position differs between the header and the record"; return false; }
+    for (int i = 0; i < 16; ++i)
+        if (a[i] != b[i]) { *why = "the header copy of the record differs"; return false; }
+    if (hms[1] >= 60 || hms[2] >= 60 || (unsigned long long)hms[0] * 3600 + hms[1] * 60 + hms[2] != secs) {
+        *why = "the play time differs between the header and the record";
+        return false;
+    }
+    *why = "";
+    return true;
+}
+
+// ---- compressed backups ---------------------------------------------------------------------------------------------
+// 60 copies of 8 MB are about 480 MB. The backup folder is marked compressed (NTFS), so the copies take a fraction of that;
+// reading them is unchanged. On a drive without NTFS compression nothing happens.
+constexpr DWORD kFsctlSetCompression = 0x9C040;  // FSCTL_SET_COMPRESSION
+constexpr USHORT kCompressionDefault = 1;        // COMPRESSION_FORMAT_DEFAULT
+
+bool CompressPath(const wchar_t* path, bool folder) {
+    HANDLE h = CreateFileW(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
+                           folder ? FILE_FLAG_BACKUP_SEMANTICS : FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (h == INVALID_HANDLE_VALUE) return false;
+    USHORT format = kCompressionDefault;
+    DWORD ret = 0;
+    const BOOL ok = DeviceIoControl(h, kFsctlSetCompression, &format, sizeof(format), nullptr, 0, &ret, nullptr);
+    CloseHandle(h);
+    return ok != 0;
+}
+
+void CompressBackup(const wchar_t* path) {
+    if (g_cfg.compressBackups) CompressPath(path, false);
+}
+
+// Once at start, on its own thread: the folder for the copies to come, and the copies already there.
+DWORD WINAPI CompressExisting(void*) {
+    if (!CompressPath(g_paths.saveBackupDir, true)) {
+        Log("save: the backup folder cannot be compressed here (not NTFS?), copies stay full size");
+        return 0;
+    }
+    wchar_t pattern[MAX_PATH];
+    wsprintfW(pattern, L"%s\\*.sav", g_paths.saveBackupDir);
+    WIN32_FIND_DATAW fd;
+    HANDLE h = FindFirstFileW(pattern, &fd);
+    int n = 0;
+    if (h != INVALID_HANDLE_VALUE) {
+        do {
+            if (fd.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_COMPRESSED)) continue;
+            wchar_t path[MAX_PATH];
+            wsprintfW(path, L"%s\\%s", g_paths.saveBackupDir, fd.cFileName);
+            if (CompressPath(path, false)) ++n;
+        } while (FindNextFileW(h, &fd));
+        FindClose(h);
+    }
+    Log("save: backup folder compressed (%d earlier copies compressed now)", n);
+    return 0;
+}
+
 struct BackupEntry {
     FILETIME time;
     wchar_t name[112];
@@ -178,8 +259,10 @@ void BackupLive(const wchar_t* live) {
     wchar_t dest[MAX_PATH];
     BackupName(L"dp", dest);
     LabelBackup(live, dest);
-    if (CopyFileW(live, dest, FALSE))
+    if (CopyFileW(live, dest, FALSE)) {
+        CompressBackup(dest);
         Log("save: backup %S", dest);
+    }
     else
         Log("save: backup failed (error %d)", (int)GetLastError());
     Rotate(g_cfg.saveBackups);
@@ -248,6 +331,12 @@ BOOL EndWrite(HANDLE h) {
                L"The game wrote a save of an unusual size, so the save file was left unchanged. The new write is in UltimateFix\\savebackups.");
         return closed;
     }
+    const char* why = "";
+    if (size == kSaveFileSize && !SaveContentLooksRight(tmp, &why)) {
+        Log("save: the new save looks damaged (%s); committed anyway, the previous one is the newest backup", why);
+        Notify(L"Нове збереження виглядає пошкодженим. Воно записане, а попереднє лежить у UltimateFix\\savebackups (найновіша копія).\n"
+               L"The new save looks damaged. It was written, and the previous one is in UltimateFix\\savebackups (the newest copy).");
+    }
     BackupLive(live);
     if (MoveFileExW(tmp, live, MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH)) {
         Log("save: committed %S (%d bytes)", live, (int)size);
@@ -266,7 +355,11 @@ void PrepareRead(const char* name) {
     DWORD size;
     bool big;
     if (!FileSizeOf(live, &size, &big)) return;  // no save yet
-    if (!big && size == kSaveFileSize) return;
+    if (!big && size == kSaveFileSize) {
+        const char* why = "";
+        if (!SaveContentLooksRight(live, &why)) Log("save: %S has the right size but looks damaged (%s); the backups are in %S", live, why, g_paths.saveBackupDir);
+        return;
+    }
     Log("save: %S has size %d (expected %d)", live, (int)size, (int)kSaveFileSize);
     if (!g_cfg.saveRestoreDamaged) return;
     wchar_t backup[MAX_PATH];
@@ -348,7 +441,11 @@ bool InstallSaveGuard() {
         Log("save: could not patch the import table, skipped");
         return false;
     }
-    Log("save: guard installed (keeping %d backups)", g_cfg.saveBackups);
+    if (g_cfg.compressBackups) {
+        HANDLE t = CreateThread(nullptr, 0, CompressExisting, nullptr, 0, nullptr);
+        if (t) CloseHandle(t);
+    }
+    Log("save: guard installed (keeping %d backups%s)", g_cfg.saveBackups, g_cfg.compressBackups ? ", compressed" : "");
     return true;
 }
 

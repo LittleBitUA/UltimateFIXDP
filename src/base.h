@@ -24,6 +24,7 @@ struct Config {
     int saveGuard;           // atomic dp.sav writes, backups, restore of a damaged file
     int saveBackups;         // how many backups to keep (1..200)
     int saveRestoreDamaged;  // restore dp.sav from the newest backup if its size is wrong
+    int compressBackups;     // the backup folder is NTFS-compressed (60 copies of 8 MB would be about 480 MB)
     int saveWarnings;        // show a message box when a save could not be committed
     int houseListFix;        // correct byte-swap format of HOUSE_LIST.NOD (day/night in buildings)
     int removeExtraJoyPoll;  // drop the per-frame joyGetPosEx call that passes uninitialised memory

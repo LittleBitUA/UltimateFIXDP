@@ -435,6 +435,8 @@ static const char kDefaultIni[] =
     "Guard=1\r\n"
     "; How many dated backups of dp.sav to keep (1..200). Each is named by when it was made and where the story stood in it.\r\n"
     "Backups=60\r\n"
+    "; 1 = the backup folder is compressed by Windows (NTFS): 60 copies of 8 MB take a fraction of 480 MB.\r\n"
+    "CompressBackups=1\r\n"
     "; If dp.sav has the wrong size at load time, restore the newest good backup.\r\n"
     "RestoreDamaged=1\r\n"
     "; Show a message when a save could not be committed or was restored.\r\n"
@@ -848,6 +850,7 @@ void LoadConfig(const wchar_t* ini) {
     }
     g_cfg.saveRestoreDamaged = (int)GetPrivateProfileIntW(L"Save", L"RestoreDamaged", 1, ini);
     g_cfg.saveWarnings = (int)GetPrivateProfileIntW(L"Save", L"Warnings", 1, ini);
+    g_cfg.compressBackups = GetPrivateProfileIntW(L"Save", L"CompressBackups", 1, ini) ? 1 : 0;
     if (g_cfg.saveBackups < 1) g_cfg.saveBackups = 1;
     if (g_cfg.saveBackups > 200) g_cfg.saveBackups = 200;
 }

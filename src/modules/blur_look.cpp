@@ -15,10 +15,18 @@ namespace {
 typedef void(__cdecl* GaussFn)(int table, int width, int height, int taps, float sigma);
 const GaussFn RealGauss = (GaussFn)(uintptr_t)kGaussTableFn;
 
+// The table holds a fixed number of taps. Spread `scene / 1280` times wider they no longer overlap: at 300 % of a 1920
+// output (scale 4.5) the taps sit 4.5 texels apart and the "blur" is a few shifted copies of the picture, the doubled edges
+// of the depth of field. Up to twice the spacing the bilinear filtering of every tap still covers the gaps, so the
+// compensation stops there: on a very large scene the blur is a little narrower than at 1280, never doubled.
+constexpr int kMaxSpread = 2;
+
 int Compensate(int size) {
     if (size <= 0 || g_sceneWidth <= 1280) return size;
     if (!g_postBuffersScaled && (size == 896 || size == 504 || size == 448 || size == 252)) return size;
     int v = (int)((long long)size * 1280 / g_sceneWidth);
+    const int floor = size / kMaxSpread;
+    if (v < floor) v = floor;
     return v < 1 ? 1 : v;
 }
 
