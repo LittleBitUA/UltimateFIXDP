@@ -105,6 +105,10 @@ void RunningScene(wchar_t* out) {
 
 // "200%  ·  3840×2160": the size of the scene that percent gives.
 void FormatTenths(int v, wchar_t* out) { wsprintfW(out, L"%d.%d", v / 10, v % 10); }
+void FormatStops(int v, wchar_t* out) {
+    const int a = v < 0 ? -v : v;
+    wsprintfW(out, L"%s%d.%d EV", v < 0 ? L"-" : (v > 0 ? L"+" : L""), a / 10, a % 10);
+}
 
 void FormatScale(int v, wchar_t* out) {
     int base = g_cfg.outputWidth ? g_cfg.outputWidth : 1280;
@@ -243,6 +247,13 @@ Item g_pageGraphics[] = {
     {{L"Різкість фінальної картинки, %", L"Sharpening of the final picture, %"}, &g_cfg.sharpen, kInt, 0, 100, 10, false, L"Graphics", L"Sharpen", nullptr, nullptr,
      {L"Підвищення різкості готового кадру. Починайте з 30–50, більше дає ореоли. Змінюється одразу.", L"Sharpens the finished frame. Start with 30–50, more gives halos. Changes at once."},
      {L"Чіткість і вигляд", L"Sharpness and look"}},
+    {{L"Сила світіння (bloom), %", L"Glow (bloom), %"}, &g_cfg.bloomStrength, kInt, 0, 300, 10, false, L"Graphics", L"BloomStrength", nullptr, nullptr,
+     {L"Власне світіння гри навколо яскравих місць. 100 = як у грі, 0 = вимкнено, більше = сильніше. Змінюється одразу.",
+      L"The game's own glow around bright spots. 100 = as the game, 0 = off, more = stronger. Changes at once."}, NOTR},
+    {{L"Експозиція (яскравість сцени)", L"Exposure (scene brightness)"}, &g_cfg.exposureComp, kInt, -30, 30, 1, false, L"Graphics", L"ExposureComp", nullptr, nullptr,
+     {L"Поправка до автоекспозиції гри в кроках діафрагми: +1.0 удвічі яскравіше, -1.0 удвічі темніше. Гра й далі сама підлаштовується під світло. Змінюється одразу.",
+      L"A correction to the game's auto exposure in stops: +1.0 twice as bright, -1.0 half as bright. The game still adapts to the light by itself. Changes at once."},
+     NOTR, nullptr, 0, nullptr, FormatStops},
     {{L"Вигляд кадру в грі", L"Look of the picture in play"}, &g_cfg.gameLook, kInt, 0, kFilterCountForMenu - 1, 1, false, L"Graphics", L"GameLook", nullptr, nullptr,
      {L"Фільтр фоторежиму, що діє весь час, не лише у фоторежимі: тепла, холодна, кіно, плівка, нуар, ваші пресети «Мій 1..4» тощо. «Без» = картинка гри. У фоторежимі діють його власні повзунки. Змінюється одразу.",
       L"A photo mode filter that stays on all the time, not only in photo mode: warm, cold, cinema, film, noir, your presets \"Mine 1..4\" and more. \"None\" = the game's picture. In photo mode its own sliders apply. Changes at once."},

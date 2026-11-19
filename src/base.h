@@ -89,6 +89,8 @@ struct Config {
     int scalePostBuffers;    // also enlarge the blur/bloom storage buffers with the scene
     int anisotropy;          // maximum anisotropic filtering, 1..16 (the game uses 8)
     int nearPlane;           // near plane of the play camera in tenths (game 10 = 1.0), 10..60: depth precision far away
+    int bloomStrength;       // percent of the game's own bloom (100 = as the game)
+    int exposureComp;        // exposure compensation in tenths of a stop (-30..30)
     int gameLook;            // a photo filter applied all the time (0 = none), [Graphics] GameLook
     int generateMips;        // build the mipmaps of world textures stored without them (far shimmer), at load
     int shadowBiasFix;       // more depth bias on the two far sun shadow cascades (crawling stripes far away)

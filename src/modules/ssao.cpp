@@ -10,15 +10,43 @@ namespace ufx {
 bool WorldActive();  // combat_strafe.cpp
 namespace {
 
+typedef HRESULT(WINAPI* GetPsConstFn)(void*, UINT, float*, UINT);
+typedef HRESULT(WINAPI* SetPsConstFn)(void*, UINT, const float*, UINT);
+
+// 2 to the power of tenths: 2^(t/10) for t in -30..30 without a C runtime.
+float Pow2Tenths(int t) {
+    const float step = 1.0717735f;  // 2^0.1
+    float v = 1.0f;
+    if (t > 0) for (int i = 0; i < t; ++i) v *= step;
+    else for (int i = 0; i < -t; ++i) v /= step;
+    return v;
+}
+
+// The game's own bloom and exposure, as the composite uses them: c9.x = bloom force, c10.x = the exposure key (the scene is
+// multiplied by key / average luminance). Changed for this one draw and put back after it.
+bool TuneComposite(void* dev, float saved[8]) {
+    if (g_cfg.bloomStrength == 100 && g_cfg.exposureComp == 0) return false;
+    void** vt = *(void***)dev;
+    if (FAILED(((GetPsConstFn)vt[110])(dev, 9, saved, 2))) return false;
+    float c[8];
+    for (int i = 0; i < 8; ++i) c[i] = saved[i];
+    c[0] *= (float)g_cfg.bloomStrength / 100.0f;
+    c[4] *= Pow2Tenths(g_cfg.exposureComp);
+    return SUCCEEDED(((SetPsConstFn)vt[109])(dev, 9, c, 2));
+}
+
 // DrawPrimitive: this, type, start, count (stdcall, vtable slot 81).
 HRESULT WINAPI CompositeDrawHook(void* dev, DWORD type, UINT start, UINT count) {
     const bool world = WorldActive();
+    float tuned[8];
+    const bool tune = world && TuneComposite(dev, tuned);
     if (g_cfg.ambientOcclusion > 0 && world) ui::AmbientOcclusionPass(dev, g_cfg.ambientOcclusion, g_cfg.aoRadius);
     ui::LookSaved look;
     const bool graded = g_cfg.xboxLook && world && ui::XboxLookBegin(dev, &look);
     void** vtable = *(void***)dev;
     HRESULT hr = ((HRESULT(WINAPI*)(void*, DWORD, UINT, UINT))vtable[81])(dev, type, start, count);
     if (graded) ui::XboxLookEnd(dev, &look);
+    if (tune) ((SetPsConstFn)vtable[109])(dev, 9, tuned, 2);
     return hr;
 }
 

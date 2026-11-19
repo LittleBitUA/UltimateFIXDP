@@ -183,6 +183,10 @@ static const char kDefaultIni[] =
     "; A photo mode filter applied all the time: 0 none, 1 warm, 2 cold, 3 B&W, 4 cinema, 5 vintage, 6 sepia, 7 noir, 8 film,\r\n"
     "; 9 bleach bypass, 10 dream, 11 VHS, 12 night, 13 fog, 14..17 your presets Mine 1..4 ([PhotoPresets]). Changes at once.\r\n"
     "GameLook=0\r\n"
+    "; The game's own glow (bloom) in percent (0..300, 100 = as the game) and its exposure in tenths of a stop (-30..30,\r\n"
+    "; 0 = as the game; 10 = one stop brighter). The game keeps adapting to the light as before. Changes at once.\r\n"
+    "BloomStrength=100\r\n"
+    "ExposureComp=0\r\n"
     "; The PC port darkens the picture by 0.85 (and 0.75 more in one cutscene state); the console did not.\r\n"
     "; 1 = remove the factors (about 15% brighter). Changes at once.\r\n"
     "XboxExposure=0\r\n"
@@ -735,6 +739,12 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.shadowBiasFix = GetPrivateProfileIntW(L"Graphics", L"ShadowBiasFix", 1, ini) ? 1 : 0;
     g_cfg.generateMips = GetPrivateProfileIntW(L"Graphics", L"GenerateMips", 1, ini) ? 1 : 0;
     g_cfg.gameLook = (int)GetPrivateProfileIntW(L"Graphics", L"GameLook", 0, ini);
+    g_cfg.bloomStrength = (int)GetPrivateProfileIntW(L"Graphics", L"BloomStrength", 100, ini);
+    if (g_cfg.bloomStrength < 0) g_cfg.bloomStrength = 0;
+    if (g_cfg.bloomStrength > 300) g_cfg.bloomStrength = 300;
+    g_cfg.exposureComp = (int)GetPrivateProfileIntW(L"Graphics", L"ExposureComp", 0, ini);
+    if (g_cfg.exposureComp < -30) g_cfg.exposureComp = -30;
+    if (g_cfg.exposureComp > 30) g_cfg.exposureComp = 30;
     if (g_cfg.gameLook < 0 || g_cfg.gameLook > 17) g_cfg.gameLook = 0;
     if (g_cfg.gameFov < 70) g_cfg.gameFov = 70;
     if (g_cfg.gameFov > 150) g_cfg.gameFov = 150;
