@@ -2295,9 +2295,8 @@ void StartHint(void* device) {
     if (!g_hintStart) g_hintStart = now ? now : 1;
     const DWORD t = now - g_hintStart;
     const int st = UpdateState();
-    const bool update = st >= 1;
     // with a newer release the card stays 40 seconds, and as long as the download runs
-    const DWORD kShow = st == 2 || st == 3 ? t + 2000 : update ? 40000 : 15000, kFade = 1000;
+    const DWORD kShow = st == 2 || st == 3 ? t + 2000 : st ? 40000 : 15000, kFade = 1000;
     if (t >= kShow) {
         g_everOpened = true;  // shown once per start
         return;
@@ -2309,53 +2308,55 @@ void StartHint(void* device) {
     g_hintVisible = true;
     const bool en = g_cfg.language == 1;
     const wchar_t* title = L"UltimateFIXDP";
-    const wchar_t* line = en ? L"Settings, photo mode and mods" : L"Налаштування, фоторежим і моди";
+    // One card. Without an update: "settings ... press F10". With one: the update line and F9, F10 as a smaller hint.
+    wchar_t line[128], sub[96];
+    const wchar_t* key = L"F10";
     const wchar_t* press = en ? L"press" : L"натисніть";
-    const float w = 480, h = 84, x = 1280 - w - 28, y = 28;
-    const float uh = update ? 64 : 0;  // the update strip under the card
-    FillRect(x + 3, y + 4, w, h + uh, alpha(0x60000000));  // shadow
-    FillRect(x, y, w, h + uh, alpha(0xEE15151B));
-    FillRect(x, y, 4, h + uh, alpha(0xFFD0343C));
+    u32 lineColor = 0xFFC4C4CE;
+    sub[0] = 0;
+    if (st == 1) {
+        wsprintfW(line, en ? L"Version %S is out: press F9 to update" : L"Вийшла версія %S: натисніть F9, щоб оновити", UpdateVersion());
+        lstrcpyW(sub, en ? L"the game restarts by itself  ·  F10 settings" : L"гра перезапуститься сама  ·  F10 налаштування");
+        key = L"F9";
+        press = en ? L"update" : L"оновити";
+        lineColor = 0xFFF2F2F5;
+    } else if (st == 2) {
+        wsprintfW(line, en ? L"Downloading version %S..." : L"Завантажується версія %S...", UpdateVersion());
+        lstrcpyW(sub, en ? L"a few seconds" : L"кілька секунд");
+        key = nullptr;
+    } else if (st == 3) {
+        wsprintfW(line, en ? L"Version %S is installed, restarting" : L"Версію %S встановлено, перезапуск", UpdateVersion());
+        key = nullptr;
+    } else if (st == 4) {
+        lstrcpyW(line, en ? L"The update failed: F9 tries again" : L"Оновлення не вдалося: F9 спробує ще раз");
+        lstrcpyW(sub, en ? L"details in UltimateFix\\ufx.log  ·  F10 settings" : L"подробиці в UltimateFix\\ufx.log  ·  F10 налаштування");
+        key = L"F9";
+        press = en ? L"retry" : L"ще раз";
+        lineColor = 0xFFFF8A80;
+    } else {
+        lstrcpyW(line, en ? L"Settings, photo mode and mods" : L"Налаштування, фоторежим і моди");
+    }
+    const float w = 520, h = sub[0] ? 104 : 84, x = 1280 - w - 28, y = 28;
+    FillRect(x + 3, y + 4, w, h, alpha(0x60000000));  // shadow
+    FillRect(x, y, w, h, alpha(0xEE15151B));
+    FillRect(x, y, 4, h, alpha(0xFFD0343C));
     FillRect(x + 4, y, w - 4, 1, alpha(0xFF2A2A34));
     wchar_t ver[64];
     wsprintfW(ver, L"%S", kVersion);
     const float tw = DrawText(title, x + 22, y + 14, alpha(0xFFF2F2F5), 20);
     DrawText(ver, x + 22 + tw + 10, y + 19, alpha(0xFF9696A4), 14);
-    DrawText(line, x + 22, y + 48, alpha(0xFFC4C4CE), 15);
-    auto keycap = [&](const wchar_t* key, const wchar_t* label, float cy) {
-        const float kw = 64, kh = 40, kx = x + w - kw - 18, ky = cy;
-        const float pw = TextWidth(label, 13);
-        DrawText(label, kx - pw - 10, ky + 13, alpha(0xFF9696A4), 13);
+    const float textW = w - 22 - (key ? 64 + 18 + 16 : 18);
+    DrawFitted(line, x + 22, y + 48, alpha(lineColor), 15, textW);
+    if (sub[0]) DrawFitted(sub, x + 22, y + 74, alpha(0xFF9696A4), 13, textW);
+    if (key) {  // the key cap on the right, its label above it
+        const float kw = 64, kh = 40, kx = x + w - kw - 18, ky = y + (h - kh) / 2 + 8;
+        const float pw = TextWidth(press, 12);
+        DrawText(press, kx + (kw - pw) / 2, ky - 20, alpha(0xFF9696A4), 12);
         FillRect(kx, ky + 3, kw, kh, alpha(0xFF0B0B0F));
         FillRect(kx, ky, kw, kh, alpha(0xFF2E2E3A));
         FillRect(kx, ky, kw, 1, alpha(0xFF4A4A58));
         const float fw = TextWidth(key, 20);
         DrawText(key, kx + (kw - fw) / 2, ky + 9, alpha(0xFFF2F2F5), 20);
-    };
-    keycap(L"F10", press, y + (h - 40) / 2);
-    if (update) {
-        const float uy = y + h;
-        FillRect(x + 4, uy, w - 4, 1, alpha(0xFF2A2A34));
-        wchar_t t1[96];
-        const wchar_t* t2;
-        u32 c1 = 0xFFF2F2F5;
-        if (st == 1) {
-            wsprintfW(t1, en ? L"Version %S is out" : L"Вийшла версія %S", UpdateVersion());
-            t2 = en ? L"the game restarts by itself" : L"гра перезапуститься сама";
-        } else if (st == 2) {
-            wsprintfW(t1, en ? L"Downloading %S..." : L"Завантажується %S...", UpdateVersion());
-            t2 = en ? L"a few seconds" : L"кілька секунд";
-        } else if (st == 3) {
-            wsprintfW(t1, en ? L"%S is installed" : L"%S встановлено", UpdateVersion());
-            t2 = en ? L"restarting" : L"перезапуск";
-        } else {
-            wsprintfW(t1, en ? L"The update failed" : L"Оновлення не вдалося");
-            t2 = en ? L"details in ufx.log" : L"подробиці в ufx.log";
-            c1 = 0xFFFF8A80;
-        }
-        DrawText(t1, x + 22, uy + 12, alpha(c1), 17);
-        DrawText(t2, x + 22, uy + 38, alpha(0xFF9696A4), 13);
-        if (st == 1 || st == 4) keycap(L"F9", en ? (st == 4 ? L"retry" : L"update") : (st == 4 ? L"ще раз" : L"оновити"), uy + 12);
     }
     OverlayEnd();
 }
