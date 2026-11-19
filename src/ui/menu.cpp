@@ -567,8 +567,13 @@ void ResetLook() {
 }
 
 int g_shotPick = 0;
-const int kShotValues[1] = {1};
-const Tr kShotNames[1] = {{L"Зробити знімок", L"Take a picture"}};
+struct Batch {
+    bool active;
+    int next, wait, savedFilter;
+    int saved[11];
+} g_batch = {};
+const int kShotValues[2] = {1, 2};
+const Tr kShotNames[2] = {{L"Зробити знімок", L"Take a picture"}, {L"З кожним фільтром", L"With every filter"}};
 
 
 void ApplyFov() { g_cfg.photoFovOn = 1; }  // touching the slider means: use my value
@@ -645,8 +650,47 @@ void ApplyPoseNow() {
 }
 
 void ApplyShot() {
+    const int pick = g_shotPick;
     g_shotPick = 0;
-    RequestScreenshot();
+    if (pick == 1) {
+        RequestScreenshot();
+        return;
+    }
+    // every filter in turn (own presets that are saved too), one shot each, then the look the player had
+    if (pick == 2 && !g_batch.active) {
+        g_batch.active = true;
+        g_batch.next = 1;
+        g_batch.wait = 0;
+        g_batch.savedFilter = g_cfg.photoFilter;
+        for (int i = 0; i < kLookCount; ++i) g_batch.saved[i] = *kLook[i];
+        Log("photo mode: a shot with every filter started");
+    }
+}
+
+// Runs every frame from OnFrame (after the screenshot pass of this frame).
+void BatchTick() {
+    if (!g_batch.active) return;
+    if (g_batch.wait > 0) {
+        if (--g_batch.wait == 0) {
+            wchar_t suffix[48];
+            wsprintfW(suffix, L"_f%02d", g_batch.next - 1);
+            RequestScreenshotNamed(suffix);
+        }
+        return;
+    }
+    while (g_batch.next < kFilterCount) {
+        const int f = g_batch.next++;
+        int v[kLookCount];
+        if (f >= kBuiltinFilters && !ReadOwnPreset(f - kBuiltinFilters + 1, v)) continue;  // an empty own preset
+        g_cfg.photoFilter = f;
+        ApplyFilter();
+        g_batch.wait = 3;  // the filter is drawn two frames before the shot is taken
+        return;
+    }
+    g_cfg.photoFilter = g_batch.savedFilter;
+    for (int i = 0; i < kLookCount; ++i) *kLook[i] = g_batch.saved[i];
+    g_batch.active = false;
+    Log("photo mode: a shot with every filter done (UltimateFix\\screenshots, files _f01.._f17)");
 }
 
 Item g_pagePhoto[] = {
@@ -708,9 +752,10 @@ Item g_pagePhoto[] = {
      NOTR},
     {{L"Застосувати позу", L"Apply the pose"}, &g_applyPick, kInt, 0, 1, 1, false, nullptr, nullptr, ApplyPoseNow, nullptr, {nullptr, nullptr}, NOTR,
      kApplyValues, 1, kApplyNames, nullptr, false},
-    {{L"Знімок", L"Picture"}, &g_shotPick, kInt, 0, 1, 1, false, nullptr, nullptr, ApplyShot, nullptr,
-     {L"Зберігає PNG кадру без меню в UltimateFix\\screenshots (клавіша F11 теж).", L"Saves a PNG of the frame without the menu to UltimateFix\\screenshots (the F11 key too)."},
-     {L"Знімок", L"Picture"}, kShotValues, 1, kShotNames, nullptr, false},
+    {{L"Знімок", L"Picture"}, &g_shotPick, kInt, 0, 2, 1, false, nullptr, nullptr, ApplyShot, nullptr,
+     {L"Зберігає PNG кадру без меню в UltimateFix\\screenshots (клавіша F11 теж; Shift+F11 — без інтерфейсу гри). «З кожним фільтром» знімає ту саму сцену з усіма фільтрами й вашими пресетами, по файлу на кожен; заморозьте час, щоб сцена не змінювалась.",
+      L"Saves a PNG of the frame without the menu to UltimateFix\\screenshots (the F11 key too; Shift+F11 without the game's HUD). \"With every filter\" shoots the same scene with all filters and your presets, a file each; freeze time so that the scene stays."},
+     {L"Знімок", L"Picture"}, kShotValues, 2, kShotNames, nullptr, false},
 };
 
 // ---- Cheats and world control. Each button is a one-shot action: the pick variable is put back to 0 at once.
@@ -2262,6 +2307,7 @@ void OnFrame(void* device) {
     if (g_open != wasOpen) OpenChanged(foreground);  // F10, Esc or the photo mode key
     if (g_swallowEsc && !Down(VK_ESCAPE)) g_swallowEsc = false;  // a later Esc press is the game's again
     RememberKeys();
+    BatchTick();
     if (g_open) g_everOpened = true;
     if (!g_open) {
         StartHint(device);

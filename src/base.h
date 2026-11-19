@@ -378,6 +378,8 @@ void AntialiasFrame(void* device, int percent);
 void ColorFrame(void* device);
 void XboxGammaFrame(void* device);
 void RequestScreenshot();
+void RequestScreenshotNamed(const wchar_t* suffix);  // the next shot with a suffix in its file name
+bool ScreenshotHidesHud();  // a shot without the HUD is being prepared (freecam.cpp hides the HUD)
 void OpenPhotoPage();
 void PerfPostBegin(void* device);
 void PerfPostEnd(void* device);

@@ -151,7 +151,7 @@ void __attribute__((cdecl)) CameraWorker() {
         if (enter) ui::OpenPhotoPage();
         Log("photo mode: %s", enter ? "on" : "off");
     }
-    SetHud(g_cfg.photoHud != 0);
+    SetHud(g_cfg.photoHud != 0 || ui::ScreenshotHidesHud());
     if ((g_cfg.photoActive != 0) != g_active) {
         g_active = g_cfg.photoActive != 0;
         g_init = false;

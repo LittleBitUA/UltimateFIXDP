@@ -1160,14 +1160,27 @@ void AmbientOcclusionPass(void* dev, int strengthPercent, int radiusPixels) {
 }
 
 static volatile bool g_shotRequested = false;
+static wchar_t g_shotSuffix[48] = L"";  // added to the next file name (a batch names its filter)
+static int g_hudlessFrames = 0;         // Shift + the screenshot key: the game's HUD is hidden for a few frames, then the shot
 void RequestScreenshot() { g_shotRequested = true; }
+void RequestScreenshotNamed(const wchar_t* suffix) {
+    lstrcpynW(g_shotSuffix, suffix ? suffix : L"", 48);
+    g_shotRequested = true;
+}
+bool ScreenshotHidesHud() { return g_hudlessFrames > 0; }
 
 void ScreenshotFrame(void* dev) {
     static bool wasDown = false;
     bool down = g_cfg.screenshotKey && (GetAsyncKeyState(g_cfg.screenshotKey) & 0x8000) != 0;
     bool press = (down && !wasDown) || g_shotRequested;
+    if (down && !wasDown && (GetAsyncKeyState(VK_SHIFT) & 0x8000)) {  // without the HUD: hide it first, shoot two frames later
+        g_hudlessFrames = 3;
+        press = false;
+        lstrcpyW(g_shotSuffix, L"_nohud");
+    }
     g_shotRequested = false;
     wasDown = down;
+    if (g_hudlessFrames > 0 && --g_hudlessFrames == 0) press = true;
     if (!press) return;
     UINT w, h, fmt;
     void* back = BackBufferInfo(dev, &w, &h, &fmt);
@@ -1187,7 +1200,9 @@ void ScreenshotFrame(void* dev) {
         CreateDirectoryW(dir, nullptr);
         SYSTEMTIME t;
         GetLocalTime(&t);
-        wsprintfW(path, L"%s\\dp_%04d%02d%02d_%02d%02d%02d.png", dir, t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond);
+        wsprintfW(path, L"%s\\dp_%04d%02d%02d_%02d%02d%02d_%03d%s.png", dir, t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute, t.wSecond,
+                  t.wMilliseconds, g_shotSuffix);
+        g_shotSuffix[0] = 0;
         ok = SUCCEEDED(save(path, 3 /*D3DXIFF_PNG*/, sys, nullptr, nullptr));
         Log("screenshot: %S %s", path, ok ? "saved" : "FAILED");
     }
