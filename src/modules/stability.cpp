@@ -22,6 +22,7 @@ volatile long g_nanCount = 0;
 bool g_audioPinned = false;
 int g_pinTries = 0;
 bool g_fpuSaid = false;
+volatile bool g_memLow = false;  // the address space is nearly used up (MemoryLine)
 
 u16 ControlWord() {
     u16 cw = 0;
@@ -49,6 +50,8 @@ extern "C" void __cdecl NanTrapWorker(ufx::u32 caller) {
 }
 
 namespace ufx {
+
+bool MemoryIsLow() { return g_memLow; }
 
 bool InstallStability() {
     bool any = false;
@@ -101,6 +104,10 @@ void MemoryLine() {
     }
     Log("memory: %u MB of %u MB address space free, largest block %u MB", (unsigned)(ms.ullAvailVirtual >> 20),
         (unsigned)(ms.ullTotalVirtual >> 20), (unsigned)(largest >> 20));
+    // below these the next big allocation (a texture, a level) can fail: the game then crashes or loops without a word
+    const bool low = (ms.ullAvailVirtual >> 20) < 300 || (largest >> 20) < 64;
+    if (low && !g_memLow) Log("memory: running low; the player is asked to save and restart");
+    g_memLow = low;
 }
 
 void StabilityFrame() {

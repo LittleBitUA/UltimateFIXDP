@@ -253,6 +253,7 @@ void TriggerCapture(const void* joyInfoEx, bool menuOpen);
 bool InstallCrashHandler();
 bool InstallCrashGuards();
 bool InstallStability();   // stability.cpp: the NaN trap guard and the x87 precision of the main thread
+bool MemoryIsLow();  // stability.cpp: the address space is nearly used up (the once-a-minute check)
 void StabilityFrame();     // once per frame from the Present hook: pins the sound libraries once, keeps the x87 word
 bool InstallAudioGuard();  // proxy.cpp: the X3DAudio guard, and the game's calls go through it from then on
 void ApplySurround();      // follows [Audio] Surround (also called from the menu)

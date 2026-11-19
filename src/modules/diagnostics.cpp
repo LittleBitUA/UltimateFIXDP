@@ -147,12 +147,18 @@ void PollSession(DWORD now) {
     static bool hinted = false;
     if (hinted || g_cfg.sessionReminderHours <= 0 || g_noticeActive) return;
     const bool poolLow = inUse >= kPoolWarnAt;
-    if (hours < (u32)g_cfg.sessionReminderHours && !poolLow) return;
+    const bool memLow = MemoryIsLow();
+    if (hours < (u32)g_cfg.sessionReminderHours && !poolLow && !memLow) return;
     HWND w = GameWindowHandle();
     if (!w || GetForegroundWindow() != w) return;  // shown once: wait until the player is looking at the game
     hinted = true;
     wchar_t titleUk[96], titleEn[96], uk[320], en[320];
-    if (poolLow) {
+    if (memLow) {
+        lstrcpyW(titleUk, L"Грі бракує пам'яті");
+        lstrcpyW(titleEn, L"The game is running out of memory");
+        lstrcpyW(uk, L"Вільного адресного простору гри майже не лишилось, і наступне завантаження може закінчитися вильотом. Збережіться й перезапустіть гру. Допомагає й ufx_laa.exe (4 ГБ) та менший масштаб рендеру.");
+        lstrcpyW(en, L"The game has almost no free address space left, and the next load may crash. Save and restart the game. ufx_laa.exe (4 GB) and a smaller render scale help too.");
+    } else if (poolLow) {
         lstrcpyW(titleUk, L"Варто перезапустити гру");
         lstrcpyW(titleEn, L"Time to restart the game");
         lstrcpyW(uk, L"Звукова система гри зайняла майже всі свої 64 комірки завантаження й не перевіряє, чи вони скінчилися. Збережіться й перезапустіть гру.");
@@ -167,7 +173,7 @@ void PollSession(DWORD now) {
     char pool[64];
     PoolText(pool, inUse);
     Log("session: the one-time hint to save and restart is shown after %u h (%s; sound load requests in use: %s)", hours,
-        poolLow ? "the sound load pool is nearly used up" : "SessionReminderHours", pool);
+        memLow ? "the address space is nearly used up" : poolLow ? "the sound load pool is nearly used up" : "SessionReminderHours", pool);
 }
 
 // ---- The report file ------------------------------------------------------------------------------------------------
