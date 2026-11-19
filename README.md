@@ -142,7 +142,7 @@ The code is our own (MIT). The ideas, facts and addresses came from earlier comm
 > **Requirements:** the Steam version 1.01b of the game. Other builds are detected and the mod stays inactive.
 > <br>**DualSense:** turn off Steam Input for the game (Properties → Controller).
 > <br>**Do not combine** with DPfix, ZachFix or DPStabilityFix: UltimateFIXDP replaces them.
-> <br>**Coming from [DP1 Launcher](https://github.com/dplauncher/DP1-Launcher)?** This is its successor: remove DPfix (`d3d9.dll`, `DPfix.ini`) first.
+> <br>**Coming from DP1 Launcher?** This is its successor: remove DPfix (`d3d9.dll`, `DPfix.ini`) first.
 
 Optional extras in the release: `ufx_laa.exe` (lets the game use 4 GB of memory, `--undo` reverts), `ufx_play.exe` (start without the launcher window; the mod installs it by itself, hold **Shift** for the old launcher), `dxvk\Install_DXVK.bat` (Vulkan renderer, _experimental_).
 
@@ -287,7 +287,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 > **Вимоги:** Steam-версія гри 1.01b. Інші збірки мод розпізнає і не вмикається.
 > <br>**DualSense:** вимкніть Steam Input для гри (Властивості → Контролер).
 > <br>**Не поєднуйте** з DPfix, ZachFix і DPStabilityFix: UltimateFIXDP їх замінює.
-> <br>**Користувались [DP1 Launcher](https://github.com/dplauncher/DP1-Launcher)?** Це його наступник: спершу приберіть DPfix (`d3d9.dll`, `DPfix.ini`).
+> <br>**Користувались DP1 Launcher?** Це його наступник: спершу приберіть DPfix (`d3d9.dll`, `DPfix.ini`).
 
 Необов'язкові додатки в релізі: `ufx_laa.exe` (дозволяє грі 4 ГБ пам'яті, `--undo` повертає як було), `ufx_play.exe` (запуск без вікна лаунчера; мод ставить його сам, утримуйте **Shift**, щоб відкрити старий лаунчер), `dxvk\Install_DXVK.bat` (Vulkan-рендерер, _експериментально_).
 
