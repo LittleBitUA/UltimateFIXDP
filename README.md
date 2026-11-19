@@ -24,7 +24,8 @@ _Універсальний фікс для_ **Deadly Premonition: The Director'
 One DLL in the game folder instead of DPfix, a stability fix, a map fix and a crash fix.
 No installer: press **F10** in game and everything is there. The 4 GB patch is a separate optional step (`ufx_laa.exe`, included).
 
-> **Public test build.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
+> **Version 0.7.0.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
+> <br>New in 0.7.0: a **mod manager**, the **far texture flicker** fixed, HBAO, SMAA, the Xbox 360 look, physics up to 180 FPS, story and residents pages — see [What's new](#whats-new-in-070).
 
 ### Features
 
@@ -32,14 +33,20 @@ No installer: press **F10** in game and everything is there. The 4 GB patch is a
 - 🚀 **Low FPS fixed** — on some PCs the game sat at ~45 FPS with an idle GPU; **45 → 180 FPS** in our test
 - ⏱️ **60 FPS limit at any refresh rate** — at 144 / 180 Hz the game used to run too fast
 - 🖥️ **Real output resolution** — the picture and the HUD at your monitor's resolution instead of 1280×720, borderless window, no DPI blur
-- ✨ **Graphics** — supersampling 1×–3×, SSAO, FXAA, sharpening, wet reflections, 16× anisotropic filtering, sharper shadows, longer draw distance
+- ✨ **Graphics** — supersampling 1×–3×, horizon-based ambient occlusion (HBAO), SMAA and FXAA, sharpening, wet reflections, 16× anisotropic filtering, sharper shadows, longer draw distance
+- 📺 **Xbox 360 look** — the console's colour grading and TV gamma on top of the PC picture
+- 🌫️ **No more flickering far textures** — the game's camera wasted depth precision; far roads, roofs and decals no longer fight each other
+- 🏎️ **High FPS physics** — 120–180 FPS with the car, doors, animations and timers at their normal speed; the FPS is unlocked by default
+- 🧩 **Mod manager** — `UltimateFix\mods\<mod>\`: translations (SWERY Localization Tool files), texture packs, or any game file by its name (`fontwide.xpc`, `mes_all.mes`); order and on/off in F10
 - 🎮 **DualSense** — USB and Bluetooth without Steam Input, **adaptive triggers per weapon**, haptics for driving and shooting, PlayStation button icons
 - 📳 **Rumble that works** — the PC port calculated vibration and never sent it to the gamepad
 - 🔫 **Aim on L2, shoot on R2** — like a modern shooter, on Xbox pads too; prompts switch between keyboard and gamepad by themselves
 - 🗺️ **Full pause map** — all 64 tiles, proper zoom, north up
 - 📍 **Waypoints** — F7 sets a mark; the distance in the game's own font and the game's own arrows on the minimap (_arrows are experimental_)
-- 💾 **Safe saves** — atomic writes, backups, automatic restore of a damaged `dp.sav`
-- 📷 **Photo mode** — free camera, frozen time, filters, FOV, costumes, poses, PNG screenshots (_experimental_)
+- 💾 **Safe saves** — atomic writes, 60 backups named by episode, chapter and play time, automatic restore of a damaged `dp.sav`
+- 📖 **Story and residents** — where the story stands and where to go next, side quests, and the timetable of every resident of Greenvale
+- 🖱️ **Camera** — field of view in play, Xbox 360 quick turn, mouse sensitivity and inversion per axis
+- 📷 **Photo mode** — free camera, frozen time, 13 filters with grain, sepia, aberration and letterbox, your own presets, FOV, costumes, poses, PNG screenshots
 - 🧰 **Tools** — frame statistics panel, built-in profiler, cheats page (money, time, weather, ammo, god mode)
 - 🇺🇦🇬🇧 **Two languages** — Ukrainian and English, switched in the menu
 
@@ -69,6 +76,30 @@ port with the Xbox 360 original:
   PC port never sends it to the device. Restored.
 - 🚧 **Draw distance** — booths and vending machines vanished 500 units
   away because of a far plane the Xbox version does not have.
+- 🌫️ **Flickering far away** — the play camera's near plane sits at 1.0, so
+  the 24-bit depth buffer had almost no precision left in the distance. The
+  mod moves it to 20.0: far surfaces stop fighting each other.
+- ⚙️ **Above 120 FPS** — 80 timers of the game turned the frame time into
+  whole ticks, so above 120 FPS they stood still or ran double. They now share
+  whole steps.
+- 🧮 **Angles that are not a number** — the angle normalisation hangs the game
+  for good on a NaN (`jmp $`). It now returns 0 and logs the caller.
+
+### What's new in 0.7.0
+
+- **Mod manager** (F10 → Mods): every folder in `UltimateFix\mods\` is a mod; switch them on and off and set their order. A mod can carry a translation (`text\`: `mes_all.json` and `glyphmap.json` of the SWERY Localization Tool), textures (`textures\<hash>.dds`, hashes from `[Debug] DumpTextures=1`), or any game file by its name right in the mod folder (`fontwide.xpc`, `mes_all.mes`, `FONTWIDE.DDS` for the picture inside an XPC).
+- **Far texture flicker fixed**: the near plane of the play camera (20.0 instead of 1.0), mipmaps built for textures that have none, steadier far shadows.
+- **HBAO**: horizon-based ambient occlusion with a depth-aware blur, worked out at up to 1080 rows on large render scales; **SMAA**; **Xbox 360 look**.
+- **High FPS**: physics and the game's other timers at 120–180 FPS; the FPS is unlocked by default, the 60 limit stays on 61–139 Hz screens.
+- **Camera**: field of view in play, Xbox 360 quick turn, mouse sensitivity (25–400 %) and inversion per axis.
+- **Story page** (episode, chapter, side quests, where to go next by name) and **Residents page** (every resident's timetable, rooms and actions named).
+- **Waypoint** as the game's own objective: its beacon over the place, arrows on the minimap edge; shown only in its own area.
+- **Photo mode**: 13 filters, temperature, tint, sepia, fade, grain, chromatic aberration, letterbox, four presets of your own.
+- **Stability**: no endless hang on an angle that is not a number, XAudio2 kept in memory, the x87 precision of Direct3D 9, a clear message when the graphics device cannot be created.
+- **Saves**: 60 backups, each named by episode, chapter and play time.
+- A start card that the settings are on **F10**; shorter menu labels; draw distance sliders stop where more adds nothing.
+
+Known issues: a light strip along some wall corners with HBAO, doubled edges of the depth of field at render scale 300 %, the X on the pause map drifts while the map pans.
 
 ### Screenshots
 
@@ -120,7 +151,8 @@ To uninstall, delete `X3DAudio1_7.dll`.
 | Key | Action |
 |---|---|
 | **F10** | Settings menu |
-| **F7** | Set a waypoint (on the pause map or in the world) · **Shift+F7** removes it |
+| **F7** | Set a waypoint (on the pause map or in the world) · **Shift+F7** removes it · **Ctrl+F7** to the game's objective |
+| **Shift+S** | Quick turn (on a pad: the Xbox 360 combination) |
 | **F6** | Photo mode |
 | **F5** / **F4** | Free camera only / hide the HUD in photo mode |
 | **F11** | Screenshot (PNG, without the menu) |
@@ -131,7 +163,7 @@ To uninstall, delete `X3DAudio1_7.dll`.
 - `UltimateFix\ufx.log` says for every fix whether it is active or skipped, and why
 - Every feature can be switched off in F10 or in `UltimateFix.ini`; `[Debug] SafeMode=1` starts with fewer hooks
 - Report problems with `ufx.log` and the `crash_*.dmp` / `hang_*.dmp` file, if there is one
-- After an update, an old `UltimateFix.ini` keeps old values: delete it to get the new defaults
+- After an update, an old `UltimateFix.ini` keeps old values (a few old defaults are updated by the mod itself): delete it to get all the new defaults
 
 ### Development
 
@@ -151,7 +183,8 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 Одна DLL у теці гри замість DPfix, фіксу стабільності, фіксу мапи й фіксу вильотів.
 Без інсталятора: натисніть **F10** у грі, і все там. 4GB-патч — окремий необов'язковий крок (`ufx_laa.exe`, є в архіві).
 
-> **Тестова збірка.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
+> **Версія 0.7.0.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
+> <br>Нове в 0.7.0: **менеджер модів**, виправлено **блимання далеких текстур**, HBAO, SMAA, вигляд Xbox 360, фізика до 180 FPS, сторінки сюжету й жителів — див. [Що нового](#що-нового-в-070).
 
 ### Можливості
 
@@ -159,14 +192,20 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 - 🚀 **Виправлено низький FPS** — на деяких ПК гра трималась на ~45 FPS при вільній відеокарті; у нашому тесті **45 → 180 FPS**
 - ⏱️ **Ліміт 60 FPS на будь-якій частоті екрана** — на 144 / 180 Гц гра раніше бігла надто швидко
 - 🖥️ **Справжня вихідна роздільність** — картинка й HUD у роздільності монітора, а не 1280×720, вікно без рамки, без розмиття від масштабування Windows
-- ✨ **Графіка** — суперсемплінг 1×–3×, SSAO, FXAA, різкість, мокрі відбиття, анізотропна фільтрація 16×, чіткіші тіні, більша дальність промальовки
+- ✨ **Графіка** — суперсемплінг 1×–3×, затінення по горизонту (HBAO), SMAA і FXAA, різкість, мокрі відбиття, анізотропна фільтрація 16×, чіткіші тіні, більша дальність промальовки
+- 📺 **Вигляд Xbox 360** — кольорокорекція й гамма телевізора консолі поверх картинки PC
+- 🌫️ **Далекі текстури більше не блимають** — камера гри марнувала точність глибини; далекі дороги, дахи й написи більше не «перебивають» одне одного
+- 🏎️ **Фізика на високому FPS** — 120–180 FPS, а машина, двері, анімації й таймери йдуть з нормальною швидкістю; FPS типово розблоковано
+- 🧩 **Менеджер модів** — `UltimateFix\mods\<мод>\`: переклади (файли SWERY Localization Tool), текстурні паки або будь-який файл гри за іменем (`fontwide.xpc`, `mes_all.mes`); порядок і вмикання в F10
 - 🎮 **DualSense** — USB і Bluetooth без Steam Input, **адаптивні триґери під кожну зброю**, відгук у машині й при пострілах, іконки кнопок PlayStation
 - 📳 **Вібрація, яка працює** — PC-порт рахував її, але не надсилав на ґеймпад
 - 🔫 **Приціл на L2, постріл на R2** — як у сучасних шутерах, і на Xbox-падах; підказки самі перемикаються між клавіатурою й ґеймпадом
 - 🗺️ **Повна мапа паузи** — усі 64 плитки, нормальний масштаб, північ угорі
 - 📍 **Мітки** — F7 ставить мітку; відстань ігровим шрифтом і рідні стрілки гри на мінімапі (_стрілки експериментальні_)
-- 💾 **Надійні збереження** — атомарний запис, резервні копії, автоматичне відновлення пошкодженого `dp.sav`
-- 📷 **Фоторежим** — вільна камера, зупинка часу, фільтри, кут огляду, костюми, пози, знімки PNG (_експериментально_)
+- 💾 **Надійні збереження** — атомарний запис, 60 резервних копій із підписом (епізод, розділ, час гри), автоматичне відновлення пошкодженого `dp.sav`
+- 📖 **Сюжет і жителі** — де ви в сюжеті й куди йти далі, побічні завдання і розклад кожного жителя Грінвейла
+- 🖱️ **Камера** — кут огляду в грі, швидкий розворот як на Xbox 360, чутливість миші й інверсія по кожній осі
+- 📷 **Фоторежим** — вільна камера, зупинка часу, 13 фільтрів із зерном, сепією, аберацією й кінорамкою, власні пресети, кут огляду, костюми, пози, знімки PNG
 - 🧰 **Інструменти** — панель статистики кадру, вбудований профайлер, сторінка читкодів (гроші, час, погода, набої, невразливість)
 - 🇺🇦🇬🇧 **Дві мови** — українська та англійська, перемикаються в меню
 
@@ -195,6 +234,30 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
   але PC-порт не надсилає її на пристрій. Відновлено.
 - 🚧 **Дальність промальовки** — будки й автомати зникали за 500 одиниць
   через дальню площину, якої у версії для Xbox немає.
+- 🌫️ **Блимання вдалині** — ближня площина камери гри стоїть на 1.0, тож
+  24-бітному буферу глибини вдалині майже не лишалось точності. Мод ставить
+  20.0: далекі поверхні більше не «перебивають» одна одну.
+- ⚙️ **Понад 120 FPS** — 80 таймерів гри перетворювали час кадру на цілі такти,
+  тож понад 120 FPS вони стояли або бігли вдвічі швидше. Тепер вони ділять
+  цілі кроки.
+- 🧮 **Кут, що не є числом** — нормалізація кута назавжди вішала гру на NaN
+  (`jmp $`). Тепер вона повертає 0 і пише в журнал, звідки прийшло число.
+
+### Що нового в 0.7.0
+
+- **Менеджер модів** (F10 → Моди): кожна тека в `UltimateFix\mods\` — це мод; вмикайте, вимикайте й міняйте порядок. Мод може нести переклад (`text\`: `mes_all.json` і `glyphmap.json` із SWERY Localization Tool), текстури (`textures\<хеш>.dds`, хеші з `[Debug] DumpTextures=1`) або будь-який файл гри за іменем просто в теці мода (`fontwide.xpc`, `mes_all.mes`, `FONTWIDE.DDS` для картинки всередині XPC).
+- **Виправлено блимання далеких текстур**: ближня площина камери (20.0 замість 1.0), міпмапи для текстур без них, стабільніші далекі тіні.
+- **HBAO**: затінення по горизонту з розмиттям з урахуванням глибини, на великому масштабі рендеру рахується до 1080 рядків; **SMAA**; **вигляд Xbox 360**.
+- **Високий FPS**: фізика й решта таймерів гри на 120–180 FPS; FPS типово розблоковано, ліміт 60 лишається на екранах 61–139 Гц.
+- **Камера**: кут огляду в грі, швидкий розворот як на Xbox 360, чутливість миші (25–400 %) та інверсія по кожній осі.
+- **Сторінка «Сюжет»** (епізод, розділ, побічні завдання, куди йти далі — назвою місця) і **сторінка «Жителі»** (розклад кожного жителя, кімнати й дії людськими словами).
+- **Мітка** як рідна ціль гри: її маяк над місцем, стрілки на краю мінімапи; показується лише у своїй локації.
+- **Фоторежим**: 13 фільтрів, температура, відтінок, сепія, вицвітання, зерно, хроматична аберація, кінорамка, чотири власні пресети.
+- **Стабільність**: немає вічного зависання на куті, що не є числом; XAudio2 тримається в пам'яті; точність x87 як у Direct3D 9; зрозуміле повідомлення, якщо графічний пристрій не створюється.
+- **Збереження**: 60 резервних копій, кожна підписана епізодом, розділом і часом гри.
+- Картка на старті про **F10**; коротші підписи в меню; повзунки дальності зупиняються там, де більше нічого не дає.
+
+Відомі проблеми: світла смужка вздовж деяких кутів стін з HBAO, подвоєні краї розмиття глибини різкості на масштабі рендеру 300 %, X на мапі паузи з'їжджає під час прокручування мапи.
 
 ### На чиїх плечах стоїмо
 
@@ -233,7 +296,8 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 | Клавіша | Дія |
 |---|---|
 | **F10** | Меню налаштувань |
-| **F7** | Поставити мітку (на мапі паузи або у світі) · **Shift+F7** прибирає |
+| **F7** | Поставити мітку (на мапі паузи або у світі) · **Shift+F7** прибирає · **Ctrl+F7** на ціль гри |
+| **Shift+S** | Швидкий розворот (на ґеймпаді: комбінація Xbox 360) |
 | **F6** | Фоторежим |
 | **F5** / **F4** | Лише вільна камера / сховати HUD у фоторежимі |
 | **F11** | Знімок екрана (PNG, без меню) |
@@ -244,7 +308,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 - `UltimateFix\ufx.log` пише про кожне виправлення, чи воно ввімкнене, чи пропущене, і чому
 - Будь-яку функцію можна вимкнути в F10 або в `UltimateFix.ini`; `[Debug] SafeMode=1` запускає мод із меншою кількістю хуків
 - Про проблеми пишіть із файлом `ufx.log` і файлом `crash_*.dmp` / `hang_*.dmp`, якщо він є
-- Після оновлення старий `UltimateFix.ini` зберігає старі значення: видаліть його, щоб отримати нові типові
+- Після оновлення старий `UltimateFix.ini` зберігає старі значення (кілька старих типових мод оновлює сам): видаліть його, щоб отримати всі нові типові
 
 ### Розробка
 
