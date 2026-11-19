@@ -24,10 +24,10 @@ _Універсальний фікс для_ **Deadly Premonition: The Director'
 ## 🇬🇧 In English
 
 One DLL in the game folder instead of DPfix, a stability fix, a map fix and a crash fix.
-No installer: press **F10** in game and everything is there. The 4 GB patch is a separate optional step (`ufx_laa.exe`, included).
+No installer: press **F10** in game and everything is there. The mod also gives the game 4 GB of memory by itself (from the second start).
 
-> **Version 0.7.0.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
-> <br>New in 0.7.0: a **mod manager**, the **far texture flicker** fixed, HBAO, SMAA, the Xbox 360 look, physics up to 180 FPS, story and residents pages — see [What's new](#whats-new-in-070).
+> **Version 0.7.1.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
+> <br>New in 0.7.1: fixes for the **thread races** behind the crashes and hangs on entering buildings, the **QTE at high FPS**, **4 GB of memory by itself**, checked and compressed save backups, the game's own Xbox icons — see [What's new](#whats-new-in-071).
 
 ### Features
 
@@ -86,6 +86,46 @@ port with the Xbox 360 original:
   whole steps.
 - 🧮 **Angles that are not a number** — the angle normalisation hangs the game
   for good on a NaN (`jmp $`). It now returns 0 and logs the caller.
+- 🧵 **Why "Windows 98 compatibility mode" helped** — two worker threads of the
+  game share data with the main thread without any lock: the world builder
+  works while the next frame already updates, and a level change clears the
+  residents while the route thread still writes a path into one of them (memory
+  damage, or a resident who waits for a route forever). One CPU core hid both.
+  The mod makes them wait for each other instead, at full speed.
+- 🕹️ **The QTE at high FPS** — the stick-waggle QTE multiplied the stick travel
+  by the frame time, so at 180 FPS every A↔D swap counted a third and the QTE
+  ran out of time. A swap now counts as at 60 FPS.
+- 🧠 **2 GB of memory** — the game is 32-bit and sees only 2 GB; a big render
+  scale runs it out. The mod gives `DP.exe` the 4 GB flag by itself (from the
+  next start, the original kept as `DP.exe.bak`).
+- 🧍 **Residents walking into nowhere** — a failed route lookup moved the
+  resident to (0, 0, 0); now the resident stays where it stood.
+
+### What's new in 0.7.1
+
+- **Stability.**
+  - The world builder and the main thread take turns, and a level change waits for the route thread: the crashes and hangs on entering buildings with company, the ones the Windows 98 compatibility mode used to hide.
+  - Residents with a missing route stay in place instead of vanishing to (0, 0, 0).
+  - The loader waits 1 ms instead of 16 between requests: fewer hitches while the town streams in.
+  - No white "not responding" window during long loads.
+  - A memory line in the log every minute, and a notice to save and restart when memory runs low.
+- **4 GB of memory by itself**: the mod gives `DP.exe` the 4 GB flag (from the next start); `ufx_laa.exe` is no longer needed.
+- **The stick-waggle QTE works at high FPS** again (every swap counts as at 60 FPS).
+- **Saves.**
+  - Every save is checked: the money, the story position and the play time must agree between the header and the record, or the mod warns.
+  - 60 backups named by episode, chapter and play time, in a compressed folder (about 1 MB each instead of 8).
+- **Graphics.**
+  - Any photo filter or your own preset can stay on all the time.
+  - Bloom strength and exposure correction.
+  - The Xbox 360 look stays on in cutscenes and scripted scenes.
+  - No doubled depth-of-field edges at render scale 300 %.
+  - Fades, loading screens and the item notice cover the screen to the last pixel above 720p.
+  - The near plane follows close cameras, so York is no longer cut at the save phone or in doorways.
+- **The game's own Xbox pad icons** instead of the mod's drawing (unpacked from the game's `BTNWIDE.XPC`).
+- **Screenshots**: Shift+F11 without the HUD, and "with every filter" in photo mode.
+- **Mouse**: sensitivity 25–400 % that really turns faster, and inversion per axis.
+
+Known issues: a light strip along some wall corners with HBAO, the X on the pause map drifts while the map pans, some rare scenes use another tone-map shader where the Xbox 360 look is not applied yet (the mod saves it as `UltimateFix\composite_*.bin` for support).
 
 ### What's new in 0.7.0
 
@@ -101,7 +141,7 @@ port with the Xbox 360 original:
 - **Saves**: 60 backups, each named by episode, chapter and play time.
 - A start card that the settings are on **F10**; shorter menu labels; draw distance sliders stop where more adds nothing.
 
-Known issues: a light strip along some wall corners with HBAO, doubled edges of the depth of field at render scale 300 %, the X on the pause map drifts while the map pans.
+Known issues of 0.7.0, see 0.7.1 above for what is fixed.
 
 ### Screenshots
 
@@ -144,7 +184,7 @@ The code is our own (MIT). The ideas, facts and addresses came from earlier comm
 > <br>**Do not combine** with DPfix, ZachFix or DPStabilityFix: UltimateFIXDP replaces them.
 > <br>**Coming from DP1 Launcher?** This is its successor: remove DPfix (`d3d9.dll`, `DPfix.ini`) first.
 
-Optional extras in the release: `ufx_laa.exe` (lets the game use 4 GB of memory, `--undo` reverts), `ufx_play.exe` (start without the launcher window; the mod installs it by itself, hold **Shift** for the old launcher), `dxvk\Install_DXVK.bat` (Vulkan renderer, _experimental_).
+Optional extras in the release: `ufx_laa.exe` (the 4 GB flag by hand; the mod now sets it by itself, `--undo` reverts), `ufx_play.exe` (start without the launcher window; the mod installs it by itself, hold **Shift** for the old launcher), `dxvk\Install_DXVK.bat` (Vulkan renderer, _experimental_).
 
 To uninstall, delete `X3DAudio1_7.dll`.
 
@@ -183,10 +223,10 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 ## 🇺🇦 Українською
 
 Одна DLL у теці гри замість DPfix, фіксу стабільності, фіксу мапи й фіксу вильотів.
-Без інсталятора: натисніть **F10** у грі, і все там. 4GB-патч — окремий необов'язковий крок (`ufx_laa.exe`, є в архіві).
+Без інсталятора: натисніть **F10** у грі, і все там. Мод також сам дає грі 4 ГБ пам'яті (з другого запуску).
 
-> **Версія 0.7.0.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
-> <br>Нове в 0.7.0: **менеджер модів**, виправлено **блимання далеких текстур**, HBAO, SMAA, вигляд Xbox 360, фізика до 180 FPS, сторінки сюжету й жителів — див. [Що нового](#що-нового-в-070).
+> **Версія 0.7.1.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
+> <br>Нове в 0.7.1: виправлено **гонки потоків**, через які гра падала й зависала при вході в будівлі, **QTE на високому FPS**, **4 ГБ пам'яті самі собою**, перевірені й стиснені копії збережень, оригінальні іконки Xbox — див. [Що нового](#що-нового-в-071).
 
 ### Можливості
 
@@ -244,6 +284,46 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
   цілі кроки.
 - 🧮 **Кут, що не є числом** — нормалізація кута назавжди вішала гру на NaN
   (`jmp $`). Тепер вона повертає 0 і пише в журнал, звідки прийшло число.
+- 🧵 **Чому допомагав «режим сумісності з Windows 98»** — два фонові потоки гри
+  працюють зі спільними даними без жодного замка: будівник світу працює, поки
+  оновлюється наступний кадр, а зміна локації прибирає жителів, поки потік
+  маршрутів ще дописує шлях одному з них (псування пам'яті або житель, що вічно
+  «чекає маршрут»). Одне ядро ховало обидві вади. Мод змушує їх чекати одне
+  одного, без втрати швидкості.
+- 🕹️ **QTE на високому FPS** — QTE «розхитування» множило рух стіка на час
+  кадру, тож на 180 FPS кожне перемикання A↔D рахувалось на третину і час
+  вичерпувався. Тепер перемикання рахується, як на 60 FPS.
+- 🧠 **2 ГБ пам'яті** — гра 32-бітна і бачить лише 2 ГБ; великий масштаб
+  рендеру їх вичерпує. Мод сам ставить `DP.exe` прапор 4 ГБ (з наступного
+  запуску, оригінал лишається як `DP.exe.bak`).
+- 🧍 **Жителі, що йдуть «в нікуди»** — невдалий пошук маршруту переносив жителя
+  в (0, 0, 0); тепер він лишається там, де стояв.
+
+### Що нового в 0.7.1
+
+- **Стабільність.**
+  - Будівник світу й головний потік працюють по черзі, а зміна локації чекає потік маршрутів. Це прибирає вильоти й зависання при вході в будівлі з супутниками: те, що раніше ховав режим сумісності з Windows 98.
+  - Жителі без маршруту лишаються на місці, а не зникають у (0, 0, 0).
+  - Потік завантаження чекає між запитами 1 мс замість 16: менше ривків, коли місто підвантажується.
+  - Під час довгих завантажень немає білого вікна «не відповідає».
+  - Раз на хвилину в журналі рядок про пам'ять, а коли її бракує, повідомлення «збережіться й перезапустіть».
+- **4 ГБ пам'яті самі собою**: мод ставить `DP.exe` прапор 4 ГБ (діє з наступного запуску), `ufx_laa.exe` більше не потрібен.
+- **QTE «розхитування» знову проходиться на високому FPS** (кожне перемикання рахується, як на 60 FPS).
+- **Збереження.**
+  - Кожне збереження перевіряється: гроші, місце в сюжеті й час гри мають збігатися в заголовку й записі, інакше мод попереджає.
+  - 60 копій, підписаних епізодом, розділом і часом гри, у стисненій теці (близько 1 МБ кожна замість 8).
+- **Графіка.**
+  - Будь-який фільтр фоторежиму або власний пресет може діяти весь час.
+  - Сила світіння (bloom) і поправка експозиції.
+  - Вигляд Xbox 360 тримається і в катсценах та сценах без керування.
+  - Без подвоєних країв розмиття на масштабі рендеру 300 %.
+  - Затемнення, екрани завантаження й сповіщення про предмет накривають екран до останнього пікселя на роздільності понад 720p.
+  - Ближня площина камери сама підтягується, коли камера близько: Йорка більше не зрізає біля телефону й у дверях.
+- **Оригінальні іконки ґеймпада Xbox** із самої гри (розпаковуються з її `BTNWIDE.XPC`) замість намальованих модом.
+- **Знімки**: Shift+F11 без інтерфейсу, у фоторежимі «з кожним фільтром».
+- **Миша**: чутливість 25–400 %, що справді повертає швидше, та інверсія по кожній осі.
+
+Відомі проблеми: світла смужка вздовж деяких кутів з HBAO; X на мапі паузи з'їжджає під час прокручування; у кількох рідкісних сценах гра бере інший шейдер, і вигляд Xbox 360 там ще не діє (мод зберігає його як `UltimateFix\composite_*.bin`, щоб додати підтримку).
 
 ### Що нового в 0.7.0
 
@@ -259,7 +339,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 - **Збереження**: 60 резервних копій, кожна підписана епізодом, розділом і часом гри.
 - Картка на старті про **F10**; коротші підписи в меню; повзунки дальності зупиняються там, де більше нічого не дає.
 
-Відомі проблеми: світла смужка вздовж деяких кутів стін з HBAO, подвоєні краї розмиття глибини різкості на масштабі рендеру 300 %, X на мапі паузи з'їжджає під час прокручування мапи.
+Відомі проблеми 0.7.0 — що виправлено, див. 0.7.1 вище.
 
 ### На чиїх плечах стоїмо
 
@@ -289,7 +369,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 > <br>**Не поєднуйте** з DPfix, ZachFix і DPStabilityFix: UltimateFIXDP їх замінює.
 > <br>**Користувались DP1 Launcher?** Це його наступник: спершу приберіть DPfix (`d3d9.dll`, `DPfix.ini`).
 
-Необов'язкові додатки в релізі: `ufx_laa.exe` (дозволяє грі 4 ГБ пам'яті, `--undo` повертає як було), `ufx_play.exe` (запуск без вікна лаунчера; мод ставить його сам, утримуйте **Shift**, щоб відкрити старий лаунчер), `dxvk\Install_DXVK.bat` (Vulkan-рендерер, _експериментально_).
+Необов'язкові додатки в релізі: `ufx_laa.exe` (прапор 4 ГБ вручну; тепер мод ставить його сам, `--undo` повертає як було), `ufx_play.exe` (запуск без вікна лаунчера; мод ставить його сам, утримуйте **Shift**, щоб відкрити старий лаунчер), `dxvk\Install_DXVK.bat` (Vulkan-рендерер, _експериментально_).
 
 Щоб видалити мод, видаліть `X3DAudio1_7.dll`.
 
