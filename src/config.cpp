@@ -79,6 +79,9 @@ static const char kDefaultIni[] =
     "PinFpu=1\r\n"
     "; 1 = the loader thread waits 1 ms instead of 16 between requests: shorter hitches while the world streams in. Restart needed.\r\n"
     "FasterLoading=1\r\n"
+    "; 1 = the mod gives DP.exe the 4 GB flag itself (as ufx_laa.exe does): it prepares the file while the game runs, the next\r\n"
+    "; start has 4 GB of address space instead of 2. The original stays as DP.exe.bak. Done again after Steam restores the file.\r\n"
+    "AutoLargeAddress=1\r\n"
     "; Threads of the game that share data without locks (what the Windows 98 compatibility mode hid by one CPU core):\r\n"
     "; SerialSetThread=1 the main thread waits for the world builder at once, RouteFlushWait=1 a level change waits for the\r\n"
     "; resident route thread (at most 250 ms). Restart needed.\r\n"
@@ -878,6 +881,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.saveWarnings = (int)GetPrivateProfileIntW(L"Save", L"Warnings", 1, ini);
     g_cfg.compressBackups = GetPrivateProfileIntW(L"Save", L"CompressBackups", 1, ini) ? 1 : 0;
     g_cfg.fasterLoading = GetPrivateProfileIntW(L"Fixes", L"FasterLoading", 1, ini) ? 1 : 0;
+    g_cfg.autoLargeAddress = GetPrivateProfileIntW(L"Fixes", L"AutoLargeAddress", 1, ini) ? 1 : 0;
     g_cfg.serialSetThread = GetPrivateProfileIntW(L"Fixes", L"SerialSetThread", 1, ini) ? 1 : 0;
     g_cfg.routeFlushWait = GetPrivateProfileIntW(L"Fixes", L"RouteFlushWait", 1, ini) ? 1 : 0;
     if (g_cfg.saveBackups < 1) g_cfg.saveBackups = 1;

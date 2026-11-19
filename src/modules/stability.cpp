@@ -181,6 +181,7 @@ void MemoryLine() {
 
 void StabilityFrame() {
     MemoryLine();
+    LargeAddressFrame();
     if (g_cfg.pinAudio && !g_audioPinned && g_pinTries < 600) {  // the sound engine exists by the first frame; ten seconds of tries at most
         ++g_pinTries;
         const bool x2 = Pin(L"XAudio2_7.dll"), xact = Pin(L"xactengine3_7.dll");

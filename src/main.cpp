@@ -135,6 +135,7 @@ static void Startup() {
     if (!g_cfg.zeroDeltaGuard) Log("zero-delta: ZeroDeltaGuard=0 is not followed: the mod's own pause makes frames of zero length, the guard stays");
     if (InstallZeroDelta()) ++on;
     if (InstallStability()) ++on;
+    InstallAutoLargeAddress();
     if (g_cfg.saveGuard && InstallSaveGuard()) ++on;
     if (g_cfg.houseListFix && InstallHouseList()) ++on;
     if (g_cfg.removeExtraJoyPoll && InstallJoyPoll()) ++on;

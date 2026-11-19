@@ -26,6 +26,7 @@ struct Config {
     int saveRestoreDamaged;  // restore dp.sav from the newest backup if its size is wrong
     int serialSetThread;     // the main thread waits for SetThread at once (no world objects built during the update)
     int routeFlushWait;      // a level change lets RouteThread finish its request before the queue is cleared
+    int autoLargeAddress;    // the mod gives DP.exe the 4 GB flag itself (from the next start)
     int fasterLoading;       // the loader thread waits 1 ms instead of 16 between requests
     int compressBackups;     // the backup folder is NTFS-compressed (60 copies of 8 MB would be about 480 MB)
     int saveWarnings;        // show a message box when a save could not be committed
@@ -256,7 +257,9 @@ void TriggerCapture(const void* joyInfoEx, bool menuOpen);
 bool InstallCrashHandler();
 bool InstallCrashGuards();
 bool InstallStability();   // stability.cpp: the NaN trap guard and the x87 precision of the main thread
-bool MemoryIsLow();  // stability.cpp: the address space is nearly used up (the once-a-minute check)
+bool MemoryIsLow();
+void InstallAutoLargeAddress();  // laa_self.cpp: prepares DP.exe with the 4 GB flag for the next start
+void LargeAddressFrame();        // its one notice, main thread  // stability.cpp: the address space is nearly used up (the once-a-minute check)
 void StabilityFrame();     // once per frame from the Present hook: pins the sound libraries once, keeps the x87 word
 bool InstallAudioGuard();  // proxy.cpp: the X3DAudio guard, and the game's calls go through it from then on
 void ApplySurround();      // follows [Audio] Surround (also called from the menu)
