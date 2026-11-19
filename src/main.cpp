@@ -155,7 +155,7 @@ static void Startup() {
     if (g_cfg.mapFix && InstallMapFix()) ++on;
     ScanMods();  // before the overlays that read the mods' folders
     if (InstallGameFiles()) ++on;
-    if ((g_cfg.textureOverride || g_cfg.dumpTextures || g_cfg.glyphTheme || GameFileTextures()) && InstallTextureOverride()) ++on;
+    if ((g_cfg.textureOverride || g_cfg.dumpTextures || g_cfg.glyphTheme || GameFileTextures() || g_cfg.generateMips) && InstallTextureOverride()) ++on;
     if (g_cfg.nativeDualSense && InstallDualSense()) ++on;
     // The writer also carries SynthHaptics and the menu's trigger test, which work with AdaptiveTriggers and Vibration off.
     if ((g_cfg.adaptiveTriggers || g_cfg.vibration || g_cfg.synthHaptics || g_cfg.menu) && InstallDualSenseOutput()) ++on;

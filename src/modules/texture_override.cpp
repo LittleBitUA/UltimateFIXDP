@@ -182,6 +182,23 @@ HRESULT WINAPI H_FromMemoryEx(void* dev, const void* data, UINT size, UINT w, UI
             Log("textures: override %08x could not be loaded (%08X), original kept", hash, (u32)hr);
         }
     }
+    // A world texture stored without mipmaps is drawn far away from its full-size picture: it shimmers and flickers as the
+    // camera moves. With GenerateMips D3DX builds the smaller levels on load (box filter). Only plain DDS textures of 128 or
+    // more on each side that carry one level; render targets, cube maps and the 2D atlases of the interface are left alone.
+    if (g_cfg.generateMips && mips <= 1 && data && size >= 128 && size != 0x7FFFFFFFu && usage == 0) {
+        const u32* dds = (const u32*)data;
+        const u32 height = dds[3], width = dds[4], levels = dds[7], caps2 = dds[29];
+        const bool square2 = (width & (width - 1)) == 0 && (height & (height - 1)) == 0;  // the atlases are not powers of two
+        if (dds[0] == 0x20534444 /*"DDS "*/ && levels <= 1 && width >= 128 && height >= 128 && square2 && !(caps2 & 0x200) /*cube*/) {
+            HRESULT hr = g_real(dev, data, size, w, h, 0 /*all levels*/, usage, fmt, pool, filter, 5 /*D3DX_FILTER_BOX*/, colorKey, info,
+                                palette, out);
+            if (hr >= 0) {
+                static u32 made = 0;
+                if (++made <= 5 || made % 200 == 0) Log("textures: mipmaps made for a %ux%u texture without them (%u so far)", width, height, made);
+                return hr;
+            }
+        }
+    }
     HRESULT real = g_real(dev, data, size, w, h, mips, usage, fmt, pool, filter, mipFilter, colorKey, info, palette, out);
     if (real >= 0 && out && *out && g_cfg.glyphTheme && !g_keyboardAtlas && size != 0x7FFFFFFFu) NoteAtlas(*out);
     return real;
@@ -233,7 +250,7 @@ bool InstallTextureOverride() {
     } else {
         Log("textures: TextureOverride=0, replacement packs are not used");
     }
-    if (g_count == 0 && !g_cfg.dumpTextures && !g_cfg.glyphTheme && !GameFileTextures()) {
+    if (g_count == 0 && !g_cfg.dumpTextures && !g_cfg.glyphTheme && !GameFileTextures() && !g_cfg.generateMips) {
         if (g_cfg.textureOverride)
             Log("textures: no replacement pack found (UltimateFix\\textures\\override, dpfix\\tex_override), not hooked");
         return false;

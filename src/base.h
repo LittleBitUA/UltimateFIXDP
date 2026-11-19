@@ -87,6 +87,7 @@ struct Config {
     int scalePostBuffers;    // also enlarge the blur/bloom storage buffers with the scene
     int anisotropy;          // maximum anisotropic filtering, 1..16 (the game uses 8)
     int nearPlane;           // near plane of the play camera in tenths (game 10 = 1.0), 10..60: depth precision far away
+    int generateMips;        // build the mipmaps of world textures stored without them (far shimmer), at load
     int shadowBiasFix;       // more depth bias on the two far sun shadow cascades (crawling stripes far away)
     int gameFov;             // field of view in play, percent of the game's own (100 = unchanged), 70..150
     int xboxExposure;        // no 0.85 / 0.75 exposure factors, as on the console
