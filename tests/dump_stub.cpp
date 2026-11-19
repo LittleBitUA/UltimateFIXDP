@@ -328,6 +328,14 @@ int main(int argc, char** argv) {
         Check(kSiteRouteCall1.va + 5 + Rd32(kSiteRouteCall1.bytes + 1) == kRouteLookupFn &&
               kSiteRouteCall2.va + 5 + Rd32(kSiteRouteCall2.bytes + 1) == kRouteLookupFn, "route keep", "both sites call 004D8980");
     }
+    // waggle QTE: travel * max(delta, 1)
+    {
+        uint8_t q[32];
+        size_t n = BuildQteGaugeStub(q, 0x14AFFE0);
+        Check(n == 17 && q[0] == 0xD9 && q[1] == 0x05 && Rd32(q + 2) == 0x14AFFE0 && q[6] == 0xD9 && q[7] == 0xE8 && q[8] == 0xDB && q[9] == 0xF1 &&
+              q[10] == 0xDA && q[11] == 0xC1 && q[12] == 0xDD && q[13] == 0xD9 && q[14] == 0xDE && q[15] == 0xC9 && q[16] == 0xC3, "qte", "stub bytes");
+        Check(Rd32(kSiteQteGauge.bytes + 2) == 0x14AFFE0, "qte", "the site multiplies by the frame delta");
+    }
     // mouse scale: the original fmul, then ours
     {
         uint8_t ms[16];

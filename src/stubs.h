@@ -631,4 +631,19 @@ inline size_t BuildRouteKeepStub(uint8_t* out, uint32_t va, uint32_t fnVa, bool 
     return (size_t)(p - out);
 }
 
+// Called in place of `fmul dword [frameDelta]` (kSiteQteGauge): st0 = the stick travel; returns it times max(delta, 1).
+// fld [delta] / fld1 / fcomi st,st1 / fcmovb st,st1 / fstp st1 / fmulp st1,st / ret. Flags change; the code after the site
+// does not read them (fadd, fstp, call, and fnstsw for its own compare).
+inline size_t BuildQteGaugeStub(uint8_t* out, uint32_t deltaVa) {
+    uint8_t* p = out;
+    *p++ = 0xD9; *p++ = 0x05; StubPut32(p, deltaVa);  // fld dword [delta]
+    *p++ = 0xD9; *p++ = 0xE8;                         // fld1
+    *p++ = 0xDB; *p++ = 0xF1;                         // fcomi st, st(1)   (CF = 1 < delta)
+    *p++ = 0xDA; *p++ = 0xC1;                         // fcmovb st, st(1)  (st0 = max(1, delta))
+    *p++ = 0xDD; *p++ = 0xD9;                         // fstp st(1)
+    *p++ = 0xDE; *p++ = 0xC9;                         // fmulp st(1), st
+    *p++ = 0xC3;                                      // ret
+    return (size_t)(p - out);
+}
+
 }  // namespace ufx

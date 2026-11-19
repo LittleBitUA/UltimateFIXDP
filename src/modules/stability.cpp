@@ -134,6 +134,20 @@ bool InstallStability() {
         Log("stability: a level change waits for the route thread (%d of 2 places)", (int)a + (int)b);
         any = any || a || b;
     }
+    // the stick-waggle QTE counts each swap as at 60 FPS (above 60 the frame delta made every swap count less)
+    {
+        const SiteDef& s = kSiteQteGauge;
+        u8* stub = BytesMatch(s.va, s.bytes, s.len) ? AllocStub(32) : nullptr;
+        if (stub) {
+            BuildQteGaugeStub(stub, 0x14AFFE0);
+            if (PatchCall(s.va, s.bytes, s.len, stub)) {
+                Log("stability: the stick-waggle QTE gauge no longer shrinks above 60 FPS");
+                any = true;
+            }
+        } else {
+            Log("stability: the waggle QTE site at %08X differs from DP.exe 1.01b, left as it is", s.va);
+        }
+    }
     // The window is not swapped for a white "not responding" ghost while a long load keeps the game thread busy.
     typedef void(WINAPI * GhostFn)();
     if (GhostFn ghost = (GhostFn)(void*)GetProcAddress(GetModuleHandleW(L"user32.dll"), "DisableProcessWindowsGhosting")) ghost();

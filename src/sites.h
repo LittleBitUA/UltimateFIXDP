@@ -838,6 +838,11 @@ constexpr uint32_t kRouteLookupFn = 0x4D8980;
 constexpr SiteDef kSiteRouteCall1 = {"resident route lookup (rider)", 0x4CCD50, 5, {0xE8, 0x2B, 0xBC, 0x00, 0x00}};
 constexpr SiteDef kSiteRouteCall2 = {"resident route lookup", 0x4D1363, 5, {0xE8, 0x18, 0x76, 0x00, 0x00}};
 
+// The stick-waggle QTE (player state 7Dh, alternate A/D or the left stick): the gauge +8C4h grows by how far the stick moved
+// this frame times the frame delta (dt * 60). The travel of one A-to-D swap does not depend on the frame rate, so at 180 FPS
+// a swap counts a third and the QTE runs out of time. The multiply becomes max(dt * 60, 1): as the game at 60 FPS and below.
+constexpr SiteDef kSiteQteGauge = {"waggle QTE gauge x frame delta", 0x4EB60E, 6, {0xD8, 0x0D, 0xE0, 0xFF, 0x4A, 0x01}};
+
 // Full-screen 2D quads (fades, the item notice): FUN_006E3360 (thiscall, the rect {x0, y0, x1, y1} or 0 = the 2D layer's
 // 1280x720 as the first stack argument, ret 14h) moves every corner half a unit to the left and up. Units are 1280x720, so
 // on a 4K back buffer that is 1.5 pixels: a 1-pixel strip stays uncovered at the right and the bottom (ZachFix issue 10).
@@ -888,7 +893,7 @@ constexpr uint32_t kNanTrapNumber = 0x409EA8;
 
 constexpr const SiteDef* kAllSites[] = {
     &kSiteNanTrap,
-    &kSiteMouseX, &kSiteMouseY, &kSiteLoaderSleep, &kSiteRouteCall1, &kSiteRouteCall2, &kSiteFullQuad[0], &kSiteFullQuad[1], &kSiteFullQuad[2], &kSiteSetThreadWake, &kSiteRouteFlush1, &kSiteRouteFlush2, &kSiteRouteFlushFn,
+    &kSiteMouseX, &kSiteMouseY, &kSiteLoaderSleep, &kSiteRouteCall1, &kSiteRouteCall2, &kSiteQteGauge, &kSiteFullQuad[0], &kSiteFullQuad[1], &kSiteFullQuad[2], &kSiteSetThreadWake, &kSiteRouteFlush1, &kSiteRouteFlush2, &kSiteRouteFlushFn,
     &kSiteGameFileBranch, &kSiteGameFileAddon, &kSiteGameFileArchive, &kSiteGameFileStore, &kSiteGameFileHave,
     &kSiteBeaconCall, &kSiteBeaconDraw, &kSiteBeaconMove, &kStorySites[0], &kStorySites[1], &kStorySites[2], &kStorySites[3], &kStorySites[4],
     &kStorySites[5], &kStorySites[6], &kStorySites[7], &kStorySites[8], &kStorySites[9], &kStorySites[10],
