@@ -9,6 +9,7 @@
 // serves GlyphTheme (the pad icon atlas) and DumpTextures, so it is installed for those even when no pack is present.
 #include "../base.h"
 #include "../hash.h"
+#include "../inflate.h"
 
 namespace ufx {
 namespace {
@@ -212,11 +213,43 @@ void* GlyphAtlasFor(void* dev, void* tex) { return GlyphAtlasForImpl(dev, tex); 
 
 namespace {
 
+// The game's own pad icons (the Xbox ones): UPDATA\SOURCE\MESSAGE\BTNWIDE.XPC next to DP.exe, which the game itself loads only
+// when it starts in pad mode. An XPC2 with a zlib DDS of 1024x1024, unpacked here and made a texture as the game would.
+void* LoadGamePadAtlas(void* dev) {
+    wchar_t path[MAX_PATH + 48];
+    wsprintfW(path, L"%sUPDATA\\SOURCE\\MESSAGE\\BTNWIDE.XPC", g_paths.gameDir);
+    HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) {
+        Log("textures: the game's pad icons %S are not there", path);
+        return nullptr;
+    }
+    DWORD size = GetFileSize(f, nullptr), got = 0;
+    u8* xpc = (size > 0x60 && size < (8u << 20)) ? (u8*)VirtualAlloc(nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) : nullptr;
+    const bool read = xpc && ReadFile(f, xpc, size, &got, nullptr) && got == size;
+    CloseHandle(f);
+    void* tex = nullptr;
+    size_t need = 0;
+    if (read) XpcFirstPicture(xpc, size, nullptr, 0, &need);
+    u8* dds = (need >= 128 && need < (16u << 20)) ? (u8*)VirtualAlloc(nullptr, need, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) : nullptr;
+    const size_t n = dds ? XpcFirstPicture(xpc, size, dds, need, nullptr) : 0;
+    if (n && g_real &&
+        SUCCEEDED(g_real(dev, dds, (UINT)n, 0xFFFFFFFEu, 0xFFFFFFFEu, 1, 0, 0 /*the file's format*/, 1 /*MANAGED*/, 1, 1, 0, nullptr, nullptr, &tex)) && tex)
+        Log("textures: the game's own pad icons loaded (%S)", path);
+    else
+        Log("textures: the game's pad icons %S could not be read (%u bytes unpacked)", path, (u32)n);
+    if (dds) VirtualFree(dds, 0, MEM_RELEASE);
+    if (xpc) VirtualFree(xpc, 0, MEM_RELEASE);
+    return tex;
+}
+
 void* GlyphAtlasForImpl(void* dev, void* tex) {
     if (!g_keyboardAtlas || tex != g_keyboardAtlas || !*(volatile u8*)(uintptr_t)0x014810F0) return tex;
     if (!g_themeTried) {
         g_themeTried = true;
         const wchar_t* name = g_cfg.glyphTheme == 2 ? L"xbox" : g_cfg.glyphTheme == 3 ? L"playstation" : (SonyPadActive() ? L"playstation" : L"xbox");
+        // Xbox icons: the game's own atlas first (the ones the console shows); our drawing only when it is not there
+        if (name[0] == L'x') g_padTheme = LoadGamePadAtlas(dev);
+        if (g_padTheme) return g_padTheme;
         wchar_t path[MAX_PATH + 40];
         wsprintfW(path, L"%sUltimateFix\\glyphs\\gamepad\\%s.png", g_paths.gameDir, name);
         if (g_fromFile && SUCCEEDED(g_fromFile(dev, path, 1024, 1024, 1, 0, 21 /*A8R8G8B8*/, 1 /*MANAGED*/, 1 /*POINT? no: default*/, 1, 0, nullptr,
