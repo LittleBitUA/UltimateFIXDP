@@ -59,6 +59,37 @@ void Utf8ToWide(const char* from, int length, wchar_t* to, int capacity) {
     to[n] = 0;
 }
 
+// A description file as UTF-8, whatever Notepad saved it as: UTF-16 (with its mark) or the ANSI code page (Windows-1251 on a
+// Ukrainian system) are converted, UTF-8 is kept. Returns the buffer to use (the same one or a new one; `data` is freed then).
+char* AsUtf8(char* data, DWORD size, const char** encoding) {
+    *encoding = "UTF-8";
+    const u8* b = (const u8*)data;
+    wchar_t* wide = nullptr;
+    int chars = 0;
+    if (size >= 2 && b[0] == 0xFF && b[1] == 0xFE) {
+        *encoding = "UTF-16";
+        wide = (wchar_t*)(data + 2);
+        chars = (int)(size - 2) / 2;
+    } else if (size && !MultiByteToWideChar(CP_UTF8, MB_ERR_INVALID_CHARS, data, (int)size, nullptr, 0)) {
+        *encoding = "ANSI";
+        chars = MultiByteToWideChar(CP_ACP, 0, data, (int)size, nullptr, 0);
+        wide = chars > 0 ? (wchar_t*)VirtualAlloc(nullptr, (chars + 1) * 2, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) : nullptr;
+        if (wide) MultiByteToWideChar(CP_ACP, 0, data, (int)size, wide, chars);
+    } else {
+        return data;
+    }
+    char* out = nullptr;
+    const int bytes = wide && chars > 0 ? WideCharToMultiByte(CP_UTF8, 0, wide, chars, nullptr, 0, nullptr, nullptr) : 0;
+    if (bytes > 0) out = (char*)VirtualAlloc(nullptr, bytes + 1, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (out) {
+        WideCharToMultiByte(CP_UTF8, 0, wide, chars, out, bytes, nullptr, nullptr);
+        out[bytes] = 0;
+    }
+    if (wide && (char*)wide != data + 2) VirtualFree(wide, 0, MEM_RELEASE);
+    VirtualFree(data, 0, MEM_RELEASE);
+    return out;
+}
+
 bool SameText(const wchar_t* a, const wchar_t* b) { return lstrcmpiW(a, b) == 0; }
 
 // Byte by byte, ASCII letters in any case: a Ukrainian key in UTF-8 has to match as written (Назва, not НАЗВА).
@@ -163,12 +194,22 @@ void Describe(ModInfo& m) {
         DWORD size = 0;
         char* ini = ReadSmall(path, 64 * 1024, &size);
         if (!ini) continue;
+        const char* encoding;
+        ini = AsUtf8(ini, size, &encoding);
+        if (!ini) continue;
         wchar_t v[200];
         if (Value(ini, "Name", "Назва", v, 64) && v[0]) lstrcpynW(m.name, v, 64);
         if (Value(ini, "Author", "Автор", v, 48)) lstrcpynW(m.author, v, 48);
         if (Value(ini, "Version", "Версія", v, 24)) lstrcpynW(m.version, v, 24);
         if (Value(ini, "Description", "Опис", v, 200)) lstrcpynW(m.description, v, 200);
         VirtualFree(ini, 0, MEM_RELEASE);
+        char a[160], f[64], d[160];
+        WideCharToMultiByte(CP_UTF8, 0, m.name, -1, a, sizeof a, nullptr, nullptr);
+        WideCharToMultiByte(CP_UTF8, 0, file, -1, f, sizeof f, nullptr, nullptr);
+        WideCharToMultiByte(CP_UTF8, 0, m.folder, -1, d, sizeof d, nullptr, nullptr);
+        Log("mods: %s\\%s (%s): name \"%s\"%s%s%s", d, f, encoding, a,
+            m.author[0] ? ", author set" : ", no author", m.version[0] ? ", version set" : ", no version",
+            m.description[0] ? ", description set" : ", no description");
         break;
     }
     lstrcpyW(path, base);
