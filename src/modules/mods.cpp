@@ -1,6 +1,7 @@
 // Mod manager: UltimateFix\mods\<folder>\ holds one mod each.
 //
-//   mod.ini      optional, UTF-8: Name=, Author=, Version=, Description= (any [section], first value wins)
+//   mod.ini      optional, UTF-8: Name=, Author=, Version=, Description= (any [section], first value wins); the same text may be
+//                mod.txt or info.txt instead, with Назва / Автор / Версія / Опис as keys too and ':' in place of '='
 //   text\        a translation or text fix: mes_all.json and glyphmap.json of the SWERY Localization Tool, *.txt corrections
 //                (the text overlay reads them, text_overlay.cpp)
 //   textures\    replacement textures, <hash>.dds or <hash>.png (texture_override.cpp)
@@ -15,6 +16,13 @@
 #include "../base.h"
 
 namespace ufx {
+
+// The files of a mod folder that describe it and are never game files (readme.txt too: mods often bring one).
+bool IsModDescription(const wchar_t* name) {
+    return lstrcmpiW(name, L"mod.ini") == 0 || lstrcmpiW(name, L"mod.txt") == 0 || lstrcmpiW(name, L"info.txt") == 0 ||
+           lstrcmpiW(name, L"readme.txt") == 0;
+}
+
 namespace {
 
 ModInfo g_mods[kMaxMods];
@@ -53,7 +61,18 @@ void Utf8ToWide(const char* from, int length, wchar_t* to, int capacity) {
 
 bool SameText(const wchar_t* a, const wchar_t* b) { return lstrcmpiW(a, b) == 0; }
 
-// The value of `key` in a UTF-8 ini text ("Key = value"), trimmed; false when the key is not there.
+// Byte by byte, ASCII letters in any case: a Ukrainian key in UTF-8 has to match as written (Назва, not НАЗВА).
+bool SameKey(const char* a, const char* b, int n) {
+    for (int i = 0; i < n; ++i) {
+        char x = a[i], y = b[i];
+        if (x >= 'A' && x <= 'Z') x = (char)(x + 32);
+        if (y >= 'A' && y <= 'Z') y = (char)(y + 32);
+        if (x != y) return false;
+    }
+    return true;
+}
+
+// The value of `key` in a UTF-8 ini text ("Key = value" or "Key: value"), trimmed; false when the key is not there.
 bool IniValue(const char* text, const char* key, wchar_t* out, int capacity) {
     const int keyLen = lstrlenA(key);
     const char* p = text;
@@ -64,10 +83,10 @@ bool IniValue(const char* text, const char* key, wchar_t* out, int capacity) {
         const char* end = p;
         if (*p) ++p;
         while (line < end && (*line == ' ' || *line == '\t')) ++line;
-        if (end - line <= keyLen || CompareStringA(LOCALE_INVARIANT, NORM_IGNORECASE, line, keyLen, key, keyLen) != CSTR_EQUAL) continue;
+        if (end - line <= keyLen || !SameKey(line, key, keyLen)) continue;
         const char* v = line + keyLen;
         while (v < end && (*v == ' ' || *v == '\t')) ++v;
-        if (v >= end || *v != '=') continue;
+        if (v >= end || (*v != '=' && *v != ':')) continue;
         ++v;
         while (v < end && (*v == ' ' || *v == '\t')) ++v;
         while (end > v && (end[-1] == '\r' || end[-1] == ' ' || end[-1] == '\t')) --end;
@@ -96,7 +115,12 @@ int CountFiles(const wchar_t* dir, const wchar_t* mask) {
 
 // The parts of a mod folder that are not game files: its description and the folders of the overlays.
 bool NotAGameFile(const wchar_t* name, bool folder) {
-    return folder ? (SameText(name, L"text") || SameText(name, L"textures")) : SameText(name, L"mod.ini");
+    return folder ? (SameText(name, L"text") || SameText(name, L"textures")) : IsModDescription(name);
+}
+
+// The value of the first key that is there: the English one or its Ukrainian twin.
+bool Value(const char* text, const char* key, const char* ukKey, wchar_t* out, int capacity) {
+    return IniValue(text, key, out, capacity) || IniValue(text, ukKey, out, capacity);
 }
 
 int CountTree(const wchar_t* dir, int depth) {
@@ -132,16 +156,20 @@ void Describe(ModInfo& m) {
     lstrcatW(base, L"\\");
     lstrcpyW(m.name, m.folder);
     m.author[0] = m.version[0] = m.description[0] = 0;
-    lstrcpyW(path, base);
-    lstrcatW(path, L"mod.ini");
-    DWORD size = 0;
-    if (char* ini = ReadSmall(path, 64 * 1024, &size)) {
+    static const wchar_t* const kDescriptions[] = {L"mod.ini", L"mod.txt", L"info.txt"};  // the first one there is read
+    for (const wchar_t* file : kDescriptions) {
+        lstrcpyW(path, base);
+        lstrcatW(path, file);
+        DWORD size = 0;
+        char* ini = ReadSmall(path, 64 * 1024, &size);
+        if (!ini) continue;
         wchar_t v[200];
-        if (IniValue(ini, "Name", v, 64) && v[0]) lstrcpynW(m.name, v, 64);
-        if (IniValue(ini, "Author", v, 48)) lstrcpynW(m.author, v, 48);
-        if (IniValue(ini, "Version", v, 24)) lstrcpynW(m.version, v, 24);
-        if (IniValue(ini, "Description", v, 200)) lstrcpynW(m.description, v, 200);
+        if (Value(ini, "Name", "Назва", v, 64) && v[0]) lstrcpynW(m.name, v, 64);
+        if (Value(ini, "Author", "Автор", v, 48)) lstrcpynW(m.author, v, 48);
+        if (Value(ini, "Version", "Версія", v, 24)) lstrcpynW(m.version, v, 24);
+        if (Value(ini, "Description", "Опис", v, 200)) lstrcpynW(m.description, v, 200);
         VirtualFree(ini, 0, MEM_RELEASE);
+        break;
     }
     lstrcpyW(path, base);
     lstrcatW(path, L"text\\");

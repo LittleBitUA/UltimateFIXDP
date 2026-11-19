@@ -308,7 +308,8 @@ unsigned PadButtons();  // buttons of the last pad data handed to the game (0 = 
 void EnsureLauncherStub(const wchar_t* gameDir);  // in the game: put the quick-start stub in place of DPLauncher.exe
 void InstallCpuTweaks();
 bool InstallWaypoint();
-// mods.cpp: the mod manager (UltimateFix\mods\<folder>\ with mod.ini, text\ and textures\; order and switches in mods.txt)
+// mods.cpp: the mod manager (UltimateFix\mods\<folder>\ with mod.ini or mod.txt, text\ and textures\; order and switches in mods.txt)
+bool IsModDescription(const wchar_t* name);  // mod.ini, mod.txt, info.txt, readme.txt: never game files
 constexpr int kMaxMods = 32;
 struct ModInfo {
     wchar_t folder[64];
