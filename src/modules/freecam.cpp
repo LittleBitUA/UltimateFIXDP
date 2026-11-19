@@ -93,8 +93,17 @@ void GameNearBeforeBuild() {
     float v = *nearPlane;
     if (g_nearSwapped && v == g_nearWritten) v = g_nearGame;
     g_nearSwapped = false;
-    const float want = (float)g_cfg.nearPlane / 10.f;
-    if (want <= v || v <= 0.f || v > 50.f || InCutscene()) {
+    float want = (float)g_cfg.nearPlane / 10.f;
+    // Never farther than half the way to the point the camera looks at (York, mostly): close cameras (the save phone, a
+    // wall behind York, a tight room) pull the plane in with them, so nothing near the camera is cut; far away the
+    // precision stays.
+    const float* eye = (const float*)(uintptr_t)(kRenderCameraVa + 0x04);
+    const float* tgt = (const float*)(uintptr_t)(kRenderCameraVa + 0x14);
+    const float dx = tgt[0] - eye[0], dy = tgt[1] - eye[1], dz = tgt[2] - eye[2];
+    const float d2 = dx * dx + dy * dy + dz * dz;
+    if (d2 > 0.f && d2 < 4.f * want * want) want = Sqrt(d2) * 0.5f;
+    // the free camera flies close to things on purpose: the game's own plane there
+    if (want <= v || v <= 0.f || v > 50.f || InCutscene() || g_active) {
         *nearPlane = v;
         return;
     }
