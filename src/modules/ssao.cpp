@@ -39,10 +39,12 @@ bool TuneComposite(void* dev, float saved[8]) {
 HRESULT WINAPI CompositeDrawHook(void* dev, DWORD type, UINT start, UINT count) {
     const bool world = WorldActive();
     float tuned[8];
-    const bool tune = world && TuneComposite(dev, tuned);
+    // the look of the picture (bloom, exposure, the Xbox 360 grading) belongs to every composite, cutscenes and scripted scenes
+    // too, where the player is not updated; only the occlusion waits for the world (it must stay off in the main menu)
+    const bool tune = TuneComposite(dev, tuned);
     if (g_cfg.ambientOcclusion > 0 && world) ui::AmbientOcclusionPass(dev, g_cfg.ambientOcclusion, g_cfg.aoRadius);
     ui::LookSaved look;
-    const bool graded = g_cfg.xboxLook && world && ui::XboxLookBegin(dev, &look);
+    const bool graded = g_cfg.xboxLook && ui::XboxLookBegin(dev, &look);
     void** vtable = *(void***)dev;
     HRESULT hr = ((HRESULT(WINAPI*)(void*, DWORD, UINT, UINT))vtable[81])(dev, type, start, count);
     if (graded) ui::XboxLookEnd(dev, &look);

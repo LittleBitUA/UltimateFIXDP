@@ -106,7 +106,6 @@ const char* const kProfilesGamma[] = {"ps_2_b", "ps_2_a", "ps_2_0", nullptr};
 void* g_lookShader = nullptr;   // IDirect3DPixelShader9
 bool g_lookFailed = false;
 bool g_lookLogged = false;
-bool g_otherLogged = false;
 void* g_gammaShader = nullptr;
 bool g_gammaFailed = false;
 bool g_gammaLogged = false;
@@ -133,6 +132,35 @@ int Thousandths(float v) {
 const float* Register(const float* block, int index) { return block + (index - kFirstRegister) * 4; }
 
 // The bound pixel shader is the game's composite (either copy of it): 1000 bytes with the known hash.
+u32 g_otherSeen[8];
+int g_otherCount = 0;
+
+void NoteOtherComposite(void* shader) {
+    UINT size = 0;
+    GetFunctionFn getFunction = Method<GetFunctionFn>(shader, kShaderGetFunction);
+    if (FAILED(getFunction(shader, nullptr, &size)) || size == 0 || size > 16384) return;
+    u8* code = (u8*)VirtualAlloc(nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!code) return;
+    if (SUCCEEDED(getFunction(shader, code, &size))) {
+        const u32 h = Fnv1a(code, size);
+        bool known = false;
+        for (int i = 0; i < g_otherCount; ++i) known = known || g_otherSeen[i] == h;
+        if (!known && g_otherCount < 8) {
+            g_otherSeen[g_otherCount++] = h;
+            wchar_t path[MAX_PATH + 40];
+            wsprintfW(path, L"%scomposite_%08x.bin", g_paths.dataDir, h);
+            HANDLE f = CreateFileW(path, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+            DWORD put = 0;
+            if (f != INVALID_HANDLE_VALUE) {
+                WriteFile(f, code, size, &put, nullptr);
+                CloseHandle(f);
+            }
+            Log("xboxlook: this scene's composite is another shader (%u bytes, hash %08X), drawn as the game does; saved as %S", size, h, path);
+        }
+    }
+    VirtualFree(code, 0, MEM_RELEASE);
+}
+
 bool IsGameComposite(void* shader) {
     u8 code[kCompositeShaderSize];
     UINT size = 0;
@@ -205,11 +233,9 @@ bool XboxLookBegin(void* dev, LookSaved* saved) {
     void* shader = nullptr;
     if (FAILED(Method<GetShaderFn>(dev, kGetPixelShader)(dev, &shader)) || !shader) return false;
     if (!IsGameComposite(shader)) {
-        // Normal for the plain copy the game draws with its post effects off (variant 0); also another mod's shader.
-        if (!g_otherLogged) {
-            g_otherLogged = true;
-            Log("xboxlook: a composite draw whose pixel shader is not the game's tone map was left as it is (said once)");
-        }
+        // Another of the game's 32 tone-map variants (other post effects in this scene), or another mod's shader. Each one
+        // is reported once and its byte code saved as UltimateFix\composite_<hash>.bin, so it can be supported later.
+        NoteOtherComposite(shader);
         Method<ReleaseFn>(shader, kRelease)(shader);
         return false;
     }
