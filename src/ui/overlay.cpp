@@ -884,14 +884,15 @@ const char kHbaoSource[] =
     "float4 main(float2 uv : TEXCOORD0) : COLOR {\n"
     "  float dc = max(Dep(uv), 1.0);\n"
     "  if (dc > 30000.0) return float4(1, 1, 1, 1);\n"
-    // the surface slope from the next texels: a wider step (it was a quarter of the radius) took the slope across a crease for
-    // every pixel that near it, which drew a band with a hard edge along wall corners and ceiling edges
-    "  float k = 1.0;\n"
-    "  float dr = Dep(uv + float2(c0.x * k, 0.0)); float dl = Dep(uv - float2(c0.x * k, 0.0));\n"
-    "  float dd = Dep(uv + float2(0.0, c0.y * k)); float du = Dep(uv - float2(0.0, c0.y * k));\n"
+    // the surface slope from the next texels, taken from the side that continues the surface: each side is tested by how well
+    // its two texels extrapolate to the centre. Near a corner of two walls the nearer one-sided difference could belong to the
+    // other wall; the pixels next to the crease then got a tilted plane, saw no occlusion and drew a white strip along it.
+    "  float2 tx = float2(c0.x, 0.0), ty = float2(0.0, c0.y);\n"
+    "  float dr1 = Dep(uv + tx), dr2 = Dep(uv + 2.0 * tx), dl1 = Dep(uv - tx), dl2 = Dep(uv - 2.0 * tx);\n"
+    "  float dd1 = Dep(uv + ty), dd2 = Dep(uv + 2.0 * ty), du1 = Dep(uv - ty), du2 = Dep(uv - 2.0 * ty);\n"
     "  float2 g;\n"
-    "  g.x = (abs(dr - dc) < abs(dc - dl) ? (dr - dc) : (dc - dl)) / k;\n"
-    "  g.y = (abs(dd - dc) < abs(dc - du) ? (dd - dc) : (dc - du)) / k;\n"
+    "  g.x = abs(2.0 * dr1 - dr2 - dc) < abs(2.0 * dl1 - dl2 - dc) ? (dr1 - dc) : (dc - dl1);\n"
+    "  g.y = abs(2.0 * dd1 - dd2 - dc) < abs(2.0 * du1 - du2 - dc) ? (dd1 - dc) : (dc - du1);\n"
     "  float2 p = uv * c1.xy;\n"
     "  float n = frac(52.9829189 * frac(dot(p, float2(0.06711056, 0.00583715))));\n"
     "  float a0 = n * 6.2831853;\n"
