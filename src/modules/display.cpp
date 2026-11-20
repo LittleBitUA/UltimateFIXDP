@@ -300,6 +300,7 @@ HRESULT WINAPI OurPresent(void* dev, const RECT* src, const RECT* dst, HWND wnd,
         VibrationFrame();
         AdaptiveTriggerFrame();
         TraceCameraFrame();  // diagnostic, does nothing unless [Debug] TraceCamera=1
+        WaterFrame();        // diagnostic, Numpad 1 only with [Debug] TraceWater=1
     }
     if (windowThread && !src && !dst) {
         ui::PerfPostBegin(dev);

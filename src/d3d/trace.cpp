@@ -337,6 +337,8 @@ HRESULT WINAPI H_SetTexture(void* dev, DWORD stage, void* tex) {
     return r_SetTexture(dev, stage, tex);
 }
 
+bool g_waterHooked = false;  // the water hooks are on the device: Numpad 1 may switch the test
+
 void PatchDevice(void* dev) {
     void** vt = *(void***)dev;
     void* ignored;
@@ -364,7 +366,9 @@ void PatchDevice(void* dev) {
         const bool e = PatchSlot(vt, kSetPixelShader, (void*)H_SetPs, (void**)&r_SetPs);
         const bool f = PatchSlot(vt, kDrawIndexedPrimitive, (void*)H_DrawIp, (void**)&r_DrawIp);
         const bool g = PatchSlot(vt, kDrawPrimitive, (void*)H_DrawP, (void**)&r_DrawP);
-        Log("water: diagnostic hooked (%d%d%d%d%d%d%d): each distinct water draw goes to the log once", a, b, c, d, e, f, g);
+        g_waterHooked = a && f && g;
+        Log("water: diagnostic hooked (%d%d%d%d%d%d%d): each distinct water draw goes to the log once; Numpad 1 switches WaterTest", a, b, c, d,
+            e, f, g);
     }
     if (g_cfg.shadowPrecision && !g_cfg.traceResources)
         PatchSlot(vt, kCreateTexture, (void*)H_CreateTexture, (void**)&r_CreateTexture);
@@ -514,7 +518,27 @@ void* WINAPI H_Direct3DCreate9(UINT sdk) {
 
 }  // namespace
 
-void DetectD3dLibrary() { NameD3dLibrary(); }  // display.cpp, at the first Present
+void DetectD3dLibrary() { NameD3dLibrary(); }
+
+// Once per frame (display.cpp): with the water hooks on, Numpad 1 switches the water test, so the same view can be compared.
+void WaterFrame() {
+    if (!g_waterHooked) return;
+    static bool was = false;
+    DWORD pid = 0;
+    HWND fg = GetForegroundWindow();
+    if (fg) GetWindowThreadProcessId(fg, &pid);
+    const bool now = pid == GetCurrentProcessId() && !ui::IsOpen() && (GetAsyncKeyState(VK_NUMPAD1) & 0x8000);  // not while typing a number in F10
+    if (now && !was) {
+        g_cfg.waterTest = g_cfg.waterTest == 1 ? 0 : 1;
+        Log("water: WaterTest %s (Numpad 1)", g_cfg.waterTest ? "on" : "off");
+        if (g_cfg.waterTest)
+            ShowNotice(L"Тест води: увімкнено", L"Water test: on", L"Текстура річки щонайменше 60 %. Numpad 1 вимикає.",
+                       L"The river's own texture at least 60 %. Numpad 1 turns it off.", 3);
+        else
+            ShowNotice(L"Тест води: вимкнено", L"Water test: off", L"Вода як у грі. Numpad 1 вмикає.", L"Water as the game draws it. Numpad 1 turns the test on.", 3);
+    }
+    was = now;
+}  // display.cpp, at the first Present
 
 bool InstallD3dTrace(bool full) {
     g_fullLayer = full;

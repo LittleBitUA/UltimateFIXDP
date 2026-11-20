@@ -377,6 +377,7 @@ bool InstallShadowScale();
 bool InstallGameplay();
 bool InstallFramePacer();
 void TraceCameraFrame();  // once per frame, from the Present hook
+void WaterFrame();        // trace.cpp: Numpad 1 switches [Debug] WaterTest while the water hooks are on
 int DisplayRefreshHz();  // refresh rate of the game window's monitor, cached (frame_pacer.cpp)
 void ApplyGameplay();
 void ApplyDifficulty();
