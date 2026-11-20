@@ -634,6 +634,18 @@ inline size_t BuildRouteKeepStub(uint8_t* out, uint32_t va, uint32_t fnVa, bool 
 // Called in place of `fmul dword [frameDelta]` (kSiteQteGauge): st0 = the stick travel; returns it times max(delta, 1).
 // fld [delta] / fld1 / fcomi st,st1 / fcmovb st,st1 / fstp st1 / fmulp st1,st / ret. Flags change; the code after the site
 // does not read them (fadd, fstp, call, and fnstsw for its own compare).
+// Jumped to from kSiteLockOnHeight: the same three instructions with our height added to the target's y.
+// fld [esp+34h] / fadd dword [height] / fsub [esp+14h] / fstp [esp+24h] / jmp back (esp is the same as at the site).
+inline size_t BuildLockOnHeightStub(uint8_t* out, uint32_t outVa, uint32_t heightVa, uint32_t backVa) {
+    uint8_t* p = out;
+    *p++ = 0xD9; *p++ = 0x44; *p++ = 0x24; *p++ = 0x34;  // fld dword [esp+34h]   target y
+    *p++ = 0xD8; *p++ = 0x05; StubPut32(p, heightVa);    // fadd dword [height]
+    *p++ = 0xD8; *p++ = 0x64; *p++ = 0x24; *p++ = 0x14;  // fsub dword [esp+14h]  eye y
+    *p++ = 0xD9; *p++ = 0x5C; *p++ = 0x24; *p++ = 0x24;  // fstp dword [esp+24h]
+    *p++ = 0xE9; StubPut32(p, backVa - (outVa + (uint32_t)(p - out) + 4));  // jmp back
+    return (size_t)(p - out);
+}
+
 inline size_t BuildQteGaugeStub(uint8_t* out, uint32_t deltaVa) {
     uint8_t* p = out;
     *p++ = 0xD9; *p++ = 0x05; StubPut32(p, deltaVa);  // fld dword [delta]

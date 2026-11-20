@@ -26,6 +26,8 @@ struct Config {
     int saveRestoreDamaged;  // restore dp.sav from the newest backup if its size is wrong
     int serialSetThread;     // the main thread waits for SetThread at once (no world objects built during the update)
     int routeFlushWait;      // a level change lets RouteThread finish its request before the queue is cleared
+    int lockOnAim;           // the lock-on aims at the chest: no drop with distance, LockOnHeight above the waist
+    int lockOnHeight;        // tenths of a game unit above the target's waist bone (40 = 4.0)
     int qteFix;              // the stick-waggle QTE counts a swap as at 60 FPS (restart needed)
     int checkUpdates;        // ask GitHub for a newer release at the start (F9 on the start card / About page updates)
     int autoLargeAddress;    // the mod gives DP.exe the 4 GB flag itself (from the next start)

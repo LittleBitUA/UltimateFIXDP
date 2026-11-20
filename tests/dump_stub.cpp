@@ -328,6 +328,18 @@ int main(int argc, char** argv) {
         Check(kSiteRouteCall1.va + 5 + Rd32(kSiteRouteCall1.bytes + 1) == kRouteLookupFn &&
               kSiteRouteCall2.va + 5 + Rd32(kSiteRouteCall2.bytes + 1) == kRouteLookupFn, "route keep", "both sites call 004D8980");
     }
+    // lock-on height: the site's three instructions with fadd [height] in between, then back
+    {
+        uint8_t q[32];
+        const uint32_t va = 0x10000000;
+        size_t n = BuildLockOnHeightStub(q, va, 0xC0003000, kLockOnHeightBack);
+        printf("lock-on height stub %zu bytes\n", n);
+        Check(n == 23 && memcmp(q, kSiteLockOnHeight.bytes, 4) == 0 && q[4] == 0xD8 && q[5] == 0x05 && Rd32(q + 6) == 0xC0003000 &&
+              memcmp(q + 10, kSiteLockOnHeight.bytes + 4, 8) == 0 && q[18] == 0xE9 && Rel32To(q, va, 18, kLockOnHeightBack),
+              "lock-on", "fld / fadd [height] / fsub / fstp / jmp back");
+        Check(kSiteLockOnHeight.va + kSiteLockOnHeight.len == kLockOnHeightBack, "lock-on", "back is right after the site");
+        Check(Rd32(kSiteLockOnDrop.bytes + 2) == 0x76F6F8, "lock-on", "the drop site loads 0.1");
+    }
     // waggle QTE: travel * max(delta, 1)
     {
         uint8_t q[32];

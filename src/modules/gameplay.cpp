@@ -162,11 +162,37 @@ bool InstallAimTolerance() {
     return true;
 }
 
+// kSiteLockOnDrop / kSiteLockOnHeight: the lock-on point no longer drops with distance and sits LockOnHeight above the waist.
+const double kLockOnNoDrop = 0.0;
+float g_lockOnHeight = 0.f;
+
+bool InstallLockOnAim() {
+    const SiteDef& d = kSiteLockOnDrop;
+    const SiteDef& h = kSiteLockOnHeight;
+    if (!BytesMatch(d.va, d.bytes, d.len) || !BytesMatch(h.va, h.bytes, h.len)) {
+        Log("aim: the lock-on code at %08X / %08X differs from DP.exe 1.01b, left as it is", d.va, h.va);
+        return false;
+    }
+    u8* stub = MakeStub(32);
+    if (!stub) return false;
+    g_lockOnHeight = (float)g_cfg.lockOnHeight / 10.f;
+    BuildLockOnHeightStub(stub, (u32)(uintptr_t)stub, (u32)(uintptr_t)&g_lockOnHeight, kLockOnHeightBack);
+    u8 drop[6] = {0xDD, 0x05, 0, 0, 0, 0};  // fld qword [our 0.0]
+    const u32 zero = (u32)(uintptr_t)&kLockOnNoDrop;
+    for (int i = 0; i < 4; ++i) drop[2 + i] = (u8)(zero >> (8 * i));
+    if (!PatchJump(h.va, h.bytes, h.len, stub)) return false;
+    if (!WriteCode(d.va, drop, sizeof(drop))) Log("aim: the lock-on drop could not be patched (the height is in place)");
+    Log("aim: the lock-on aims %d.%d units above the waist, without the drop of a tenth of the distance", g_cfg.lockOnHeight / 10,
+        (g_cfg.lockOnHeight < 0 ? -g_cfg.lockOnHeight : g_cfg.lockOnHeight) % 10);
+    return true;
+}
+
 bool InstallGameplay() {
     int n = 0;
     if (g_cfg.difficultyEnabled && InstallDifficulty()) ++n;
     if (InstallWetGate()) ++n;
     if (g_cfg.aimTolerance && InstallAimTolerance()) ++n;
+    if (g_cfg.lockOnAim && InstallLockOnAim()) ++n;
     ApplyGameplay();
     return n > 0;
 }

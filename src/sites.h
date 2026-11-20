@@ -842,6 +842,15 @@ constexpr SiteDef kSiteRouteCall2 = {"resident route lookup", 0x4D1363, 5, {0xE8
 // this frame times the frame delta (dt * 60). The travel of one A-to-D swap does not depend on the frame rate, so at 180 FPS
 // a swap counts a third and the QTE runs out of time. The multiply becomes max(dt * 60, 1): as the game at 60 FPS and below.
 constexpr SiteDef kSiteQteGauge = {"waggle QTE gauge x frame delta", 0x4EB60E, 6, {0xD8, 0x0D, 0xE0, 0xFF, 0x4A, 0x01}};
+// Lock-on (FUN_0053A5C0, the branch with a target in player+0x808): the camera pitch goes from York's head (NT_FHEAD) to the
+// target's waist bone (FUN_0053A580: PM_WAIST from +0x5FE, N_BODY2 for kinds 4/5), and the height of that point is lowered by
+// 0.1 x the horizontal distance (`fld qword [0076F6F8h]` = 0.1, `fmul st(1)` / `fsubp st(2)`): at 30 units 3 below the waist,
+// at 60 units 6, so the lock aims at the hips and the legs. The drop site loads 0.1, the height site is
+// `fld [esp+34h] / fsub [esp+14h] / fstp [esp+24h]` (target y minus eye y).
+constexpr SiteDef kSiteLockOnDrop = {"lock-on aim drop (0.1 x distance)", 0x53A9AC, 6, {0xDD, 0x05, 0xF8, 0xF6, 0x76, 0x00}};
+constexpr SiteDef kSiteLockOnHeight = {"lock-on aim height (target y - eye y)", 0x53A95F, 12,
+                                       {0xD9, 0x44, 0x24, 0x34, 0xD8, 0x64, 0x24, 0x14, 0xD9, 0x5C, 0x24, 0x24}};
+constexpr uint32_t kLockOnHeightBack = 0x53A96B;
 
 // Full-screen 2D quads (fades, the item notice): FUN_006E3360 (thiscall, the rect {x0, y0, x1, y1} or 0 = the 2D layer's
 // 1280x720 as the first stack argument, ret 14h) moves every corner half a unit to the left and up. Units are 1280x720, so
@@ -893,7 +902,7 @@ constexpr uint32_t kNanTrapNumber = 0x409EA8;
 
 constexpr const SiteDef* kAllSites[] = {
     &kSiteNanTrap,
-    &kSiteMouseX, &kSiteMouseY, &kSiteLoaderSleep, &kSiteRouteCall1, &kSiteRouteCall2, &kSiteQteGauge, &kSiteFullQuad[0], &kSiteFullQuad[1], &kSiteFullQuad[2], &kSiteSetThreadWake, &kSiteRouteFlush1, &kSiteRouteFlush2, &kSiteRouteFlushFn,
+    &kSiteMouseX, &kSiteMouseY, &kSiteLoaderSleep, &kSiteRouteCall1, &kSiteRouteCall2, &kSiteQteGauge, &kSiteLockOnDrop, &kSiteLockOnHeight, &kSiteFullQuad[0], &kSiteFullQuad[1], &kSiteFullQuad[2], &kSiteSetThreadWake, &kSiteRouteFlush1, &kSiteRouteFlush2, &kSiteRouteFlushFn,
     &kSiteGameFileBranch, &kSiteGameFileAddon, &kSiteGameFileArchive, &kSiteGameFileStore, &kSiteGameFileHave,
     &kSiteBeaconCall, &kSiteBeaconDraw, &kSiteBeaconMove, &kStorySites[0], &kStorySites[1], &kStorySites[2], &kStorySites[3], &kStorySites[4],
     &kStorySites[5], &kStorySites[6], &kStorySites[7], &kStorySites[8], &kStorySites[9], &kStorySites[10],
