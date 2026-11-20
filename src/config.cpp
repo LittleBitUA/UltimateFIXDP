@@ -835,6 +835,10 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.freeCam = (int)GetPrivateProfileIntW(L"FreeCam", L"Enabled", 1, ini);
     g_cfg.freeCamKey = (int)GetPrivateProfileIntW(L"FreeCam", L"Key", 0x74, ini);
     g_cfg.freeCamHudKey = (int)GetPrivateProfileIntW(L"FreeCam", L"HudKey", 0x73, ini);
+    g_cfg.flyKey = (int)GetPrivateProfileIntW(L"Cheats", L"FlyKey", 0x74, ini);  // F5
+    g_cfg.flySpeed = (int)GetPrivateProfileIntW(L"Cheats", L"FlySpeed", 40, ini);
+    if (g_cfg.flySpeed < 5) g_cfg.flySpeed = 5;
+    if (g_cfg.flySpeed > 500) g_cfg.flySpeed = 500;
     g_cfg.freeCamSpeed = (int)GetPrivateProfileIntW(L"FreeCam", L"Speed", 20, ini);
     if (g_cfg.freeCamSpeed < 1) g_cfg.freeCamSpeed = 1;
     if (g_cfg.freeCamSpeed > 500) g_cfg.freeCamSpeed = 500;

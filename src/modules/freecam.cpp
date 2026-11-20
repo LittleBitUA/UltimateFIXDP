@@ -21,7 +21,7 @@ bool g_hudHidden = false;
 u8 g_hudSaved = 1;
 float g_pos[3], g_yaw, g_pitch;
 LARGE_INTEGER g_last;
-bool g_keyPrev[3];
+bool g_keyPrev[4];
 
 // x87 helpers: the module has no C runtime.
 float Sin(float x) { float r; __asm__("fsin" : "=t"(r) : "0"(x)); return r; }
@@ -44,6 +44,8 @@ bool Pressed(int index, int vk) {
     g_keyPrev[index] = now;
     return edge;
 }
+
+void FlyFrame(bool menuOpen);  // the fly cheat, below
 
 void SetHud(bool hidden) {
     volatile u8* flag = (volatile u8*)(uintptr_t)kHudFlagVa;
@@ -174,6 +176,7 @@ void __attribute__((cdecl)) CameraWorker() {
         }
         Log("freecam: %s", g_active ? "on" : "off");
     }
+    FlyFrame(menuOpen);
     GameFovBeforeBuild();
     GameNearBeforeBuild();
     if (!g_active) return;
@@ -250,7 +253,78 @@ void __attribute__((cdecl)) CameraWorker() {
     if (g_cfg.photoFovOn && g_cfg.freeCamFov >= 30) *fov = (float)g_cfg.freeCamFov * kPi / 180.f;
 }
 
+// ---- Fly (cheat): York is held where the player steers him; the game's own movement and falling do not apply meanwhile.
+// The position (+58h..+60h) is written twice a frame: here, after the game's update and before the camera and the draw, and at
+// the start of the player update (FlyHold), so the update starts from it too. The previous-frame position (+3B0h) is kept equal,
+// so the frame's movement the game derives from the two is zero.
+bool g_flyOn = false;
+float g_fly[3];
+LARGE_INTEGER g_flyLast = {};
+
+bool FlyAllowed(u8* p) {
+    const u32 state = *(volatile u32*)(p + 0x654);
+    return state != 0x87 && state != 0x88 && !InCutscene();  // not behind the wheel, not in a scene
+}
+
+void FlyPut(u8* p) {
+    for (int i = 0; i < 3; ++i) {
+        *(volatile float*)(p + 0x58 + 4 * i) = g_fly[i];
+        *(volatile float*)(p + 0x3B0 + 4 * i) = g_fly[i];
+    }
+}
+
+void FlyFrame(bool menuOpen) {
+    if (g_cfg.flyKey && Pressed(3, g_cfg.flyKey) && !menuOpen) {
+        g_cfg.cheatFly = !g_cfg.cheatFly;
+        ShowNotice(g_cfg.cheatFly ? L"Політ: увімкнено" : L"Політ: вимкнено", g_cfg.cheatFly ? L"Fly: on" : L"Fly: off",
+                   g_cfg.cheatFly ? L"WASD, Space вгору, C вниз, Shift швидше. Опуститесь до землі, перш ніж вимикати."
+                                  : L"Йорк упаде звідти, де він зараз.",
+                   g_cfg.cheatFly ? L"WASD, Space up, C down, Shift faster. Get near the ground before turning it off."
+                                  : L"York falls from where he is now.", 3);
+    }
+    u8* p = (u8*)(uintptr_t)PlayerObjectNow();
+    if (!g_cfg.cheatFly || !p || !FlyAllowed(p)) {
+        if (g_flyOn) Log("cheat: fly %s", g_cfg.cheatFly ? "paused (car or scene)" : "off");
+        g_flyOn = false;
+        return;
+    }
+    LARGE_INTEGER now, freq;
+    QueryPerformanceCounter(&now);
+    QueryPerformanceFrequency(&freq);
+    if (!g_flyOn) {
+        for (int i = 0; i < 3; ++i) g_fly[i] = *(volatile float*)(p + 0x58 + 4 * i);
+        g_flyOn = true;
+        g_flyLast = now;
+        Log("cheat: fly on at %d %d %d", (int)g_fly[0], (int)g_fly[1], (int)g_fly[2]);
+    }
+    float dt = (float)((double)(now.QuadPart - g_flyLast.QuadPart) / (double)freq.QuadPart);
+    g_flyLast = now;
+    if (dt > 0.1f) dt = 0.1f;
+    if (dt < 0.f) dt = 0.f;
+    if (!menuOpen && !g_active) {  // with the free camera on, WASD flies the camera, York stays
+        volatile float* eye = (volatile float*)(uintptr_t)(kRenderCameraVa + 0x04);
+        volatile float* tgt = (volatile float*)(uintptr_t)(kRenderCameraVa + 0x14);
+        float fx = tgt[0] - eye[0], fz = tgt[2] - eye[2];
+        float len = Sqrt(fx * fx + fz * fz);
+        if (len > 1e-4f) { fx /= len; fz /= len; } else { fx = 0.f; fz = 1.f; }
+        const float rx = -fz, rz = fx;  // screen right, as for the free camera
+        float fw = (Down('W') ? 1.f : 0.f) - (Down('S') ? 1.f : 0.f);
+        float st = (Down('D') ? 1.f : 0.f) - (Down('A') ? 1.f : 0.f);
+        float ud = (Down(VK_SPACE) ? 1.f : 0.f) - (Down('C') ? 1.f : 0.f);
+        float speed = (float)g_cfg.flySpeed * (Down(VK_SHIFT) ? 4.f : 1.f);
+        g_fly[0] += (fx * fw + rx * st) * speed * dt;
+        g_fly[2] += (fz * fw + rz * st) * speed * dt;
+        g_fly[1] += ud * speed * dt;
+    }
+    FlyPut(p);
+}
+
 }  // namespace
+
+// At the start of the player update (CheatsTick): the update begins from the held position.
+void FlyHold(void* player) {
+    if (g_flyOn && player && FlyAllowed((u8*)player)) FlyPut((u8*)player);
+}
 
 bool FreeCamBlocksInput() { return g_active && g_cfg.freeCamFreeze; }
 

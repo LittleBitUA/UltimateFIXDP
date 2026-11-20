@@ -291,10 +291,12 @@ bool NoteWaterDraw(UINT count, u32 from) {
     return water;
 }
 
-// [Debug] WaterTest=1: for the draw only, the share of the river's own texture (c10.z) is at least 0.6.
+// [Debug] WaterTest, for the water draw only: c10.z is the bias of the river's own texture over the reflection
+// (out = lerp(reflection, s0, saturate(s0.a + c10.z))). The river came with 1.0 (texture only, the flat blue), the rippled
+// water with -0.75 at times. 1 = -0.75 (reflection mostly), 2 = 0 (the texture by its own alpha).
 template <typename Draw> HRESULT WaterDraw(void* dev, bool water, Draw draw) {
-    if (!water || g_cfg.waterTest != 1 || !r_SetPsConstF) return draw();
-    float v[4] = {g_psC[10][0], g_psC[10][1], g_psC[10][2] < 0.6f ? 0.6f : g_psC[10][2], g_psC[10][3]};
+    if (!water || (g_cfg.waterTest != 1 && g_cfg.waterTest != 2) || !r_SetPsConstF) return draw();
+    float v[4] = {g_psC[10][0], g_psC[10][1], g_cfg.waterTest == 1 ? -0.75f : 0.0f, g_psC[10][3]};
     r_SetPsConstF(dev, 10, v, 1);
     const HRESULT hr = draw();
     r_SetPsConstF(dev, 10, g_psC[10], 1);
@@ -563,11 +565,14 @@ void WaterFrame() {
     if (fg) GetWindowThreadProcessId(fg, &pid);
     const bool now = pid == GetCurrentProcessId() && !ui::IsOpen() && (GetAsyncKeyState(VK_NUMPAD1) & 0x8000);  // not while typing a number in F10
     if (now && !was) {
-        g_cfg.waterTest = g_cfg.waterTest == 1 ? 0 : 1;
-        Log("water: WaterTest %s (Numpad 1)", g_cfg.waterTest ? "on" : "off");
-        if (g_cfg.waterTest)
-            ShowNotice(L"Тест води: увімкнено", L"Water test: on", L"Текстура річки щонайменше 60 %. Numpad 1 вимикає.",
-                       L"The river's own texture at least 60 %. Numpad 1 turns it off.", 3);
+        g_cfg.waterTest = (g_cfg.waterTest + 1) % 3;
+        Log("water: WaterTest %d (Numpad 1): c10.z %s", g_cfg.waterTest, g_cfg.waterTest == 1 ? "-0.75" : g_cfg.waterTest == 2 ? "0" : "as the game sets it");
+        if (g_cfg.waterTest == 1)
+            ShowNotice(L"Тест води 1 з 2: відбиття", L"Water test 1 of 2: reflection", L"c10.z = -0.75: більше відбиття. Numpad 1 далі.",
+                       L"c10.z = -0.75: mostly reflection. Numpad 1 for the next.", 3);
+        else if (g_cfg.waterTest == 2)
+            ShowNotice(L"Тест води 2 з 2: за прозорістю", L"Water test 2 of 2: by alpha", L"c10.z = 0: текстура за власною прозорістю. Numpad 1 вимикає.",
+                       L"c10.z = 0: the texture by its own alpha. Numpad 1 turns it off.", 3);
         else
             ShowNotice(L"Тест води: вимкнено", L"Water test: off", L"Вода як у грі. Numpad 1 вмикає.", L"Water as the game draws it. Numpad 1 turns the test on.", 3);
     }

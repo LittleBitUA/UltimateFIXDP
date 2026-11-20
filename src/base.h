@@ -154,6 +154,9 @@ struct Config {
     int keepBlurLook;        // keep the screen size of the blur / depth-of-field with a bigger scene
     int alt3dScale;          // 1 = as the game, 2..3 = the full model of far objects reaches that much farther
     int halveFlashes;        // muzzle flashes, splashes and hits run at the console's speed
+    int cheatFly;            // York flies: held where WASD/Space/C steer him (not saved)
+    int flyKey;              // [Cheats] FlyKey, default F5
+    int flySpeed;            // [Cheats] FlySpeed, world units per second
     int cheatGod;            // the current health is brought back to the maximum every frame
     int cheatClockStop;      // the in-game clock stands still
     int cheatClockSpeed;     // clock speed in tenths (10 = as the game)
@@ -253,6 +256,8 @@ bool DsOutputReady();
 void DsSetRumble(unsigned char strong, unsigned char weak);
 void AdaptiveTriggerFrame();
 bool PlayerStateNow(u32* state);
+u32 PlayerObjectNow();     // combat_strafe.cpp: the player object of the last player update, 0 outside the world
+void FlyHold(void* player);  // freecam.cpp: the fly cheat holds York at the start of the player update
 bool DualSenseToJoy(void* joyInfoEx);
 bool DualSenseConnected();
 bool InstallInputExtras();

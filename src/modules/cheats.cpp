@@ -61,6 +61,7 @@ void CheatYorkToCamera() { g_toCamera = 1; PhotoThaw(20); }
 
 // Runs once per frame from the player update (esi = the player object).
 void CheatsTick(void* player) {
+    FlyHold(player);
     u8* game = *(u8**)(uintptr_t)kGameManagerPtrVa;
     if (!game || !GoodPtr((u32)(uintptr_t)game)) return;
     u32 timerAddr = *(volatile u32*)(uintptr_t)0xBE1EA0;
