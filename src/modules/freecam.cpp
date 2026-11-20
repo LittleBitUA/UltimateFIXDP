@@ -354,6 +354,8 @@ bool InstallFreeCam() {
         return false;
     }
     g_installed = true;
+    if (g_cfg.flyKey && (g_cfg.flyKey == g_cfg.freeCamKey || g_cfg.flyKey == g_cfg.freeCamHudKey || g_cfg.flyKey == 0x75))
+        Log("freecam: FlyKey %d is also a free camera / photo mode key: the fly cheat will not move York while the camera is free", g_cfg.flyKey);
     Log("freecam: ready (key %d switches the camera, key %d the HUD, speed %d)", g_cfg.freeCamKey, g_cfg.freeCamHudKey,
         g_cfg.freeCamSpeed);
     return true;

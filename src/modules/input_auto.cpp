@@ -77,7 +77,7 @@ bool IgnoredKey(int vk) {
     if (vk == VK_LWIN || vk == VK_RWIN || vk == VK_SNAPSHOT || vk == VK_F12) return true;
     if (vk == VK_F9 || vk == VK_F10) return true;  // F9: the sampling profiler, F10: the menu
     if (vk == g_cfg.waypointObjectiveKey) return true;  // with Ctrl: the waypoint to the game's objective
-    return vk == g_cfg.waypointKey || vk == g_cfg.screenshotKey || vk == g_cfg.freeCamKey || vk == g_cfg.freeCamHudKey;
+    return vk == g_cfg.waypointKey || vk == g_cfg.screenshotKey || vk == g_cfg.freeCamKey || vk == g_cfg.freeCamHudKey || vk == g_cfg.flyKey;
 }
 
 // True when a key went down since the last call. Mouse buttons are not keys here.

@@ -837,7 +837,7 @@ Item g_pageCheats[] = {
     {{L"Набої зброї в руках", L"Ammunition of the weapon in hand"}, &g_cheatPick, kInt, 0, 1, 1, false, nullptr, nullptr, DoAmmo, nullptr,
      {L"Магазин зброї, яку Йорк тримає, до максимуму.", L"Fills the magazine of the weapon York holds."},
      {L"Предмети й переміщення", L"Items and moving"}, kOneValue, 1, kAmmoNames, nullptr, false},
-    {{L"Політ Йорка (F5)", L"Fly York (F5)"}, &g_cfg.cheatFly, kBool, 0, 1, 1, false, nullptr, nullptr, nullptr, nullptr,
+    {{L"Політ Йорка (F3)", L"Fly York (F3)"}, &g_cfg.cheatFly, kBool, 0, 1, 1, false, nullptr, nullptr, nullptr, nullptr,
      {L"Йорк летить, куди ведете: WASD відносно камери, Space вгору, C вниз, Shift учетверо швидше. Гра його не рухає й не дає впасти. Вимкніть біля землі, бо з висоти він упаде (згодиться невразливість). Не в машині й не в катсцені. Клавіша й швидкість: [Cheats] FlyKey, FlySpeed в UltimateFix.ini.",
       L"York flies where you steer: WASD relative to the camera, Space up, C down, Shift four times faster. The game neither moves him nor lets him fall. Turn it off near the ground, from a height he falls (invulnerability helps). Not in a car or a cutscene. Key and speed: [Cheats] FlyKey, FlySpeed in UltimateFix.ini."}, NOTR},
     {{L"Йорк до камери", L"York to the camera"}, &g_cheatPick, kInt, 0, 1, 1, false, nullptr, nullptr, DoCamera, nullptr,
