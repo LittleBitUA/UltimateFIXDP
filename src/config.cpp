@@ -434,6 +434,7 @@ static const char kDefaultIni[] =
     "; 1 = log the player state changes, the game's camera mode changes, scripted camera requests and sudden camera (eye) jumps, each\r\n"
     "; with the cutscene flag, and the car input once a second while driving; at most 600 lines per start. Play to the place where the\r\n"
     "; camera should change, then send UltimateFix\\ufx.log. Off by default (every line is written on the game thread).\r\n"
+    "; With it on, Numpad 2 writes a \"camera mark\" line at the moment the camera goes wrong.\r\n"
     "TraceCamera=0\r\n"
     "\r\n"
     "[Menu]\r\n"

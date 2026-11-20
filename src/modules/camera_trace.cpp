@@ -6,7 +6,8 @@
 // - scripted camera requests of the game manager;
 // - sudden jumps of the render camera (CRdCamera at 00BD9648: eye +4, target +0x14) within one frame;
 // - while driving, what the game sees from the pad, once a second;
-// - the cutscene flag (bit 31 of 008A6074) with the player, camera and scripted-camera lines.
+// - the cutscene flag (bit 31 of 008A6074) with the player, camera and scripted-camera lines;
+// - Numpad 2: a mark with the whole camera at that moment (CameraMark).
 // Reads memory only; the one game call is the object lookup the camera code itself makes every frame. The whole
 // trace writes at most kMaxLines lines per session: every line is a synchronous write on the game thread.
 #include "../base.h"
@@ -69,9 +70,36 @@ bool PlayerStateNow(u32* state) {
     return true;
 }
 
+// Numpad 2 (the game in front, the menu closed): "the camera went wrong here". One full line of the camera, outside the
+// budget of the trace (at most 200 marks), so the moment can be found in the log.
+void CameraMark() {
+    static bool was = false;
+    static int marks = 0;
+    DWORD pid = 0;
+    HWND fg = GetForegroundWindow();
+    if (fg) GetWindowThreadProcessId(fg, &pid);
+    const bool now = pid == GetCurrentProcessId() && !ui::IsOpen() && (GetAsyncKeyState(VK_NUMPAD2) & 0x8000);
+    const bool press = now && !was;
+    was = now;
+    if (!press || marks >= 200) return;
+    ++marks;
+    const u32 cam = U(kCameraPtrVa, 0), player = PlayerObject(), mgr = U(kGameMgrPtrVa, 0);
+    Log("camera mark %d: frame %u eye %d %d %d target %d %d %d (x1000); camera mode %u (previous %u); player state %u, "
+        "position %d %d %d; scripted request %u kind %u; cutscene mode %u",
+        marks, g_frame, Milli(F(kRenderCameraVa, 0x4)), Milli(F(kRenderCameraVa, 0x8)), Milli(F(kRenderCameraVa, 0xC)),
+        Milli(F(kRenderCameraVa, 0x14)), Milli(F(kRenderCameraVa, 0x18)), Milli(F(kRenderCameraVa, 0x1C)),
+        cam ? U(cam, 0x154) : 0u, cam ? U(cam, 0x158) : 0u, player ? U(player, 0x654) : 0u, player ? Milli(F(player, 0x58)) : 0,
+        player ? Milli(F(player, 0x5C)) : 0, player ? Milli(F(player, 0x60)) : 0, mgr ? U(mgr, kReqFlagOff) : 0u,
+        mgr ? U(mgr, kReqKindOff) : 0u, U(kEventFlagsVa, 0) >> 31);
+    ShowNotice(L"Позначку камери записано", L"Camera mark written", L"Рядок «camera mark» в UltimateFix\\ufx.log",
+               L"A \"camera mark\" line in UltimateFix\\ufx.log", 2);
+}
+
 // Diagnostic only (rumble and the adaptive triggers have their own calls in the Present hook).
 void TraceCameraFrame() {
-    if (!g_cfg.traceCamera || g_lines >= kMaxLines) return;
+    if (!g_cfg.traceCamera) return;
+    CameraMark();
+    if (g_lines >= kMaxLines) return;
     ++g_frame;
     const u32 event = U(kEventFlagsVa, 0) >> 31;
 
