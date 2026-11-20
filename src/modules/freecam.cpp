@@ -259,6 +259,7 @@ void __attribute__((cdecl)) CameraWorker() {
 // so the frame's movement the game derives from the two is zero.
 bool g_flyOn = false;
 float g_fly[3];
+float g_flyYaw = 0.f;  // York's heading while flying (+7Ch, also the target +6Ch): the game's camera follows it
 LARGE_INTEGER g_flyLast = {};
 
 bool FlyAllowed(u8* p) {
@@ -277,9 +278,9 @@ void FlyFrame(bool menuOpen) {
     if (g_cfg.flyKey && Pressed(3, g_cfg.flyKey) && !menuOpen) {
         g_cfg.cheatFly = !g_cfg.cheatFly;
         ShowNotice(g_cfg.cheatFly ? L"Політ: увімкнено" : L"Політ: вимкнено", g_cfg.cheatFly ? L"Fly: on" : L"Fly: off",
-                   g_cfg.cheatFly ? L"WASD, Space вгору, C вниз, Shift швидше. Опуститесь до землі, перш ніж вимикати."
+                   g_cfg.cheatFly ? L"WASD, мишка або Q/E поворот, Space вгору, C вниз, Shift швидше. Вимикайте біля землі."
                                   : L"Йорк упаде звідти, де він зараз.",
-                   g_cfg.cheatFly ? L"WASD, Space up, C down, Shift faster. Get near the ground before turning it off."
+                   g_cfg.cheatFly ? L"WASD, the mouse or Q/E turn, Space up, C down, Shift faster. Turn it off near the ground."
                                   : L"York falls from where he is now.", 3);
     }
     u8* p = (u8*)(uintptr_t)PlayerObjectNow();
@@ -295,6 +296,9 @@ void FlyFrame(bool menuOpen) {
         for (int i = 0; i < 3; ++i) g_fly[i] = *(volatile float*)(p + 0x58 + 4 * i);
         g_flyOn = true;
         g_flyLast = now;
+        g_flyYaw = *(volatile float*)(p + 0x7C);
+        POINT c;
+        if (CenterOfWindow(&c)) SetCursorPos(c.x, c.y);
         Log("cheat: fly on at %d %d %d", (int)g_fly[0], (int)g_fly[1], (int)g_fly[2]);
     }
     float dt = (float)((double)(now.QuadPart - g_flyLast.QuadPart) / (double)freq.QuadPart);
@@ -302,6 +306,18 @@ void FlyFrame(bool menuOpen) {
     if (dt > 0.1f) dt = 0.1f;
     if (dt < 0.f) dt = 0.f;
     if (!menuOpen && !g_active) {  // with the free camera on, WASD flies the camera, York stays
+        // turning: the game sees no input while flying (FreeCamBlocksInput), so the mouse and Q/E turn York here, and the
+        // game's camera follows his heading as it always does
+        POINT centre, cur;
+        if (CenterOfWindow(&centre) && GetCursorPos(&cur)) {
+            g_flyYaw -= (float)(cur.x - centre.x) * 0.003f;
+            SetCursorPos(centre.x, centre.y);
+        }
+        g_flyYaw += ((Down('Q') ? 1.f : 0.f) - (Down('E') ? 1.f : 0.f)) * 2.0f * dt;
+        if (g_flyYaw > kPi) g_flyYaw -= 2.f * kPi;
+        if (g_flyYaw < -kPi) g_flyYaw += 2.f * kPi;
+        *(volatile float*)(p + 0x7C) = g_flyYaw;
+        *(volatile float*)(p + 0x6C) = g_flyYaw;
         volatile float* eye = (volatile float*)(uintptr_t)(kRenderCameraVa + 0x04);
         volatile float* tgt = (volatile float*)(uintptr_t)(kRenderCameraVa + 0x14);
         float fx = tgt[0] - eye[0], fz = tgt[2] - eye[2];
@@ -326,7 +342,7 @@ void FlyHold(void* player) {
     if (g_flyOn && player && FlyAllowed((u8*)player)) FlyPut((u8*)player);
 }
 
-bool FreeCamBlocksInput() { return g_active && g_cfg.freeCamFreeze; }
+bool FreeCamBlocksInput() { return (g_active && g_cfg.freeCamFreeze) || g_flyOn; }  // flying: York must not walk or turn by the game's input
 
 void GameFovAfterFrame() {
     if (g_nearSwapped) {
