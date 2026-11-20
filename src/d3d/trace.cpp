@@ -7,6 +7,7 @@
 // These vtable swaps are the foundation the later graphics features build on.
 #include "../base.h"
 #include "../sites.h"
+#include "../stubs.h"
 
 namespace ufx {
 bool g_usingDxvk = false;
@@ -549,6 +550,22 @@ void* WINAPI H_Direct3DCreate9(UINT sdk) {
 
 void DetectD3dLibrary() { NameD3dLibrary(); }
 
+// The reflection probe (kSiteReflectionChoice): kind (-1 none, 0 mirror, 1 water), weight and blend of the frame's reflection
+// source, and a frame counter. WaterFrame turns them into log lines.
+volatile u32 g_reflRec[4];
+
+void InstallReflectionProbe() {
+    const SiteDef& s = kSiteReflectionChoice;
+    if (!BytesMatch(s.va, s.bytes, s.len)) {
+        Log("water: the reflection source check at %08X differs from DP.exe 1.01b, no reflection probe", s.va);
+        return;
+    }
+    u8* stub = AllocStub(64);
+    if (!stub) return;
+    BuildReflectionProbe(stub, (u32)(uintptr_t)stub, (u32)(uintptr_t)g_reflRec, kReflectionChoiceBack);
+    if (PatchJump(s.va, s.bytes, s.len, stub)) Log("water: reflection probe installed (which reflection passes the frame runs)");
+}
+
 // Once per frame (display.cpp): with the water hooks on, Numpad 1 switches the water test, so the same view can be compared.
 void WaterFrame() {
     if (!g_waterHooked) return;
@@ -558,6 +575,29 @@ void WaterFrame() {
     if (!s_counted && GetTickCount() - s_start > 10000) {
         s_counted = true;
         Log("water: %d water pixel shaders recognised (the game has 272); %d distinct water draws so far", g_waterShaderCount, g_waterKeyCount);
+    }
+    {   // the reflection source of the frame, every 2 s when it changed (at most 80 lines)
+        static DWORD s_last = 0;
+        static int s_lines = 0, s_prevKind = -2, s_prevFar = -1, s_prevNear = -1;
+        static u32 s_prevCount = 0;
+        const DWORD t = GetTickCount();
+        if (s_lines < 80 && t - s_last > 2000 && g_reflRec[3] != s_prevCount) {
+            s_last = t;
+            s_prevCount = g_reflRec[3];
+            const int kind = (int)g_reflRec[0];
+            float weight, blend;
+            u32 w = g_reflRec[1], b = g_reflRec[2];
+            __builtin_memcpy(&weight, &w, 4);
+            __builtin_memcpy(&blend, &b, 4);
+            const int farPass = kind != -1 && weight > 0.f && blend > 0.01f;
+            const int nearPass = kind != -1 && weight > 0.f && blend < 0.99f;
+            if (kind != s_prevKind || farPass != s_prevFar || nearPass != s_prevNear) {
+                ++s_lines;
+                s_prevKind = kind; s_prevFar = farPass; s_prevNear = nearPass;
+                Log("water: reflection source %s, weight %d, blend %d (thousandths): far pass %s, near pass %s",
+                    kind == -1 ? "none" : kind == 1 ? "water" : "mirror", Milli(weight), Milli(blend), farPass ? "runs" : "no", nearPass ? "runs" : "no");
+            }
+        }
     }
     static bool was = false;
     DWORD pid = 0;
@@ -580,6 +620,7 @@ void WaterFrame() {
 }  // display.cpp, at the first Present
 
 bool InstallD3dTrace(bool full) {
+    if (g_cfg.traceWater) InstallReflectionProbe();
     g_fullLayer = full;
     void** slot = FindImportSlot(GetModuleHandleW(nullptr), "d3d9.dll", "Direct3DCreate9");
     if (!slot) {

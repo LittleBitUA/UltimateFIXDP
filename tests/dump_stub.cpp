@@ -328,6 +328,20 @@ int main(int argc, char** argv) {
         Check(kSiteRouteCall1.va + 5 + Rd32(kSiteRouteCall1.bytes + 1) == kRouteLookupFn &&
               kSiteRouteCall2.va + 5 + Rd32(kSiteRouteCall2.bytes + 1) == kRouteLookupFn, "route keep", "both sites call 004D8980");
     }
+    // reflection probe: three loads from the frame, a counter, the original compare, back
+    {
+        uint8_t q[64];
+        const uint32_t va = 0x10000000;
+        size_t n = BuildReflectionProbe(q, va, 0xC0004000, kReflectionChoiceBack);
+        printf("reflection probe %zu bytes\n", n);
+        Check(n == 53 && q[0] == 0x50 && q[1] == 0x8B && q[2] == 0x85 && Rd32(q + 3) == 0xFFFFE678u && q[7] == 0xA3 && Rd32(q + 8) == 0xC0004000 &&
+              Rd32(q + 14) == 0xFFFFEFD0u && Rd32(q + 19) == 0xC0004004 && Rd32(q + 25) == 0xFFFFC210u && Rd32(q + 30) == 0xC0004008 &&
+              q[34] == 0xFF && q[35] == 0x05 && Rd32(q + 36) == 0xC000400C && q[40] == 0x58,
+              "reflection probe", "push / three copies / inc / pop");
+        Check(memcmp(q + 41, kSiteReflectionChoice.bytes, 7) == 0, "reflection probe", "the original compare");
+        Check(q[48] == 0xE9 && Rel32To(q, va, 48, kReflectionChoiceBack), "reflection probe", "jmp back after the site");
+        Check(kSiteReflectionChoice.va + kSiteReflectionChoice.len == kReflectionChoiceBack, "reflection probe", "back is right after the site");
+    }
     // lock-on height: the site's three instructions with fadd [height] in between, then back
     {
         uint8_t q[32];

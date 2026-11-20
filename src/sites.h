@@ -841,6 +841,11 @@ constexpr SiteDef kSiteRouteCall2 = {"resident route lookup", 0x4D1363, 5, {0xE8
 // The stick-waggle QTE (player state 7Dh, alternate A/D or the left stick): the gauge +8C4h grows by how far the stick moved
 // this frame times the frame delta (dt * 60). The travel of one A-to-D swap does not depend on the frame rate, so at 180 FPS
 // a swap counts a third and the QTE runs out of time. The multiply becomes max(dt * 60, 1): as the game at 60 FPS and below.
+// FUN_006D32E0, right after the scene list: the planar reflection pass (FUN_006D8B50, 006D454C far / 006D464C near) runs only
+// when a reflection source was found (local [ebp-1988h] != -1: 1 water 40000h, 0 mirror), its weight [ebp-1030h] > 0, and the
+// blend [ebp-3DF0h] is above 0.01 (far) or below 0.99 (near). The water diagnostic records these three here every frame.
+constexpr SiteDef kSiteReflectionChoice = {"reflection source check", 0x6D44DF, 7, {0x83, 0xBD, 0x78, 0xE6, 0xFF, 0xFF, 0xFF}};
+constexpr uint32_t kReflectionChoiceBack = 0x6D44E6;
 constexpr SiteDef kSiteQteGauge = {"waggle QTE gauge x frame delta", 0x4EB60E, 6, {0xD8, 0x0D, 0xE0, 0xFF, 0x4A, 0x01}};
 // Lock-on (FUN_0053A5C0, the branch with a target in player+0x808): the camera pitch goes from York's head (NT_FHEAD) to the
 // target's waist bone (FUN_0053A580: PM_WAIST from +0x5FE, N_BODY2 for kinds 4/5), and the height of that point is lowered by
@@ -902,7 +907,7 @@ constexpr uint32_t kNanTrapNumber = 0x409EA8;
 
 constexpr const SiteDef* kAllSites[] = {
     &kSiteNanTrap,
-    &kSiteMouseX, &kSiteMouseY, &kSiteLoaderSleep, &kSiteRouteCall1, &kSiteRouteCall2, &kSiteQteGauge, &kSiteLockOnDrop, &kSiteLockOnHeight, &kSiteFullQuad[0], &kSiteFullQuad[1], &kSiteFullQuad[2], &kSiteSetThreadWake, &kSiteRouteFlush1, &kSiteRouteFlush2, &kSiteRouteFlushFn,
+    &kSiteMouseX, &kSiteMouseY, &kSiteLoaderSleep, &kSiteRouteCall1, &kSiteRouteCall2, &kSiteQteGauge, &kSiteReflectionChoice, &kSiteLockOnDrop, &kSiteLockOnHeight, &kSiteFullQuad[0], &kSiteFullQuad[1], &kSiteFullQuad[2], &kSiteSetThreadWake, &kSiteRouteFlush1, &kSiteRouteFlush2, &kSiteRouteFlushFn,
     &kSiteGameFileBranch, &kSiteGameFileAddon, &kSiteGameFileArchive, &kSiteGameFileStore, &kSiteGameFileHave,
     &kSiteBeaconCall, &kSiteBeaconDraw, &kSiteBeaconMove, &kStorySites[0], &kStorySites[1], &kStorySites[2], &kStorySites[3], &kStorySites[4],
     &kStorySites[5], &kStorySites[6], &kStorySites[7], &kStorySites[8], &kStorySites[9], &kStorySites[10],

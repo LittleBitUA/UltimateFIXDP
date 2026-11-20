@@ -634,6 +634,24 @@ inline size_t BuildRouteKeepStub(uint8_t* out, uint32_t va, uint32_t fnVa, bool 
 // Called in place of `fmul dword [frameDelta]` (kSiteQteGauge): st0 = the stick travel; returns it times max(delta, 1).
 // fld [delta] / fld1 / fcomi st,st1 / fcmovb st,st1 / fstp st1 / fmulp st1,st / ret. Flags change; the code after the site
 // does not read them (fadd, fstp, call, and fnstsw for its own compare).
+// Jumped to from kSiteReflectionChoice: copies the source kind, its weight and the blend into rec[0..2], counts the frame in
+// rec[3], then the original `cmp dword [ebp-1988h], -1` and back (the je after the site reads its flags).
+inline size_t BuildReflectionProbe(uint8_t* out, uint32_t outVa, uint32_t recVa, uint32_t backVa) {
+    uint8_t* p = out;
+    *p++ = 0x50;                                                                  // push eax
+    *p++ = 0x8B; *p++ = 0x85; StubPut32(p, 0xFFFFE678u);                           // mov eax, [ebp-1988h]
+    *p++ = 0xA3; StubPut32(p, recVa);                                             // mov [rec], eax
+    *p++ = 0x8B; *p++ = 0x85; StubPut32(p, 0xFFFFEFD0u);                           // mov eax, [ebp-1030h]
+    *p++ = 0xA3; StubPut32(p, recVa + 4);                                         // mov [rec+4], eax
+    *p++ = 0x8B; *p++ = 0x85; StubPut32(p, 0xFFFFC210u);                           // mov eax, [ebp-3DF0h]
+    *p++ = 0xA3; StubPut32(p, recVa + 8);                                         // mov [rec+8], eax
+    *p++ = 0xFF; *p++ = 0x05; StubPut32(p, recVa + 12);                           // inc dword [rec+12]
+    *p++ = 0x58;                                                                  // pop eax
+    *p++ = 0x83; *p++ = 0xBD; StubPut32(p, 0xFFFFE678u); *p++ = 0xFF;              // cmp dword [ebp-1988h], -1
+    *p++ = 0xE9; StubPut32(p, backVa - (outVa + (uint32_t)(p - out) + 4));        // jmp back
+    return (size_t)(p - out);
+}
+
 // Jumped to from kSiteLockOnHeight: the same three instructions with our height added to the target's y.
 // fld [esp+34h] / fadd dword [height] / fsub [esp+14h] / fstp [esp+24h] / jmp back (esp is the same as at the site).
 inline size_t BuildLockOnHeightStub(uint8_t* out, uint32_t outVa, uint32_t heightVa, uint32_t backVa) {
