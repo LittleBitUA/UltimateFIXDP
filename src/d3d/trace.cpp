@@ -185,7 +185,7 @@ SetPsFn r_SetPs = nullptr;
 DrawIpFn r_DrawIp = nullptr;
 typedef HRESULT(WINAPI* DrawPFn)(void*, DWORD, UINT, UINT);
 DrawPFn r_DrawP = nullptr;
-void* g_waterShaders[64];
+void* g_waterShaders[512];  // the game has 272 of them (index rule (i%272)%16 in 8..15); 64 missed the river
 int g_waterShaderCount = 0;
 void* g_curPs = nullptr;
 void* g_stageTex[8];
@@ -193,6 +193,18 @@ float g_psC[16][4];  // c0..c15 as last set
 float g_vsC243[4];
 u32 g_waterKeys[40];
 int g_waterKeyCount = 0;
+u32 g_reflKeys[24];   // draws by other shaders that read a render target in s5 or s6 (a reflection)
+int g_reflKeyCount = 0;
+
+bool IsTarget(void* tex) {
+    if (!tex) return false;
+    void** vt = *(void***)tex;
+    typedef DWORD(WINAPI * TypeFn)(void*);
+    if (((TypeFn)vt[10])(tex) != 3) return false;
+    u32 desc[8] = {0};
+    typedef HRESULT(WINAPI * DescFn)(void*, UINT, void*);
+    return SUCCEEDED(((DescFn)vt[17])(tex, 0, desc)) && (desc[2] & 1);
+}
 
 bool NamesMirror(const DWORD* code) {
     // the CTAB comment block comes first: 0xFFFE token with its length in DWORDs
@@ -210,7 +222,7 @@ bool NamesMirror(const DWORD* code) {
 
 HRESULT WINAPI H_CreatePs(void* dev, const DWORD* code, void** out) {
     HRESULT hr = r_CreatePs(dev, code, out);
-    if (SUCCEEDED(hr) && out && *out && NamesMirror(code) && g_waterShaderCount < 64) {
+    if (SUCCEEDED(hr) && out && *out && NamesMirror(code) && g_waterShaderCount < 512) {
         g_waterShaders[g_waterShaderCount++] = *out;
         if (g_waterShaderCount == 1) Log("water: water pixel shaders recognised (g_vMirror); the first is from %08X", (u32)(uintptr_t)code);
     }
@@ -259,6 +271,21 @@ bool NoteWaterDraw(UINT count, u32 from) {
                     Milli(g_psC[13][2]), Milli(g_psC[13][3]), Milli(g_psC[12][0]), Milli(g_psC[12][1]), Milli(g_psC[12][2]),
                     Milli(g_psC[12][3]), Milli(g_vsC243[0]), Milli(g_vsC243[1]), Milli(g_vsC243[2]), Milli(g_vsC243[3]));
             }
+        }
+    }
+    if (!water && g_reflKeyCount < 24 && (IsTarget(g_stageTex[5]) || IsTarget(g_stageTex[6]))) {
+        const u32 key = (u32)(uintptr_t)g_curPs * 31u + (u32)(uintptr_t)g_stageTex[0] * 7u + (u32)(uintptr_t)g_stageTex[5] * 17u;
+        bool seen = false;
+        for (int i = 0; i < g_reflKeyCount && !seen; ++i) seen = g_reflKeys[i] == key;
+        if (!seen) {
+            g_reflKeys[g_reflKeyCount++] = key;
+            char t0[48], t1[48], t5[48], t6[48];
+            DescribeTexture(g_stageTex[0], t0);
+            DescribeTexture(g_stageTex[1], t1);
+            DescribeTexture(g_stageTex[5], t5);
+            DescribeTexture(g_stageTex[6], t6);
+            Log("water: a draw by another shader (%08X) reads a target in s5/s6: %u triangles from %08X: s0 %s | s1 %s | s5 %s | s6 %s",
+                (u32)(uintptr_t)g_curPs, count, from, t0, t1, t5, t6);
         }
     }
     return water;
@@ -523,6 +550,13 @@ void DetectD3dLibrary() { NameD3dLibrary(); }
 // Once per frame (display.cpp): with the water hooks on, Numpad 1 switches the water test, so the same view can be compared.
 void WaterFrame() {
     if (!g_waterHooked) return;
+    static DWORD s_start = 0;
+    static bool s_counted = false;
+    if (!s_start) s_start = GetTickCount();
+    if (!s_counted && GetTickCount() - s_start > 10000) {
+        s_counted = true;
+        Log("water: %d water pixel shaders recognised (the game has 272); %d distinct water draws so far", g_waterShaderCount, g_waterKeyCount);
+    }
     static bool was = false;
     DWORD pid = 0;
     HWND fg = GetForegroundWindow();
