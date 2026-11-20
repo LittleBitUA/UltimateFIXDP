@@ -92,6 +92,20 @@ bool LoadApis() {
            setupEnum && setupGetDetail && setupDestroy;
 }
 
+// Why a Sony device was passed over, once per reason: a pad that "does not connect" is otherwise silent in the log.
+int g_skipLogs = 0;
+void NoteSkipped(const char* what, unsigned value) {
+    if (g_skipLogs >= 6) return;
+    static unsigned seen[6];
+    static int count = 0;
+    const unsigned key = (unsigned)what[0] << 24 ^ value;
+    for (int i = 0; i < count; ++i)
+        if (seen[i] == key) return;
+    if (count < 6) seen[count++] = key;
+    ++g_skipLogs;
+    Log(what, value);
+}
+
 // Opens the first DualSense; returns the handle and the input report length (64 = USB, 78 = Bluetooth), or null.
 HANDLE OpenDualSense(int* inputLength, USHORT* product, int* outputLength = nullptr, int* featureLength = nullptr) {
     GUID guid;
@@ -114,7 +128,11 @@ HANDLE OpenDualSense(int* inputLength, USHORT* product, int* outputLength = null
         HANDLE h = CreateFileW(path, GENERIC_READ | GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING,
                                0, nullptr);
         if (h == INVALID_HANDLE_VALUE) h = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
-        if (h == INVALID_HANDLE_VALUE) continue;
+        if (h == INVALID_HANDLE_VALUE) {
+            NoteSkipped("dualsense: a Sony device could not be opened (error %u: another program such as DSX, DS4Windows or "
+                        "HidHide may hold or hide it)", (unsigned)GetLastError());
+            continue;
+        }
         HidAttributes a;
         a.size = sizeof(a);
         if (hidGetAttr(h, &a) && a.vendor == 0x054C && (a.product == 0x0CE6 || a.product == 0x0DF2)) {
@@ -130,6 +148,7 @@ HANDLE OpenDualSense(int* inputLength, USHORT* product, int* outputLength = null
             *product = a.product;
             found = h;
         } else {
+            if (a.vendor == 0x054C) NoteSkipped("dualsense: a Sony device with product %04X is not a DualSense, passed over", a.product);
             CloseHandle(h);
         }
     }
