@@ -258,6 +258,7 @@ void __attribute__((cdecl)) CameraWorker() {
 // the start of the player update (FlyHold), so the update starts from it too. The previous-frame position (+3B0h) is kept equal,
 // so the frame's movement the game derives from the two is zero.
 bool g_flyOn = false;
+volatile u8 g_flyBridge = 0;  // read by the physics bridge: York flies (1) or lands this frame (2)
 float g_fly[3];
 float g_flyYaw = 0.f;  // York's heading while flying (+7Ch, also the target +6Ch): the game's camera follows it
 LARGE_INTEGER g_flyLast = {};
@@ -285,7 +286,10 @@ void FlyFrame(bool menuOpen) {
     }
     u8* p = (u8*)(uintptr_t)PlayerObjectNow();
     if (!g_cfg.cheatFly || !p || !FlyAllowed(p)) {
-        if (g_flyOn) Log("cheat: fly %s", g_cfg.cheatFly ? "paused (car or scene)" : "off");
+        if (g_flyOn) {
+            Log("cheat: fly %s", g_cfg.cheatFly ? "paused (car or scene)" : "off");
+            g_flyBridge = (p && FlyAllowed(p)) ? 2 : 0;  // land through the game's own teleport sync on the next physics call
+        }
         g_flyOn = false;
         return;
     }
@@ -295,6 +299,7 @@ void FlyFrame(bool menuOpen) {
     if (!g_flyOn) {
         for (int i = 0; i < 3; ++i) g_fly[i] = *(volatile float*)(p + 0x58 + 4 * i);
         g_flyOn = true;
+        g_flyBridge = 1;
         g_flyLast = now;
         g_flyYaw = *(volatile float*)(p + 0x7C);
         POINT c;
@@ -337,6 +342,27 @@ void FlyFrame(bool menuOpen) {
 
 }  // namespace
 
+typedef void(__attribute__((thiscall)) * ShapesToFn)(void* player, float lift);
+typedef void(__attribute__((thiscall)) * LandFn)(void* player);
+
+// In place of the player's physics (kSitePlayerPhysicsCall) while the bridge byte is set: flying, York and his two physics shapes
+// are put where the cheat holds him and the game's ground, fall and collisions are skipped; landing, the game's own teleport sync
+// sweeps the shape down onto the ground once.
+void __attribute__((cdecl)) FlyPhysicsWorker(void* player) {
+    u8* p = (u8*)player;
+    if (g_flyBridge == 2) {
+        g_flyBridge = 0;
+        if (p) {
+            ((LandFn)(uintptr_t)kPlayerLandFn)(player);
+            Log("cheat: fly landed at %d %d %d", (int)*(volatile float*)(p + 0x58), (int)*(volatile float*)(p + 0x5C), (int)*(volatile float*)(p + 0x60));
+        }
+        return;
+    }
+    if (!p || !g_flyOn) { g_flyBridge = 0; return; }
+    FlyPut(p);
+    ((ShapesToFn)(uintptr_t)kPlayerShapesToFn)(player, 0.f);
+}
+
 // At the start of the player update (CheatsTick): the update begins from the held position.
 void FlyHold(void* player) {
     if (g_flyOn && player && FlyAllowed((u8*)player)) FlyPut((u8*)player);
@@ -370,6 +396,16 @@ bool InstallFreeCam() {
         return false;
     }
     g_installed = true;
+    {   // the fly cheat's physics bridge
+        const SiteDef& f = kSitePlayerPhysicsCall;
+        u8* bridge = BytesMatch(f.va, f.bytes, f.len) ? AllocStub(32) : nullptr;
+        if (bridge) {
+            BuildFlyPhysicsBridge(bridge, (u32)(uintptr_t)bridge, (u32)(uintptr_t)&g_flyBridge, (u32)(uintptr_t)FlyPhysicsWorker, kPlayerPhysicsFn);
+            if (!PatchCall(f.va, f.bytes, f.len, bridge)) Log("freecam: the player physics call could not be patched (the fly cheat is rough)");
+        } else {
+            Log("freecam: the player physics call at %08X differs from DP.exe 1.01b (the fly cheat is rough)", f.va);
+        }
+    }
     if (g_cfg.flyKey && (g_cfg.flyKey == g_cfg.freeCamKey || g_cfg.flyKey == g_cfg.freeCamHudKey || g_cfg.flyKey == 0x75))
         Log("freecam: FlyKey %d is also a free camera / photo mode key: the fly cheat will not move York while the camera is free", g_cfg.flyKey);
     Log("freecam: ready (key %d switches the camera, key %d the HUD, speed %d)", g_cfg.freeCamKey, g_cfg.freeCamHudKey,

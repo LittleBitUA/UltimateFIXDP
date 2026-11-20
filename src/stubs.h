@@ -634,6 +634,21 @@ inline size_t BuildRouteKeepStub(uint8_t* out, uint32_t va, uint32_t fnVa, bool 
 // Called in place of `fmul dword [frameDelta]` (kSiteQteGauge): st0 = the stick travel; returns it times max(delta, 1).
 // fld [delta] / fld1 / fcomi st,st1 / fcmovb st,st1 / fstp st1 / fmulp st1,st / ret. Flags change; the code after the site
 // does not read them (fadd, fstp, call, and fnstsw for its own compare).
+// Called in place of the player physics (kSitePlayerPhysicsCall), ecx = the player: with the byte at flagVa clear it goes on to the
+// game's function; otherwise worker(player) (cdecl) runs instead and the game's is skipped.
+// cmp byte [flag], 0 / jne +5 / jmp game / push ecx / call worker / add esp, 4 / ret
+inline size_t BuildFlyPhysicsBridge(uint8_t* out, uint32_t outVa, uint32_t flagVa, uint32_t workerVa, uint32_t gameFn) {
+    uint8_t* p = out;
+    *p++ = 0x80; *p++ = 0x3D; StubPut32(p, flagVa); *p++ = 0x00;                  // cmp byte [flag], 0
+    *p++ = 0x75; *p++ = 0x05;                                                     // jne fly
+    *p++ = 0xE9; StubPut32(p, gameFn - (outVa + (uint32_t)(p - out) + 4));        // jmp game (its ret returns to the site)
+    *p++ = 0x51;                                                                  // fly: push ecx
+    *p++ = 0xE8; StubPut32(p, workerVa - (outVa + (uint32_t)(p - out) + 4));      // call worker
+    *p++ = 0x83; *p++ = 0xC4; *p++ = 0x04;                                        // add esp, 4
+    *p++ = 0xC3;                                                                  // ret
+    return (size_t)(p - out);
+}
+
 // Jumped to from kSiteReflectionChoice: copies the source kind, its weight and the blend into rec[0..2], counts the frame in
 // rec[3], then the original `cmp dword [ebp-1988h], -1` and back (the je after the site reads its flags).
 inline size_t BuildReflectionProbe(uint8_t* out, uint32_t outVa, uint32_t recVa, uint32_t backVa) {

@@ -328,6 +328,17 @@ int main(int argc, char** argv) {
         Check(kSiteRouteCall1.va + 5 + Rd32(kSiteRouteCall1.bytes + 1) == kRouteLookupFn &&
               kSiteRouteCall2.va + 5 + Rd32(kSiteRouteCall2.bytes + 1) == kRouteLookupFn, "route keep", "both sites call 004D8980");
     }
+    // fly physics bridge
+    {
+        uint8_t q[32];
+        const uint32_t va = 0x10000000;
+        size_t n = BuildFlyPhysicsBridge(q, va, 0xC0005000, 0x20000000, kPlayerPhysicsFn);
+        printf("fly physics bridge %zu bytes\n", n);
+        Check(n == 24 && q[0] == 0x80 && q[1] == 0x3D && Rd32(q + 2) == 0xC0005000 && q[6] == 0 && q[7] == 0x75 && q[8] == 0x05 && q[9] == 0xE9 &&
+              Rel32To(q, va, 9, kPlayerPhysicsFn) && q[14] == 0x51 && q[15] == 0xE8 && Rel32To(q, va, 15, 0x20000000) && q[20] == 0x83 &&
+              q[21] == 0xC4 && q[22] == 0x04 && q[23] == 0xC3, "fly bridge", "cmp / jne / jmp game / push ecx / call worker / add esp, 4");
+        Check(kSitePlayerPhysicsCall.va + 5 + Rd32(kSitePlayerPhysicsCall.bytes + 1) == kPlayerPhysicsFn, "fly bridge", "the site calls 004E3280");
+    }
     // reflection probe: three loads from the frame, a counter, the original compare, back
     {
         uint8_t q[64];
