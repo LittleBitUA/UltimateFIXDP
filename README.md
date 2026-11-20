@@ -190,6 +190,25 @@ The code is our own (MIT). The ideas, facts and addresses came from earlier comm
 
 🧪 **Testers:** **Gold flin** and **Tree Fan**. Thank you for playing the unfinished builds and reporting everything that broke.
 
+### 🤖 Who did what: Claude and Dmytro
+
+Someone wrote to us: *"Claude, fix Deadly Premonition, make no mistakes."* So here it is, honestly.
+
+**Claude** (Anthropic's AI model, working in Claude Code):
+- wrote the mod's code: the patches and assembly stubs, the F10 menu, the updater, the checks that compare every patch with the real `DP.exe`. Every commit in this repository is co-authored by Claude;
+- read the decompiled game code and the bytes of `DP.exe`, looked for the causes of the bugs and the addresses to fix them at, and carried ideas from the projects above over into our own code;
+- wrote the README, the release notes and the website, and packed the test builds and the releases;
+- **cannot run the game.** Claude has never seen a frame of it live: everything was written blind, from code, logs and screenshots;
+- **made mistakes.** A test build with the wrong DLL inside, a key that clashed with another feature, fixes that took several tries. A person caught each of them in game.
+
+**Dmytro Bidlov** («Little Bit»):
+- came up with the project and decides what it is: what gets fixed first, what goes in and what is cut, the MIT license, the rule "our own code only", how the menu and the site look;
+- played every test build on Windows and sent back logs, screenshots, saves and shader dumps. Without that, nobody would know that any of this works;
+- made [DPRecomp](https://github.com/LittleBitUA/DPRecomp), the Xbox 360 recompilation the PC port is compared with, and the SWERY Localization Tool, and is making the Ukrainian translation this mod was built to carry;
+- decides on every release; nothing is published without a check.
+
+What we hold to: *"tested in game"* in this README means a person tested it in game. Everything else is marked _experimental_.
+
 ### Installation
 
 1. Back up `savedata\dp.sav`
@@ -392,6 +411,25 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 | **[Kenney Input Prompts](https://kenney.nl/assets/input-prompts)** | Kenney | Іконки кнопок ґеймпада (CC0) |
 
 🧪 **Тестувальники:** **Gold flin** і **Tree Fan**. Дякуємо, що грали в недороблені збірки й повідомляли про все, що ламалось.
+
+### 🤖 Хто що робив: Claude і Dmytro
+
+Нам написали: *«Claude, fix Deadly Premonition, make no mistakes»*. Тож чесно.
+
+**Claude** (ШІ-модель Anthropic, працює в Claude Code):
+- написав код мода: правки й асемблерні вставки, меню F10, оновлювач, перевірки, які звіряють кожну правку зі справжнім `DP.exe`. Кожен коміт у цьому репозиторії має Claude як співавтора;
+- читав декомпільований код гри й байти `DP.exe`, шукав причини багів і адреси, де їх виправити, переносив ідеї з проєктів вище у власний код;
+- написав README, описи релізів і сайт, пакував тестові збірки й релізи;
+- **не може запустити гру.** Claude жодного разу не бачив її наживо: усе написано наосліп, з коду, логів і скриншотів;
+- **помилявся.** Тестова збірка з не тим DLL усередині, клавіша, що заважала іншій функції, виправлення, які вдавалися не з першого разу. Кожну таку помилку в грі знайшла людина.
+
+**Dmytro Bidlov** («Little Bit»):
+- придумав проєкт і вирішує, яким він буде: що виправляти першим, що додати, а що прибрати, ліцензія MIT, правило «лише власний код», вигляд меню й сайту;
+- пройшов кожну тестову збірку на Windows і надсилав логи, скриншоти, збереження й дампи шейдерів. Без цього ніхто б не знав, що хоч щось тут працює;
+- зробив [DPRecomp](https://github.com/LittleBitUA/DPRecomp), рекомпіляцію версії для Xbox 360, з якою порівнюємо PC-порт, і SWERY Localization Tool, і робить український переклад, заради якого цей мод і з'явився;
+- вирішує щодо кожного релізу: без перевірки нічого не виходить.
+
+Чого ми тримаємось: *«перевірено в грі»* у цьому README означає, що це перевірила в грі людина. Решту позначено як _експериментальне_.
 
 ### Встановлення
 
