@@ -6,15 +6,21 @@
 // Enter/Space toggles or presses the highlighted button, Backspace puts the selected setting back to its default (a changed
 // one has a grey dot after its label), Tab / PgUp / PgDn switches the section, Esc closes. The mouse
 // works too: click a section, a switch, a slider, a button or the value; the wheel scrolls.
+// A gamepad ([Menu] PadControl) does the same: View + Menu (Create + Options) held together opens and closes, the D-pad or the
+// left stick moves and changes (held, it repeats, and a slider speeds up), A / Cross is Enter, B / Circle is Esc, Y / Triangle
+// is Backspace, LB / RB the section, LT / RT a screen of rows. The hints at the bottom name the pad's buttons while it is used.
 // A change of a setting that has an ini key is written to UltimateFix.ini at once (a slider when the drag ends). Rows
 // without a key (most of the photo mode and the cheats) last for the session only.
 #include "ui.h"
 #include "theme.h"
 #include "../sites.h"
 #include "../story.h"
+#include "../menupad.h"
 #include <mmsystem.h>
 
 namespace ufx {
+bool PadZCarriesTriggers(unsigned id);  // sony_layout.cpp: Z of this WinMM pad is the shared trigger axis
+bool PadIsRawSony(unsigned id);         // sony_layout.cpp: a Sony pad left in its own layout (SonyLayout=0)
 namespace ui {
 namespace {
 
@@ -191,7 +197,7 @@ Item g_pageDisplay[] = {
     {{L"Розтягувати картинку на весь екран", L"Stretch the picture to the screen"}, &g_cfg.scaleToWindow, kBool, 0, 1, 1, false, L"Display", L"ScaleToWindow", nullptr, nullptr,
      {L"Картинка 16:9 розтягується на вікно без рамки зі збереженням пропорцій (чорні смуги на інших моніторах). Вимкнено: гра сама розтягує картинку на все вікно, не зберігаючи пропорцій.", L"The 16:9 picture fills the borderless window keeping its proportions (black bars on other monitors). Off: the game itself stretches the picture over the whole window without keeping the proportions."}, NOTR},
     {{L"Ховати курсор миші", L"Hide the mouse cursor"}, &g_cfg.hideCursor, kBool, 0, 1, 1, false, L"Display", L"HideCursor", nullptr, nullptr,
-     {L"Курсор не показується над вікном гри. У меню F10 він видимий завжди.", L"The cursor is hidden over the game window. In the F10 menu it is always visible."}, NOTR},
+     {L"Курсор не показується над вікном гри. У меню F10 він видимий, поки меню керують не ґеймпадом (тоді він з'являється з першим рухом миші).", L"The cursor is hidden over the game window. In the F10 menu it is visible unless the menu is used with a gamepad (then it comes back as soon as the mouse moves)."}, NOTR},
     {{L"Вимкнути масштабування Windows (DPI)", L"Disable Windows scaling (DPI)"}, &g_cfg.dpiAware, kBool, 0, 1, 1, true, L"Display", L"DpiAware", nullptr, nullptr,
      {L"Потрібно на екранах із масштабом 125% і більше, інакше вікно виходить розмитим.", L"Needed on screens scaled 125% or more, otherwise the window is blurry."},
      {L"Система", L"System"}},
@@ -203,6 +209,9 @@ Item g_pageDisplay[] = {
     {{L"Анімація меню", L"Menu animation"}, &g_cfg.menuAnimations, kBool, 0, 1, 1, false, L"Menu", L"Animations", nullptr, nullptr,
      {L"Панель з'являється плавно, виділення ковзає до вибраного рядка й розділу, повзунок перемикача пересувається. Вимкнено: усе змінюється миттєво. Закривається меню завжди одразу.",
       L"The panel fades in, the selection glides to the chosen row and section, the knob of a switch slides across. Off: everything changes at once. The menu always closes at once."}, NOTR},
+    {{L"Керування меню ґеймпадом", L"Gamepad control of the menu"}, &g_cfg.menuPadControl, kBool, 0, 1, 1, false, L"Menu", L"PadControl", nullptr, nullptr,
+     {L"Меню F10 працює й на ґеймпаді: View + Menu разом (на DualSense Create + Options) відкриває і закриває його, хрестовина або лівий стік ходять, A / хрестик вибирає, B / коло закриває, LB / RB (L1 / R1) перемикають розділ, LT / RT гортають на екран, Y / трикутник повертає типове. Гра в цей час ґеймпада не бачить. Діє з наступного відкриття меню.",
+      L"The F10 menu also works on a gamepad: View + Menu together (Create + Options on a DualSense) opens and closes it, the D-pad or the left stick moves, A / Cross picks, B / Circle closes, LB / RB (L1 / R1) switch the section, LT / RT scroll a screen, Y / Triangle restores the default. The game does not see the pad meanwhile. Takes effect the next time the menu opens."}, NOTR},
     {{L"Перевіряти оновлення", L"Check for updates"}, &g_cfg.checkUpdates, kBool, 0, 1, 1, true, L"Menu", L"CheckUpdates", nullptr, nullptr,
      {L"На старті один анонімний запит до GitHub: чи вийшла нова версія. Якщо так, плашка на старті й сторінка «Про мод» пропонують F9: мод сам завантажить її, замінить X3DAudio1_7.dll та іконки й перезапустить гру. Налаштування, моди й копії збережень лишаються.",
       L"One anonymous request to GitHub at the start: is a new version out. If so, the start card and the About page offer F9: the mod downloads it, replaces X3DAudio1_7.dll and the icons and restarts the game. Settings, mods and save backups stay."}, NOTR},
@@ -424,6 +433,9 @@ Item g_pageInput[] = {
      {L"Міняє місцями L2 і R2: кнопки, вісь триґерів і ефекти DualSense. Не діє на ґеймпад Sony з вимкненим пунктом «DualSense / DualShock як ґеймпад Xbox 360» і на 4-осьові ґеймпади DirectInput, де вісь Z це правий стік.", L"Swaps L2 and R2: the buttons, the trigger axis and the DualSense effects. Not on a Sony pad with 'DualSense / DualShock as an Xbox 360 pad' off, nor on 4-axis DirectInput pads, whose Z axis is the right stick."}, NOTR},
     {{L"Ґеймпад через XInput (запасний)", L"Gamepad through XInput (fallback)"}, &g_cfg.xinputFallback, kBool, 0, 1, 1, false, L"Input", L"XInputFallback", nullptr, nullptr,
      {L"Страховка для Steam Input, DS4Windows, Xbox-ґеймпада.", L"A fallback for Steam Input, DS4Windows, an Xbox pad."}, NOTR},
+    {{L"Відсутній ґеймпад питати у фоні", L"Ask about a missing gamepad in the background"}, &g_cfg.padPollThread, kBool, 0, 1, 1, false, L"Input", L"PadPollThread", nullptr, nullptr,
+     {L"Коли ґеймпада немає, Windows на деяких системах відповідає на питання про нього 18-60 мс, і гра смикалась двічі на секунду. Увімкнено: про відсутній ґеймпад двічі на секунду питає окремий фоновий потік, а гра одразу отримує його останню відповідь. Щойно ґеймпад з'явиться, гра знову сама читає його щокадру (підключений ґеймпад відповідає швидко). Вимкнено: питає сама гра, двічі на секунду. Змінюється одразу.",
+      L"With no gamepad, Windows takes 18-60 ms to answer a question about it on some systems, and the game hitched twice a second. On: a background thread asks about the missing gamepad twice a second, and the game gets its last answer at once. As soon as a gamepad appears, the game reads it itself every frame again (a connected gamepad answers fast). Off: the game asks itself, twice a second. Changes at once."}, NOTR},
     {{L"DualSense напряму через HID", L"DualSense directly over HID"}, &g_cfg.nativeDualSense, kBool, 0, 1, 1, true, L"Input", L"NativeDualSense", nullptr, nullptr,
      {L"Типово увімкнено: мод сам шукає DualSense і, якщо Windows дає відкрити пристрій, читає його напряму, а гра отримує ці дані замість ґеймпада з Windows. Так буває й з увімкненим Steam Input, і тоді його розкладка для гри не діє: щоб нею користуватися, вимкніть цей пункт. Через Bluetooth вібрація й адаптивні триґери працюють лише з цим пунктом; через USB працюють і без нього. Без DualSense нічого не змінює, гра читає ґеймпад як раніше. Потрібен перезапуск.",
       L"On by default: the mod looks for a DualSense and, when Windows lets it open the device, reads it directly, and the game gets that instead of the pad Windows shows it. That also happens with Steam Input on, and then Steam Input's mapping for the game does not apply: to use it, turn this off. Over Bluetooth, rumble and adaptive triggers work only with this on; over USB they work without it too. With no DualSense nothing changes and the game reads the pad as before. Needs a restart."}, NOTR},
@@ -1002,6 +1014,28 @@ int g_hoverRow = -1;        // the item whose button the mouse is over this fram
 int g_hoverChip = 0;        // that button
 bool g_swallowEsc = false;  // the Esc that closed the menu is still held: the game must not see it as a new press
 
+// ---- the gamepad ([Menu] PadControl) ------------------------------------------------------------------------
+// The menu reads pad 0 itself once per frame (ReadMenuPad, from the sources the game's read uses) while the game is shown a
+// neutral pad, and menupad.h turns the data into the menu's buttons. While the menu is closed the joyGetPosEx hook watches
+// for the open pair in what the game is about to get (PadForGame) and asks OnFrame to open it.
+enum { kPadNone = 0, kPadFromDualSense = 1, kPadFromWinmm = 2, kPadFromXInput = 3 };
+MenuPad g_pad;
+bool g_padOn = false;             // this opening of the menu is driven by the pad too (PadControl when it opened)
+bool g_padMode = false;           // the last input came from the pad: the hints name its buttons and the mouse cursor is hidden
+unsigned g_padRepeat = 0;         // the part of this frame's pad presses that are repeats of a held button
+DWORD g_padGameButtons = 0;       // the buttons of the menu's last read, in the layout the game gets them
+int g_padSource = kPadNone;       // where the menu's last read came from
+volatile LONG g_padOpenWanted = 0;  // the hook saw the open pair while the menu was closed: OnFrame opens it
+volatile LONG g_padSwallow = 0;     // pad buttons the game must not see until they are let go (they opened or closed the menu)
+volatile DWORD g_padSeenAt = 0;     // GetTickCount of the game's last read that found a pad (the start card names the pair)
+volatile LONG g_padSeenSource = kPadNone;  // and where it came from
+bool ReadMenuPad(MenuPadRaw* raw, DWORD* gameButtons, int* source);  // with the hooks below
+// The mouse: hover selects a row only when the mouse really moved, so a resting cursor does not take the selection back from
+// the keys or the pad every frame (it did: the cursor rests in the middle of the window, over the list, when the menu opens).
+float g_mouseX = 0, g_mouseY = 0;
+bool g_mouseKnown = false;  // false: the next frame only learns where the cursor is
+bool g_mouseMoved = false;  // it moved since the frame before
+
 // ---- layout (1280x720 coordinates) -----------------------------------------------------------------------
 // The panel can be moved and resized with the mouse: its place and size are variables and everything else is worked out from them by
 // UpdateLayout(). Defaults: 1080 x 616 at 100,52.
@@ -1116,14 +1150,24 @@ bool Pressed(int vk) {
     return now && !was;
 }
 
+const int kMenuKeys[] = {VK_F10, VK_ESCAPE, VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT, VK_RETURN, VK_SPACE, VK_TAB,
+                         VK_PRIOR, VK_NEXT, VK_LBUTTON, VK_BACK, 'Y', 'N', VK_F9};
+
 void RememberKeys() {
-    static const int keys[] = {VK_F10, VK_ESCAPE, VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT, VK_RETURN, VK_SPACE, VK_TAB,
-                               VK_PRIOR, VK_NEXT, VK_LBUTTON, VK_BACK, 'Y', 'N', VK_F9};
-    for (int vk : keys) g_prev[vk] = Down(vk) ? 1 : 0;
+    for (int vk : kMenuKeys) g_prev[vk] = Down(vk) ? 1 : 0;
     for (int d = 0; d < 10; ++d) {
         g_prev[0x30 + d] = Down(0x30 + d) ? 1 : 0;
         g_prev[VK_NUMPAD0 + d] = Down(VK_NUMPAD0 + d) ? 1 : 0;
     }
+}
+
+// A key of the menu or a mouse button went down this frame (the hints go back to the keys).
+bool AnyKeyPressed() {
+    for (int vk : kMenuKeys)
+        if (Pressed(vk)) return true;
+    for (int d = 0; d < 10; ++d)
+        if (Pressed(0x30 + d) || Pressed(VK_NUMPAD0 + d)) return true;
+    return false;
 }
 
 // ---- Quiet motion ([Menu] Animations) -----------------------------------------------------------------------------
@@ -1445,14 +1489,54 @@ void ChipLayout(const Item& it, float* x, float* w, int* n) {
 wchar_t g_editText[12];
 int g_editLen = 0;
 
+// On the pad there are no digits: the box starts with the value and Up/Down (or Left/Right) step it. Such a value is taken
+// as it is (no "a number below 1280 is a height"), and it may be negative, which the typed digits cannot be.
+bool g_editPad = false;
+int g_editValue = 0;
+
 void BeginEdit() {
     g_editing = true;
+    g_editPad = false;
     g_editLen = 0;
     g_editText[0] = 0;
 }
 
+void ShowPadEditValue() {
+    wsprintfW(g_editText, L"%d", g_editValue);
+    g_editLen = lstrlenW(g_editText);
+}
+
+void BeginPadEdit(const Item& it) {
+    BeginEdit();
+    g_editPad = true;
+    g_editValue = *it.value;
+    ShowPadEditValue();
+}
+
+// Up/Right one step more, Down/Left one less; a held direction speeds up as a slider does.
+void PadEditStep(const Item& it, unsigned pad) {
+    const unsigned bit = (pad & kPadUp) ? kPadUp : (pad & kPadDown) ? kPadDown : (pad & kPadRight) ? kPadRight : kPadLeft;
+    const int dir = (bit == kPadUp || bit == kPadRight) ? +1 : -1;
+    int v = g_editPad ? g_editValue : *it.value;
+    if (!g_editPad && g_editLen) {  // digits typed first: step from them
+        v = 0;
+        for (int i = 0; i < g_editLen; ++i) v = v * 10 + (g_editText[i] - L'0');
+    }
+    v += dir * it.step * MenuPadStepScale(MenuPadRepeats(g_pad, bit));
+    if (v < it.lo) v = it.lo;
+    if (v > it.hi) v = it.hi;
+    g_editPad = true;
+    g_editValue = v;
+    ShowPadEditValue();
+}
+
 void ConfirmEdit(Item& it) {
     g_editing = false;
+    if (g_editPad) {
+        g_editPad = false;
+        SetValue(it, g_editValue);
+        return;
+    }
     if (g_editLen == 0) return;
     int n = 0;
     for (int i = 0; i < g_editLen; ++i) n = n * 10 + (g_editText[i] - L'0');
@@ -1463,9 +1547,21 @@ void ConfirmEdit(Item& it) {
 void HandleEditKeys(Item& it) {
     if (Pressed(VK_ESCAPE)) { g_editing = false; return; }
     if (Pressed(VK_RETURN)) { ConfirmEdit(it); return; }
-    if (Pressed(VK_BACK) && g_editLen > 0) g_editText[--g_editLen] = 0;
+    if (Pressed(VK_BACK) && g_editLen > 0) {
+        if (g_editPad) {  // the stepped value becomes typed digits (or nothing, if it was negative)
+            g_editPad = false;
+            if (g_editValue < 0) g_editLen = 1;
+        }
+        g_editText[--g_editLen] = 0;
+    }
     for (int d = 0; d < 10; ++d)
-        if ((Pressed(0x30 + d) || Pressed(VK_NUMPAD0 + d)) && g_editLen < 6) {
+        if (Pressed(0x30 + d) || Pressed(VK_NUMPAD0 + d)) {
+            if (g_editPad) {  // a digit after the pad's steps starts a typed number
+                g_editPad = false;
+                g_editLen = 0;
+                g_editText[0] = 0;
+            }
+            if (g_editLen >= 6) continue;
             g_editText[g_editLen++] = (wchar_t)(L'0' + d);
             g_editText[g_editLen] = 0;
         }
@@ -1494,9 +1590,54 @@ bool SidebarClick(float mx, float my) {
     return false;
 }
 
+// The rows a pad trigger moves the selection by: about a screen of the list.
+int PageRows() {
+    const int n = (int)((kListBottom - kListTop) / kRowH) - 1;
+    return n < 1 ? 1 : n;
+}
+
+// This frame's pad: the menu's buttons that went down or repeated (0 without pad control or without a pad).
+unsigned PadFrame() {
+    g_padRepeat = 0;
+    if (!g_padOn) return 0;
+    MenuPadRaw raw = {};
+    int source = kPadNone;
+    if (!ReadMenuPad(&raw, &g_padGameButtons, &source)) g_padGameButtons = 0;
+    if (source && source != g_padSource) {
+        static int logs = 0;
+        if (logs < 4) {
+            ++logs;
+            Log("menu: gamepad control on (%s)", source == kPadFromDualSense ? "DualSense read directly"
+                                                  : source == kPadFromXInput  ? "XInput pad"
+                                                                              : "WinMM pad");
+        }
+    }
+    if (source) g_padSource = source;
+    const MenuPadFrame f = MenuPadUpdate(g_pad, raw, GetTickCount());
+    g_padRepeat = f.repeat;
+    if (f.down | f.pressed) g_padMode = true;
+    return f.pressed;
+}
+
+// Where the mouse is and whether it moved: a move, a click, the wheel or a key gives the hints back to the keyboard.
+void MouseFrame() {
+    float x, y;
+    g_mouseMoved = false;
+    if (!MousePosition(&x, &y)) return;
+    const float dx = x - g_mouseX, dy = y - g_mouseY;
+    if (g_mouseKnown && dx * dx + dy * dy > 1.f) g_mouseMoved = true;
+    g_mouseX = x;
+    g_mouseY = y;
+    g_mouseKnown = true;
+}
+
 void HandleInput(bool foreground) {
     Page& pg = g_pages[g_page];
-    if (!foreground) return;
+    if (!foreground) {
+        MenuPadRestart(g_pad);  // what is held when the focus comes back is not a press
+        g_mouseKnown = false;
+        return;
+    }
     // The mouse wheel: the game keeps its movement in a 16-bit word (it never reaches our window hook); take it.
     {
         volatile short* word = (volatile short*)(uintptr_t)0x014AFFC0;
@@ -1508,12 +1649,20 @@ void HandleInput(bool foreground) {
             g_wheel = g_wheel + steps;
         }
     }
-    if (g_confirm) {  // the question about restoring defaults: Enter / Y confirms, Esc / N cancels, or click a button
+    const unsigned pad = PadFrame();
+    MouseFrame();
+    if (g_mouseMoved || g_wheel || AnyKeyPressed()) g_padMode = false;
+    if (pad & kPadOpen) {  // the pair that opened the menu closes it from anywhere, a question or a typed number too
+        g_open = false;
+        g_wheel = 0;
+        return;
+    }
+    if (g_confirm) {  // the question about restoring defaults: Enter / Y / A confirms, Esc / N / B cancels, or click a button
         g_wheel = 0;
         float mx, my;
         bool click = Pressed(VK_LBUTTON) && MousePosition(&mx, &my);
-        bool yes = Pressed(VK_RETURN) || Pressed('Y');
-        bool no = Pressed(VK_ESCAPE) || Pressed('N');
+        bool yes = Pressed(VK_RETURN) || Pressed('Y') || (pad & kPadAccept);
+        bool no = Pressed(VK_ESCAPE) || Pressed('N') || (pad & kPadBack);
         if (click) {
             if (mx >= kConfirmX + 40 && mx <= kConfirmX + 40 + 200 && my >= kConfirmY + 120 && my <= kConfirmY + 154) yes = true;
             else if (mx >= kConfirmX + 280 && mx <= kConfirmX + 280 + 200 && my >= kConfirmY + 120 && my <= kConfirmY + 154) no = true;
@@ -1526,17 +1675,29 @@ void HandleInput(bool foreground) {
         }
         return;
     }
+    const int pageBefore = g_page;
     if (pg.about) {  // nothing to change on this page: keys for the sections, clicks for the sidebar
-        if (Pressed(VK_ESCAPE)) g_open = false;
+        if (Pressed(VK_ESCAPE) || (pad & kPadBack)) g_open = false;
         if (Pressed(VK_TAB)) SelectPage(g_page + ((GetAsyncKeyState(VK_SHIFT) & 0x8000) ? -1 : 1));
-        if (Pressed(VK_NEXT)) SelectPage(g_page + 1);
-        if (Pressed(VK_PRIOR)) SelectPage(g_page - 1);
-        if (pg.residents) ResidentsScroll(-g_wheel * 2 + (Pressed(VK_DOWN) ? 1 : 0) - (Pressed(VK_UP) ? 1 : 0));
+        if (Pressed(VK_NEXT) || (pad & kPadNextSection)) SelectPage(g_page + 1);
+        if (Pressed(VK_PRIOR) || (pad & kPadPrevSection)) SelectPage(g_page - 1);
+        if (g_page != pageBefore) {  // the rest belongs to the page that was left
+            g_wheel = 0;
+            return;
+        }
+        if (pg.residents)
+            ResidentsScroll(-g_wheel * 2 + ((Pressed(VK_DOWN) || (pad & kPadDown)) ? 1 : 0) - ((Pressed(VK_UP) || (pad & kPadUp)) ? 1 : 0) +
+                            ((pad & kPadPageDown) ? PageRows() : 0) - ((pad & kPadPageUp) ? PageRows() : 0));
         float mx = 0, my = 0;
         const bool click = Pressed(VK_LBUTTON) && MousePosition(&mx, &my);
         if (pg.mods) {
-            ModsPageInput(Pressed(VK_UP) || g_wheel > 0, Pressed(VK_DOWN) || g_wheel < 0, Pressed(VK_RETURN) || Pressed(VK_SPACE),
-                          Pressed(VK_LEFT), Pressed(VK_RIGHT), click && !SidebarClick(mx, my), mx, my);
+            // A held direction moves the selection again and again, but a mod goes up or down the list once per press.
+            const unsigned once = pad & ~g_padRepeat;
+            ModsPageInput(Pressed(VK_UP) || g_wheel > 0 || (pad & kPadUp), Pressed(VK_DOWN) || g_wheel < 0 || (pad & kPadDown),
+                          Pressed(VK_RETURN) || Pressed(VK_SPACE) || (pad & kPadAccept), Pressed(VK_LEFT) || (once & kPadLeft),
+                          Pressed(VK_RIGHT) || (once & kPadRight), click && !SidebarClick(mx, my), mx, my);
+            for (int i = 0; (pad & (kPadPageUp | kPadPageDown)) && i < PageRows(); ++i)
+                ModsPageInput((pad & kPadPageUp) != 0, (pad & kPadPageDown) != 0, false, false, false, false, 0, 0);
         } else if (click) {
             SidebarClick(mx, my);
         }
@@ -1544,14 +1705,36 @@ void HandleInput(bool foreground) {
         return;
     }
     if (g_editing) {
-        HandleEditKeys(pg.items[g_sel]);
+        Item& it = pg.items[g_sel];
+        if (pad & kPadBack) {  // B cancels the number, as Esc does; A takes it, as Enter does
+            g_editing = false;
+            g_editPad = false;
+            return;
+        }
+        if (pad & kPadAccept) {
+            ConfirmEdit(it);
+            return;
+        }
+        if (pad & (kPadUp | kPadDown | kPadLeft | kPadRight)) PadEditStep(it, pad);
+        HandleEditKeys(it);
         if (Pressed(VK_LBUTTON)) g_editing = false;  // a click elsewhere cancels
         return;
     }
-    if (Pressed(VK_ESCAPE)) g_open = false;
+    if (Pressed(VK_ESCAPE) || (pad & kPadBack)) g_open = false;
     int prevSel = g_sel;
     if (Pressed(VK_UP)) g_sel = (g_sel + pg.count - 1) % pg.count;
     if (Pressed(VK_DOWN)) g_sel = (g_sel + 1) % pg.count;
+    // The pad's Up/Down wrap around at the ends on a press only: a held one stops there instead of running round again.
+    if (pad & kPadUp) {
+        if (g_sel > 0) --g_sel;
+        else if (!(g_padRepeat & kPadUp)) g_sel = pg.count - 1;
+    }
+    if (pad & kPadDown) {
+        if (g_sel < pg.count - 1) ++g_sel;
+        else if (!(g_padRepeat & kPadDown)) g_sel = 0;
+    }
+    if (pad & kPadPageUp) g_sel = g_sel - PageRows() < 0 ? 0 : g_sel - PageRows();
+    if (pad & kPadPageDown) g_sel = g_sel + PageRows() > pg.count - 1 ? pg.count - 1 : g_sel + PageRows();
     if (g_chipRow != g_sel) {
         g_chipRow = g_sel;
         g_chipSel = 0;
@@ -1560,8 +1743,18 @@ void HandleInput(bool foreground) {
         Item& it = pg.items[g_sel];
         bool numeric = it.kind == kInt && !it.names && it.key;
         bool action = IsActionRow(it);
-        if (Pressed(VK_LEFT) || Pressed(VK_RIGHT)) {
-            int dir = Pressed(VK_RIGHT) ? +1 : -1;
+        const bool slider = it.kind == kInt && !it.names && !it.presets;
+        int dir = Pressed(VK_RIGHT) ? +1 : Pressed(VK_LEFT) ? -1 : 0;
+        int scale = 1;  // steps per change: a slider held on the pad speeds up
+        if (!dir && (pad & (kPadLeft | kPadRight))) {
+            const unsigned bit = (pad & kPadRight) ? kPadRight : kPadLeft;
+            const bool again = (g_padRepeat & bit) != 0;
+            if (!(again && it.kind == kBool)) {  // a held direction must not flip a switch on and off ten times a second
+                dir = bit == kPadRight ? +1 : -1;
+                if (again && slider) scale = MenuPadStepScale(MenuPadRepeats(g_pad, bit));
+            }
+        }
+        if (dir) {
             if (action) {  // only the highlight moves: a stray arrow must not apply a preset or spend money
                 g_chipSel += dir;
                 if (g_chipSel < 0) g_chipSel = 0;
@@ -1579,11 +1772,11 @@ void HandleInput(bool foreground) {
                 }
                 if (i >= 0 && i < it.presetCount) SetValue(it, it.presets[i]);
             } else {
-                Change(it, dir);
+                Change(it, dir * scale);
             }
         }
-        if (action) {  // Enter or Space presses the highlighted button
-            if (Pressed(VK_RETURN) || Pressed(VK_SPACE)) {
+        if (action) {  // Enter, Space or A presses the highlighted button
+            if (Pressed(VK_RETURN) || Pressed(VK_SPACE) || (pad & kPadAccept)) {
                 int i = g_chipSel < 0 ? 0 : (g_chipSel >= it.presetCount ? it.presetCount - 1 : g_chipSel);
                 SetValue(it, it.presets[i]);
             }
@@ -1592,15 +1785,26 @@ void HandleInput(bool foreground) {
                 if (numeric) BeginEdit();
                 else Change(it, +1);
             }
+            if (pad & kPadAccept) {  // A: as Enter, but the number box starts with the value, which the pad then steps
+                if (numeric) BeginPadEdit(it);
+                else Change(it, +1);
+            }
             if (Pressed(VK_SPACE)) Change(it, +1);
         }
-        // Backspace: this one setting back to its default, no question (one value, and it is shown in the description). The
-        // typing box returned above, so its Backspace never gets here; not during a slider drag, which would take it back.
-        if (Pressed(VK_BACK) && Changed(it) && !g_dragging) SetValue(it, it.def);
+        // Backspace (Y on the pad): this one setting back to its default, no question (one value, and it is shown in the
+        // description). The typing box returned above, so its Backspace never gets here; not during a slider drag, which
+        // would take it back.
+        if ((Pressed(VK_BACK) || (pad & kPadReset)) && Changed(it) && !g_dragging) SetValue(it, it.def);
     }
     if (Pressed(VK_TAB)) SelectPage(g_page + ((GetAsyncKeyState(VK_SHIFT) & 0x8000) ? -1 : 1));
-    if (Pressed(VK_NEXT)) SelectPage(g_page + 1);
-    if (Pressed(VK_PRIOR)) SelectPage(g_page - 1);
+    if (Pressed(VK_NEXT) || (pad & kPadNextSection)) SelectPage(g_page + 1);
+    if (Pressed(VK_PRIOR) || (pad & kPadPrevSection)) SelectPage(g_page - 1);
+    if (g_page != pageBefore) {
+        // The mouse code below works on the rows of the new page (SelectPage rebuilt them) but `pg` is still the old page:
+        // an item index of one looked up in the other could even run past its end.
+        g_wheel = 0;
+        return;
+    }
 
     // the wheel scrolls the list
     int wheel = g_wheel;
@@ -1686,7 +1890,7 @@ void HandleInput(bool foreground) {
             if (idx >= 0 && my >= y && my < y + h && mx >= kCx - 8 && mx <= kCr + 8) {
                 Item& it = pg.items[idx];
                 bool slider = it.kind == kInt && !it.names && !it.presets;
-                if (it.presets) {  // the button under the mouse lights up, like a row does
+                if (it.presets && !g_padMode) {  // the button under the mouse lights up, like a row does
                     float hx[8], hw[8];
                     int hn;
                     ChipLayout(it, hx, hw, &hn);
@@ -1725,8 +1929,8 @@ void HandleInput(bool foreground) {
                         float vw = TextWidth(value, 18);
                         if (mx >= kCr - vw - 8) Change(it, mx < kCr - vw / 2 ? -1 : +1);
                     }
-                } else if (!held) {
-                    g_sel = idx;  // hover selects
+                } else if (!held && g_mouseMoved) {
+                    g_sel = idx;  // hover selects, when the mouse moved over the row (a resting cursor leaves the keys and the pad alone)
                 }
             }
             y += h;
@@ -1740,6 +1944,100 @@ void HandleInput(bool foreground) {
 }
 
 // --- drawing ---------------------------------------------------------------------------------------------
+// ---- the pad's buttons in the hints ----------------------------------------------------------------------
+// PlayStation names for a DualSense or another Sony pad, as the game's own icons do ([Graphics] GlyphTheme: Xbox and
+// PlayStation as chosen, otherwise by the pad).
+bool PadSonyFor(int source) {
+    if (g_cfg.glyphTheme == 2) return false;
+    if (g_cfg.glyphTheme == 3) return true;
+    return source == kPadFromDualSense || SonyPadActive() || PadIsRawSony(0);
+}
+bool PadSony() { return PadSonyFor(g_padSource ? g_padSource : (int)g_padSeenSource); }
+
+// A button's name for a line of plain text (a description, a question): 0 Accept, 1 Back, 2 Reset, 3 the open pair.
+const wchar_t* PadWord(int which) {
+    const bool en = g_cfg.language == 1;
+    if (!PadSony()) {
+        static const wchar_t* const xbox[4] = {L"A", L"B", L"Y", L"View + Menu"};
+        return xbox[which & 3];
+    }
+    static const wchar_t* const uk[4] = {L"хрестик", L"коло", L"трикутник", L"Create + Options"};
+    static const wchar_t* const enPs[4] = {L"Cross", L"Circle", L"Triangle", L"Create + Options"};
+    return (en ? enPs : uk)[which & 3];
+}
+
+// One button as a small key cap: a disc for a face button, a rounded box for the others. Only characters every font of
+// Windows and Wine has (WGL4: × ○ ▲), so no button turns into an empty box. Returns its width; `draw` false only measures.
+// The cap is px + 3 high and starts one unit above the line, so the caps of the two hint lines (16 units apart) never overlap.
+float PadCap(const wchar_t* label, bool disc, float x, float y, int px, bool draw) {
+    const int fpx = px - 2;
+    const float h = (float)px + 3.f, tw = TextWidth(label, fpx, kSemibold);
+    const float w = disc ? (tw + 7.f > h ? tw + 7.f : h) : tw + 10.f;
+    if (draw) {
+        FillRoundFramed(x, y - 1.f, w, h, disc ? h / 2.f : 4.f, kHover, kLine2);
+        DrawText(label, x + (w - tw) / 2.f, y - 1.f + (h - (float)fpx) / 2.f - 1.f, kText, fpx, kSemibold);
+    }
+    return w;
+}
+
+// The cap(s) of a token: {A} {B} {Y} {LB} {RB} {LT} {RT} {OPEN}. Returns the width, 0 for an unknown token.
+float PadToken(const wchar_t* t, int n, float x, float y, int px, bool draw) {
+    auto is = [t, n](const wchar_t* s) {
+        int i = 0;
+        while (i < n && s[i] && s[i] == t[i]) ++i;
+        return i == n && !s[i];
+    };
+    const bool ps = PadSony();
+    if (is(L"A")) return PadCap(ps ? L"×" : L"A", true, x, y, px, draw);
+    if (is(L"B")) return PadCap(ps ? L"○" : L"B", true, x, y, px, draw);
+    if (is(L"Y")) return PadCap(ps ? L"▲" : L"Y", true, x, y, px, draw);
+    if (is(L"LB")) return PadCap(ps ? L"L1" : L"LB", false, x, y, px, draw);
+    if (is(L"RB")) return PadCap(ps ? L"R1" : L"RB", false, x, y, px, draw);
+    if (is(L"LT")) return PadCap(ps ? L"L2" : L"LT", false, x, y, px, draw);
+    if (is(L"RT")) return PadCap(ps ? L"R2" : L"RT", false, x, y, px, draw);
+    if (is(L"OPEN")) {
+        float w = PadCap(ps ? L"Create" : L"View", false, x, y, px, draw);
+        const float plus = TextWidth(L"+", px);
+        if (draw) DrawText(L"+", x + w + 4.f, y, kFaint, px);
+        w += 8.f + plus;
+        return w + PadCap(ps ? L"Options" : L"Menu", false, x + w, y, px, draw);
+    }
+    return 0.f;
+}
+
+// A hint line with the pad's buttons: plain text, and tokens in braces drawn as key caps. What does not fit in maxW is left
+// out from the first piece that would cross it (a text piece is cut with "…").
+void DrawPadLineImpl(const wchar_t* text, float x, float y, u32 color, int px, float maxW) {
+    const float right = x + maxW;
+    const wchar_t* p = text;
+    while (*p) {
+        if (*p == L'{') {
+            const wchar_t* e = p + 1;
+            while (*e && *e != L'}') ++e;
+            if (!*e) return;
+            const float w = PadToken(p + 1, (int)(e - p - 1), x, y, px, false);
+            if (x + w > right) return;
+            x += PadToken(p + 1, (int)(e - p - 1), x, y, px, true);
+            p = e + 1;
+            continue;
+        }
+        wchar_t piece[256];
+        int n = 0;
+        while (p[n] && p[n] != L'{' && n < 255) {
+            piece[n] = p[n];
+            ++n;
+        }
+        piece[n] = 0;
+        p += n;
+        const float w = TextWidth(piece, px);
+        if (x + w > right) {
+            DrawFitted(piece, x, y, color, px, right - x);
+            return;
+        }
+        x += DrawText(piece, x, y, color, px);
+    }
+}
+
 // The box a number is typed into, right-aligned on a row.
 void DrawEditBox(float y) {
     float w = 150;
@@ -1950,7 +2248,8 @@ void DrawAbout() {
     y += 20 + 5 * line + 10 * s;
     DrawText(en ? L"Testers" : L"Тестувальники", kCx, y, kAccentHi, 13, kSemibold);
     DrawFitted(L"Gold flin, Tree Fan, EliParker", kCx, y + 20, kMuted, 15, width);
-    DrawText(en ? L"F10 or Esc close" : L"F10 або Esc закрити", kCx, kPy + kPh - 30, kFaint, 13);
+    if (g_padMode) DrawPadLineImpl(en ? L"{B} close     {LB} {RB} section" : L"{B} закрити     {LB} {RB} розділ", kCx, kPy + kPh - 30, kFaint, 13, width);
+    else DrawText(en ? L"F10 or Esc close" : L"F10 або Esc закрити", kCx, kPy + kPh - 30, kFaint, 13);
 }
 
 // True when `size` bytes at `p` can be read: committed pages that allow reading, over the whole range. The Story page reads
@@ -2043,9 +2342,14 @@ void DrawStory() {
     const bool en = g_cfg.language == 1;
     const float w = kCr - kCx;
     float y = kListTop - 4;
-    DrawText(en ? L"Read-only: the mod changes nothing of the game here.     F10 or Esc close"
-                : L"Лише перегляд: мод тут нічого не змінює в грі.     F10 або Esc закрити",
-             kCx, kPy + kPh - 36, kFaint, 13);
+    if (g_padMode)
+        DrawPadLineImpl(en ? L"Read-only: the mod changes nothing of the game here.     {B} close     {LB} {RB} section"
+                           : L"Лише перегляд: мод тут нічого не змінює в грі.     {B} закрити     {LB} {RB} розділ",
+                        kCx, kPy + kPh - 36, kFaint, 13, kCr + 24 - kCx);
+    else
+        DrawText(en ? L"Read-only: the mod changes nothing of the game here.     F10 or Esc close"
+                    : L"Лише перегляд: мод тут нічого не змінює в грі.     F10 або Esc закрити",
+                 kCx, kPy + kPh - 36, kFaint, 13);
     StoryState st = {};
     const int result = ReadStory(&st);
     if (result) {
@@ -2164,6 +2468,11 @@ void Draw() {
         else if (pg.residents) ResidentsPage(kCx, kListTop, kCr, kPy + kPh - 44);
         else if (pg.mods) ModsPage(kCx, kListTop, kCr, kPy + kPh - 44);
         else DrawAbout();
+        // The mods page draws its own key line (mods_page.cpp); the pad's goes under it, where the other pages have their second line.
+        if (pg.mods && g_padMode)
+            DrawPadLineImpl(g_cfg.language == 1 ? L"↑ ↓ select     {A} on / off     ← → higher / lower     {LB} {RB} section     {B} close"
+                                                : L"↑ ↓ вибір     {A} вмк. / вимк.     ← → вище / нижче     {LB} {RB} розділ     {B} закрити",
+                            kCx, kPy + kPh - 20, kFaint, 12, kCr + 24 - kCx);
         // These pages have no description box: a notice floats over the top of the content, under the page's title (the
         // floating box of the closed menu would land right on it). It is drawn last, over the page.
         DrawNoticeBelow((kCx + kCr) / 2, kPy + 108, kCr - kCx - 32);
@@ -2219,10 +2528,14 @@ void Draw() {
         // the selected row's description comes back when the notice is over
     } else if (g_editing) {
         wchar_t line[256];
-        wsprintfW(line, en ? L"Type a value for \"%s\" (from %d to %d) and press Enter. Esc cancels." : L"Введіть значення для «%s» (від %d до %d) і натисніть Enter. Esc скасовує.",
-                  Tx(cur.label), cur.lo, cur.hi);
+        if (g_padMode)
+            wsprintfW(line, en ? L"\"%s\": up and down change the value (from %d to %d), %s takes it, %s cancels." : L"«%s»: ↑ ↓ змінюють значення (від %d до %d), %s бере його, %s скасовує.",
+                      Tx(cur.label), cur.lo, cur.hi, PadWord(0), PadWord(1));
+        else
+            wsprintfW(line, en ? L"Type a value for \"%s\" (from %d to %d) and press Enter. Esc cancels." : L"Введіть значення для «%s» (від %d до %d) і натисніть Enter. Esc скасовує.",
+                      Tx(cur.label), cur.lo, cur.hi);
         int used = DrawLines(line, kCx + 4, hintTop, kText, 15, 19, hintW, 2, true);
-        if (cur.resolution)
+        if (cur.resolution && !g_padMode)
             DrawLines(en ? L"A width (1920, 2560, 3840) or a height (1080, 1440, 2160): a number below 1280 is taken as a height."
                          : L"Ширина (1920, 2560, 3840) або висота (1080, 1440, 2160): число менше 1280 вважається висотою.",
                       kCx + 4, hintTop + 19.f * (float)used, kFaint, 15, 19, hintW, 4 - used, true);
@@ -2245,7 +2558,8 @@ void Draw() {
         if (changed) {
             wchar_t value[64], line[128];
             FormatDefault(cur, value);
-            wsprintfW(line, en ? L"Default: %s  ·  Backspace restores" : L"Типово: %s  ·  Backspace повертає", value);
+            if (g_padMode) wsprintfW(line, en ? L"Default: %s  ·  %s restores" : L"Типово: %s  ·  %s повертає", value, PadWord(2));
+            else wsprintfW(line, en ? L"Default: %s  ·  Backspace restores" : L"Типово: %s  ·  Backspace повертає", value);
             DrawFitted(line, kCx + 4, hintTop + lh * (float)used + 2, kFaint, 13, hintW);
         }
     }
@@ -2258,11 +2572,21 @@ void Draw() {
                  kConfirmX + 24, kConfirmY + 24, kText, 20);
         DrawText(en ? L"Your current values will be replaced. This cannot be undone." : L"Ваші поточні значення буде замінено. Скасувати це не вийде.",
                  kConfirmX + 24, kConfirmY + 60, kMuted, 15);
-        DrawText(en ? L"Enter or Y: yes      Esc or N: no" : L"Enter або Y: так      Esc або N: ні", kConfirmX + 24, kConfirmY + 88, kFaint, 14);
+        if (g_padMode) DrawPadLineImpl(en ? L"{A} yes      {B} no" : L"{A} так      {B} ні", kConfirmX + 24, kConfirmY + 90, kFaint, 14, kConfirmW - 48);
+        else DrawText(en ? L"Enter or Y: yes      Esc or N: no" : L"Enter або Y: так      Esc або N: ні", kConfirmX + 24, kConfirmY + 88, kFaint, 14);
         FillRound(kConfirmX + 40, kConfirmY + 120, 200, 34, 8, kAccent);
         DrawText(en ? L"Yes, restore" : L"Так, відновити", kConfirmX + 40 + 100 - TextWidth(en ? L"Yes, restore" : L"Так, відновити", 16) / 2, kConfirmY + 127, kWhite, 16);
         FillRoundFramed(kConfirmX + 280, kConfirmY + 120, 200, 34, 8, kSelected, kLine2);
         DrawText(en ? L"No, keep" : L"Ні, лишити", kConfirmX + 280 + 100 - TextWidth(en ? L"No, keep" : L"Ні, лишити", 16) / 2, kConfirmY + 127, kText, 16);
+        return;
+    }
+    if (g_padMode) {  // the last input came from the pad: its buttons instead of the keys
+        DrawPadLineImpl(en ? L"↑ ↓ select     ← → change / pick a button     {A} toggle / press / set a number     {B} close     {LB} {RB} section"
+                           : L"↑ ↓ вибір     ← → змінити / вибрати кнопку     {A} вибрати / натиснути / число     {B} закрити     {LB} {RB} розділ",
+                        kCx, kPy + kPh - 36, kFaint, 13, kCr + 24 - kCx);
+        DrawPadLineImpl(en ? L"{Y} default     {LT} {RT} a screen up / down     {OPEN} open / close the menu"
+                           : L"{Y} типове     {LT} {RT} на екран вище / нижче     {OPEN} відкрити / закрити меню",
+                        kCx, kPy + kPh - 20, kFaint, 12, kCr + 24 - kCx);
         return;
     }
     DrawFitted(en ? L"↑ ↓ select     ← → change / pick a button     Enter type a number / press     Tab section     wheel / click     F10 or Esc close"
@@ -2331,60 +2655,273 @@ int WINAPI H_ShowCursor(BOOL show) {
     return count;
 }
 
-void EnsureCursorVisible() {
+// `arrow` false: the counter is kept the same, but no cursor image is shown (the pad drives the menu; the cursor resting in
+// the middle of the panel only covered it). The next mouse move brings the arrow back (MouseFrame, g_padMode).
+void EnsureCursorVisible(bool arrow) {
     int count = ShowCursor(TRUE);  // our own import, not the game's hooked one
     while (count < 0) count = ShowCursor(TRUE);
     if (count > 0) ShowCursor(FALSE);
     g_cursorHidden = false;
-    SetCursor(LoadCursorW(nullptr, MAKEINTRESOURCEW(32512)));
+    SetCursor(arrow ? LoadCursorW(nullptr, MAKEINTRESOURCEW(32512)) : nullptr);
 }
 
 BOOL WINAPI H_SetCursorPos(int x, int y) { return (g_open || FreeCamBlocksInput()) ? TRUE : r_SetCursorPos(x, y); }
+
+// --- a missing pad, asked about on a worker thread ------------------------------------------------------------
+// With no pad Windows answers joyGetPosEx only after it has looked through the device list: 18-62 ms per call in the
+// logs, so even the half-second throttle (ThrottleMissingPad) left a hitch on the game thread twice a second. While a slot
+// has no pad, a low-priority worker asks Windows about it every 500 ms and the hook answers at once with the worker's last
+// result. When the worker gets an answer with a pad, the hook asks Windows itself again, on the game thread: a present
+// pad answers fast and the game needs fresh data every frame. Only the result code is handed over: a failed call gives no
+// pad data (the throttle has always answered with the code alone), and the data of the worker's successful call would be
+// up to half a second old; the hook's own call in the same poll gets fresh data instead.
+constexpr unsigned kPadSlots = 16;      // WinMM joystick ids 0..15
+constexpr DWORD kPadPollMs = 500;
+constexpr DWORD kPadForgetMs = 2000;    // a slot the game has not asked about for this long is left alone (the menu is open, ...)
+volatile LONG g_padMissing[kPadSlots];  // 1 = the hook answers this slot from the worker (written by the game thread only)
+volatile LONG g_padFlags[kPadSlots];    // the dwFlags the game asks this slot with
+volatile LONG g_padAsked[kPadSlots];    // GetTickCount of the game's last question about it
+// The worker's last answer: the take count in the high 16 bits (the game thread raises it each time it hands the slot over),
+// the MMRESULT in the low 16. The worker stores its answer only if the count is still the one it read before its call, so
+// a slow call that started before the pad came and went cannot report a stale "pad present" for the new take.
+volatile LONG g_padAnswer[kPadSlots];
+unsigned g_padTakes[kPadSlots];         // game thread only
+volatile LONG g_padIdle = 0;            // 1 = the worker waits for g_padWake without a timeout
+HANDLE g_padWake = nullptr;             // auto-reset: a slot was handed over, or the game asks again after a pause
+int g_padWorker = 0;                    // 0 = not started, 1 = running, -1 = could not be started (game thread only)
+
+DWORD WINAPI PadWorker(void*) {
+    LARGE_INTEGER qf;
+    QueryPerformanceFrequency(&qf);
+    double total = 0, worst = 0;
+    int calls = 0;
+    bool said = false;
+    for (;;) {
+        bool any = false;
+        if (*(volatile int*)&g_cfg.padPollThread) {  // switched off in the menu: the hook takes the slots back on its next poll
+            for (unsigned id = 0; id < kPadSlots; ++id) {
+                if (!g_padMissing[id] || GetTickCount() - (DWORD)g_padAsked[id] > kPadForgetMs) continue;
+                any = true;
+                const LONG before = g_padAnswer[id];
+                JOYINFOEX j;
+                DWORD* words = (DWORD*)&j;
+                for (unsigned i = 0; i < sizeof(j) / sizeof(DWORD); ++i) words[i] = 0;
+                j.dwSize = sizeof(j);
+                j.dwFlags = (DWORD)g_padFlags[id];
+                LARGE_INTEGER q0, q1;
+                QueryPerformanceCounter(&q0);
+                const MMRESULT r = r_joyGetPosEx(id, &j);
+                QueryPerformanceCounter(&q1);
+                InterlockedCompareExchange(&g_padAnswer[id], (LONG)(((ULONG)before & 0xFFFF0000u) | ((ULONG)r & 0xFFFFu)), before);
+                const double ms = (double)(q1.QuadPart - q0.QuadPart) * 1000.0 / (double)qf.QuadPart;
+                total += ms;
+                if (ms > worst) worst = ms;
+                if (!said && ++calls >= 4) {  // about two seconds in: the first call alone may include the driver's start-up
+                    said = true;
+                    const double avg = total / calls;
+                    Log("input: the missing pad is polled on a worker thread (%d.%02d ms per call, %d.%02d ms at most, %d calls)", (int)avg,
+                        (int)(avg * 100.0) % 100, (int)worst, (int)(worst * 100.0) % 100, calls);
+                }
+            }
+        }
+        if (any) {
+            WaitForSingleObject(g_padWake, kPadPollMs);
+        } else {
+            // Nothing to ask: sleep until the hook hands a slot over or asks again. Should the hook look at g_padIdle just
+            // before it is set, it sees it set on its next poll, a frame later.
+            InterlockedExchange(&g_padIdle, 1);
+            WaitForSingleObject(g_padWake, INFINITE);
+            InterlockedExchange(&g_padIdle, 0);
+        }
+    }
+}
+
+bool StartPadWorker() {
+    if (g_padWorker) return g_padWorker > 0;
+    g_padWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    HANDLE t = g_padWake ? CreateThread(nullptr, 0, PadWorker, nullptr, 0, nullptr) : nullptr;
+    if (!t) {
+        g_padWorker = -1;
+        Log("input: the pad worker thread could not be started (error %u); a missing pad is asked about on the game thread", (unsigned)GetLastError());
+        return false;
+    }
+    SetThreadPriority(t, THREAD_PRIORITY_LOWEST);
+    CloseHandle(t);
+    g_padWorker = 1;
+    return true;
+}
+
+// A direct call for this slot just failed: hand the slot to the worker. False when the worker is off or cannot run.
+bool PadToWorker(UINT id, const JOYINFOEX* info, MMRESULT r) {
+    if (id >= kPadSlots || !info || info->dwSize != sizeof(JOYINFOEX) || !g_cfg.padPollThread || r == JOYERR_NOERROR) return false;
+    if (!StartPadWorker()) return false;
+    InterlockedExchange(&g_padFlags[id], (LONG)info->dwFlags);
+    InterlockedExchange(&g_padAsked[id], (LONG)GetTickCount());
+    const ULONG take = (++g_padTakes[id] & 0x7FFFu) << 16;
+    InterlockedExchange(&g_padAnswer[id], (LONG)(take | ((ULONG)r & 0xFFFFu)));  // the failure just seen, until the worker knows better
+    InterlockedExchange(&g_padMissing[id], 1);
+    SetEvent(g_padWake);
+    return true;
+}
+
+// The answer for a slot the worker holds, at once. False (and the slot back on the game thread) when the worker has seen a
+// pad or was switched off: the caller then asks Windows itself.
+bool PadFromWorker(UINT id, const JOYINFOEX* info, MMRESULT* r) {
+    // A call with no record or a record of the wrong size is a parameter error that Windows answers at once: it is passed on
+    // and leaves the slot with the worker.
+    if (id >= kPadSlots || !g_padMissing[id] || !info || info->dwSize != sizeof(JOYINFOEX)) return false;
+    const MMRESULT code = (MMRESULT)((ULONG)g_padAnswer[id] & 0xFFFFu);
+    if (code == JOYERR_NOERROR || !g_cfg.padPollThread) {
+        InterlockedExchange(&g_padMissing[id], 0);
+        return false;
+    }
+    InterlockedExchange(&g_padAsked[id], (LONG)GetTickCount());
+    if ((DWORD)g_padFlags[id] != info->dwFlags) InterlockedExchange(&g_padFlags[id], (LONG)info->dwFlags);
+    if (g_padIdle) SetEvent(g_padWake);  // the game asks again after a pause (the menu was open)
+    *r = code;
+    return true;
+}
+
+// With no pad Windows answers a joyGetPosEx(0) only after it has looked through the device list (cfgmgr32, kernel calls): the
+// sampling profiler of this mod found 80% of the frame in ntdll because of it. A slot without a pad is asked about by the
+// worker above (PadPollThread); with that off, a failed answer for pad 0 is reused for half a second (ThrottleMissingPad),
+// so the slow question is asked on the game thread twice a second, not every frame. `asked`: Windows was asked on this
+// thread, so the data is fresh (an answer from the worker or the throttle is only a failure code). Used by the hook for the
+// game and by the menu's own read of the pad while the game is shown a neutral one.
+DWORD g_padFailTick = 0;
+MMRESULT g_padFailCode = JOYERR_NOERROR;
+
+MMRESULT AskWinmm(UINT id, LPJOYINFOEX info, bool* asked) {
+    MMRESULT r;
+    *asked = false;
+    if (PadFromWorker(id, info, &r)) return r;
+    const DWORD nowTick = GetTickCount();
+    if (id == 0 && g_cfg.throttleMissingPad && g_padFailCode != JOYERR_NOERROR && nowTick - g_padFailTick < 500) return g_padFailCode;
+    *asked = true;
+    r = r_joyGetPosEx(id, info);
+    // A slot the worker takes needs no throttle: it is answered from the worker until a pad is there, and then the next poll
+    // must ask Windows at once.
+    const bool taken = PadToWorker(id, info, r);
+    if (id == 0) {
+        if (r != JOYERR_NOERROR && !taken) {
+            g_padFailCode = r;
+            g_padFailTick = nowTick;
+        } else {
+            g_padFailCode = JOYERR_NOERROR;
+        }
+    }
+    return r;
+}
+
+// The bits of the open pair in the pad-0 data of this source, 0 when the layout of the pad is not known: on a 4-axis
+// DirectInput pad (right stick on Z/R) buttons 6 and 7 are often the triggers, and aiming while firing must not open the menu.
+DWORD OpenPairFor(int source) {
+    if (source == kPadFromDualSense || source == kPadFromXInput) return kPadOpenPair;  // made in the Xbox layout
+    if (PadIsRawSony(0)) return (1u << 8) | (1u << 9);  // a Sony pad in its own layout: Create, Options
+    return PadZCarriesTriggers(0) || (g_cfg.sonyLayout && SonyPadActive()) ? kPadOpenPair : 0;  // Xbox layout, or a converted Sony pad
+}
+
+// While the menu is closed: pad 0 as the game is about to get it. The open pair asks OnFrame to open the menu, and buttons that
+// opened or closed the menu are kept from the game until they are let go. The first half of the pair is held back for a
+// moment (kPairWaitMs), so that Start (the game's pause) or Back does not reach the game when the other half follows; a half
+// tapped alone reaches it that moment later, one held alone from then on.
+constexpr DWORD kPairWaitMs = 120, kPairTapMs = 60;
+DWORD g_pairPrev = 0;      // the buttons of the poll before
+DWORD g_pairHeld = 0;      // the half held back now
+DWORD g_pairHeldAt = 0;
+DWORD g_pairTap = 0;       // a half let go while held back: shown to the game until g_pairTapUntil
+DWORD g_pairTapUntil = 0;
+
+void PadForGame(JOYINFOEX* info, int source) {
+    const DWORD now = GetTickCount();
+    g_padSeenAt = now | 1;
+    g_padSeenSource = source;
+    const DWORD b = info->dwButtons;
+    const DWORD pair = g_cfg.menu && g_cfg.menuPadControl ? OpenPairFor(source) : 0;
+    DWORD swallow = (DWORD)g_padSwallow;
+    if (!pair) {
+        g_pairHeld = g_pairTap = 0;
+    } else if ((b & pair) == pair && !(swallow & pair)) {
+        InterlockedExchange(&g_padOpenWanted, 1);
+        swallow |= pair;
+        g_pairHeld = g_pairTap = 0;
+    } else {
+        if (g_pairHeld && !(b & g_pairHeld)) {  // tapped alone
+            g_pairTap = g_pairHeld;
+            g_pairTapUntil = now + kPairTapMs;
+            g_pairHeld = 0;
+        } else if (g_pairHeld && now - g_pairHeldAt >= kPairWaitMs) {  // held alone: the game's
+            g_pairHeld = 0;
+        }
+        const DWORD fresh = b & pair & ~g_pairPrev & ~swallow;
+        if (!g_pairHeld && fresh && (b & pair) != pair) {
+            g_pairHeld = fresh;
+            g_pairHeldAt = now;
+        }
+    }
+    g_pairPrev = b;
+    swallow &= b;  // a let-go button is the game's again
+    InterlockedExchange(&g_padSwallow, (LONG)swallow);
+    DWORD out = b & ~swallow & ~g_pairHeld;
+    if (g_pairTap) {
+        if ((int)(now - g_pairTapUntil) < 0) out |= g_pairTap;
+        else g_pairTap = 0;
+    }
+    if (out == b) return;
+    info->dwButtons = out;
+    int count = 0;
+    for (int i = 0; i < 32; ++i) count += (out >> i) & 1;
+    info->dwButtonNumber = (DWORD)count;
+}
 
 MMRESULT WINAPI H_joyGetPosEx(UINT id, LPJOYINFOEX info) {
     if (id != 0 && g_cfg.onlyFirstPad) return JOYERR_UNPLUGGED;  // the game only ever uses slot 0
     if ((!g_open && !FreeCamBlocksInput()) || id != 0 || !info) {
         MMRESULT r;
+        int source = kPadNone;
         if (id == 0 && info && g_cfg.nativeDualSense && DualSenseToJoy(info)) {
             r = JOYERR_NOERROR;  // a DualSense read directly: no WinMM call, no conversion needed
+            source = kPadFromDualSense;
         } else {
-            // With no pad Windows answers a joyGetPosEx(0) only after it has looked through the device list (cfgmgr32, kernel calls): the
-            // sampling profiler of this mod found 80% of the frame in ntdll because of it. A failed answer for pad 0 is reused for half a
-            // second, so the (slow) question is asked twice a second, not every frame.
-            // Only the WinMM answer is cached: the XInput fallback below is cheap (it scans for a new pad once a second
-            // itself) and still runs every poll, so a pad seen only through XInput does not bring the slow question back.
-            static DWORD s_failTick = 0;
-            static MMRESULT s_failCode = JOYERR_NOERROR;
-            static double s_ms = 0;
-            static int s_calls = 0, s_logs = 0;
-            DWORD nowTick = GetTickCount();
-            if (id == 0 && g_cfg.throttleMissingPad && s_failCode != JOYERR_NOERROR && nowTick - s_failTick < 500) {
-                r = s_failCode;
-            } else {
-                LARGE_INTEGER q0, q1, qf;
-                QueryPerformanceCounter(&q0);
-                r = r_joyGetPosEx(id, info);
-                QueryPerformanceCounter(&q1);
+            // Only the WinMM answer is cached (AskWinmm): the XInput fallback below is cheap (it scans for a new pad once a
+            // second itself) and still runs every poll, so a pad seen only through XInput does not bring the slow question back.
+            static double s_ms = 0, s_worst = 0;
+            static int s_calls = 0, s_cached = 0, s_logs = 0;
+            LARGE_INTEGER q0, q1, qf;
+            QueryPerformanceCounter(&q0);
+            bool asked = false;  // Windows was asked on this thread (not answered from the worker or the throttle)
+            r = AskWinmm(id, info, &asked);
+            QueryPerformanceCounter(&q1);
+            if (id == 0) {  // the time this poll spent on the game thread, the answers without a WinMM call included
                 QueryPerformanceFrequency(&qf);
-                if (id == 0) {
-                    s_ms += (double)(q1.QuadPart - q0.QuadPart) * 1000.0 / (double)qf.QuadPart;
-                    if (++s_calls >= 120) {
-                        if (s_logs < 6) { ++s_logs; Log("input: reading the pad takes %d.%02d ms per call on average (%d calls)", (int)(s_ms / s_calls), (int)(s_ms / s_calls * 100.0) % 100, s_calls); }
-                        s_ms = 0;
-                        s_calls = 0;
+                const double ms = (double)(q1.QuadPart - q0.QuadPart) * 1000.0 / (double)qf.QuadPart;
+                s_ms += ms;
+                if (ms > s_worst) s_worst = ms;
+                if (!asked) ++s_cached;
+                if (++s_calls >= 120) {
+                    if (s_logs < 6) {
+                        ++s_logs;
+                        const double avg = s_ms / s_calls;
+                        Log("input: reading the pad takes %d.%02d ms per call on the game thread on average, %d.%02d ms at most (%d calls, %d answered without asking Windows)",
+                            (int)avg, (int)(avg * 100.0) % 100, (int)s_worst, (int)(s_worst * 100.0) % 100, s_calls, s_cached);
                     }
-                    if (r != JOYERR_NOERROR) { s_failCode = r; s_failTick = nowTick; }
-                    else s_failCode = JOYERR_NOERROR;
+                    s_ms = s_worst = 0;
+                    s_calls = s_cached = 0;
                 }
-                if (r == JOYERR_NOERROR && info) ConvertSonyLayout(id, info);
             }
-            if (r != JOYERR_NOERROR && id == 0 && g_cfg.xinputFallback && XInputToJoy(info)) r = JOYERR_NOERROR;
+            if (asked && r == JOYERR_NOERROR && info) ConvertSonyLayout(id, info);
+            if (r == JOYERR_NOERROR) source = kPadFromWinmm;
+            if (r != JOYERR_NOERROR && id == 0 && g_cfg.xinputFallback && XInputToJoy(info)) {
+                r = JOYERR_NOERROR;
+                source = kPadFromXInput;
+            }
             static bool s_fallbackOff = false;
             if (r != JOYERR_NOERROR && id == 0 && !g_cfg.xinputFallback && !s_fallbackOff) {
                 s_fallbackOff = true;
                 Log("input: no WinMM pad, and the XInput fallback is off ([Input] XInputFallback=0): an Xbox pad without Steam Input stays unseen");
             }
         }
+        if (id == 0 && r == JOYERR_NOERROR && info && info->dwSize == sizeof(JOYINFOEX) && !g_open) PadForGame(info, source);
         if (id == 0) PadCapture(r == JOYERR_NOERROR ? info : nullptr);
         if (!g_open) AutoInputTick(id, info, (unsigned)r, r_GetAsyncKeyState);
         return r;
@@ -2395,6 +2932,57 @@ MMRESULT WINAPI H_joyGetPosEx(UINT id, LPJOYINFOEX info) {
     info->dwPOV = 0xFFFF;
     PadCapture(info);
     return JOYERR_NOERROR;
+}
+
+// The menu's own read of pad 0, once per frame while it is open (the game then gets a neutral pad from the hook): the sources
+// and the order of the game's read above, so the menu sees the pad the game would. `gameButtons` are the buttons in the
+// layout the game gets them (they are kept from it after the menu closes, PadForGame); `raw` has them in the Xbox layout
+// menupad.h reads. False: no pad.
+bool ReadMenuPad(MenuPadRaw* raw, DWORD* gameButtons, int* source) {
+    raw->valid = false;
+    *source = kPadNone;
+    JOYINFOEX j;
+    DWORD* words = (DWORD*)&j;
+    for (unsigned i = 0; i < sizeof(j) / sizeof(DWORD); ++i) words[i] = 0;
+    j.dwSize = sizeof(j);
+    j.dwFlags = JOY_RETURNALL;
+    if (g_cfg.nativeDualSense && DualSenseToJoy(&j)) {
+        *source = kPadFromDualSense;
+    } else {
+        bool asked = false;
+        const MMRESULT r = r_joyGetPosEx ? AskWinmm(0, &j, &asked) : (MMRESULT)JOYERR_UNPLUGGED;
+        if (r == JOYERR_NOERROR && asked) {
+            ConvertSonyLayout(0, &j);
+            *source = kPadFromWinmm;
+        } else if (g_cfg.xinputFallback && XInputToJoy(&j)) {
+            *source = kPadFromXInput;
+        }
+    }
+    if (!*source) return false;
+    *gameButtons = j.dwButtons;
+    DWORD b = j.dwButtons;
+    bool zTriggers = true;  // DualSenseToJoy, XInputToJoy and ConvertSonyLayout put both triggers on Z
+    if (*source == kPadFromWinmm) {
+        zTriggers = PadZCarriesTriggers(0) || (g_cfg.sonyLayout && SonyPadActive());
+        if (PadIsRawSony(0)) {  // SonyLayout=0: the game gets the Sony order; the menu reads it in the Xbox order (sony_layout.cpp)
+            static const u8 from[10] = {1, 2, 0, 3, 4, 5, 8, 9, 10, 11};
+            DWORD x = 0;
+            for (int i = 0; i < 10; ++i)
+                if ((b >> from[i]) & 1) x |= 1u << i;
+            if (b & (1u << 6)) x |= kXbLT;
+            if (b & (1u << 7)) x |= kXbRT;
+            b = x;
+            zTriggers = false;  // Z is the right stick there
+        }
+    }
+    raw->valid = true;
+    raw->buttons = b;
+    raw->pov = (j.dwFlags & JOY_RETURNPOV) ? j.dwPOV : 0xFFFF;
+    raw->x = j.dwXpos;
+    raw->y = j.dwYpos;
+    raw->z = j.dwZpos;
+    raw->zTriggers = zTriggers;
+    return true;
 }
 
 template <class F>
@@ -2408,6 +2996,8 @@ bool Hook(const char* dll, const char* name, F* real, void* replacement) {
 }  // namespace
 
 bool IsOpen() { return g_open; }
+bool PadHintsShown() { return g_open && g_padMode; }
+void DrawPadLine(const wchar_t* text, float x, float y, u32 argb, int px, float maxW) { DrawPadLineImpl(text, x, y, argb, px, maxW); }
 
 // Replaces the game's wheel reader: while the menu is open the wheel steps go to the menu and the game sees none
 // (otherwise the weapon changes behind the menu).
@@ -2440,6 +3030,21 @@ bool Install() {
 }
 
 namespace {
+// The menu has just been opened (before its first HandleInput): whether the pad drives it this time, and the pad and the mouse
+// start afresh, so the pair that opened it, still held, does not close it again at once.
+void PadOpening(bool byPad) {
+    g_padOn = g_cfg.menuPadControl && r_joyGetPosEx;  // without the hook the game would see the pad behind the menu
+    static bool said = false;
+    if (g_cfg.menuPadControl && !r_joyGetPosEx && !said) {
+        said = true;
+        Log("menu: gamepad control off: the joyGetPosEx hook is not in place, the game would see the pad behind the menu");
+    }
+    MenuPadRestart(g_pad);
+    g_padMode = byPad && g_padOn;
+    g_mouseKnown = false;
+    g_pairHeld = g_pairTap = 0;  // a half of the pair held back when F10 opened the menu is not shown to the game later
+}
+
 // Everything that must happen when the menu opens or closes, whatever opened or closed it.
 void OpenChanged(bool foreground) {
     g_editing = false;  // half-typed digits or a pending question must not wait for the next opening (and hit item 0)
@@ -2463,6 +3068,11 @@ void OpenChanged(bool foreground) {
     }
     if (g_cfg.hideCursor) SetCursor(nullptr);
     if (Down(VK_ESCAPE)) g_swallowEsc = true;
+    // The pad buttons held now (B or the pair that closed the menu) would reach the game as new presses: B is its cancel, Start
+    // its pause. They stay the game's once let go (PadForGame). A request to open the menu seen meanwhile is stale.
+    if (g_padOn) InterlockedExchange(&g_padSwallow, (LONG)g_padGameButtons);
+    g_padGameButtons = 0;
+    InterlockedExchange(&g_padOpenWanted, 0);
     // The game turns the mouse movement into camera movement as the distance from the window centre (and puts the cursor
     // back there); while the menu was open it was told the cursor rests in the centre. Put the real one there too, or the
     // first frame after closing reads the whole distance to where the menu was clicked as a camera turn.
@@ -2504,14 +3114,19 @@ void StartHint(void* device) {
     const bool en = g_cfg.language == 1;
     const wchar_t* title = L"UltimateFIXDP";
     // One card. Without an update: "settings ... press F10". With one: the update line and F9, F10 as a smaller hint.
-    wchar_t line[128], sub[96];
+    wchar_t line[128], sub[128], settings[64];
     const wchar_t* key = L"F10";
     const wchar_t* press = en ? L"press" : L"натисніть";
     u32 lineColor = kMuted;
     sub[0] = 0;
+    // With a pad in use (the game read one in the last 3 seconds) the card also names the pad's pair that opens the menu.
+    const DWORD seen = g_padSeenAt;
+    const bool pad = g_cfg.menuPadControl && r_joyGetPosEx && seen && now - seen < 3000;
+    if (pad) wsprintfW(settings, en ? L"F10 or %s: settings" : L"F10 або %s: налаштування", PadWord(3));
+    else lstrcpyW(settings, en ? L"F10 settings" : L"F10 налаштування");
     if (st == 1) {
         wsprintfW(line, en ? L"Version %S is out: press F9 to update" : L"Вийшла версія %S: натисніть F9, щоб оновити", UpdateVersion());
-        lstrcpyW(sub, en ? L"the game restarts by itself  ·  F10 settings" : L"гра перезапуститься сама  ·  F10 налаштування");
+        wsprintfW(sub, en ? L"the game restarts by itself  ·  %s" : L"гра перезапуститься сама  ·  %s", settings);
         key = L"F9";
         press = en ? L"update" : L"оновити";
         lineColor = kText;
@@ -2524,12 +3139,13 @@ void StartHint(void* device) {
         key = nullptr;
     } else if (st == 4) {
         lstrcpyW(line, en ? L"The update failed: F9 tries again" : L"Оновлення не вдалося: F9 спробує ще раз");
-        lstrcpyW(sub, en ? L"details in UltimateFix\\ufx.log  ·  F10 settings" : L"подробиці в UltimateFix\\ufx.log  ·  F10 налаштування");
+        wsprintfW(sub, en ? L"details in UltimateFix\\ufx.log  ·  %s" : L"подробиці в UltimateFix\\ufx.log  ·  %s", settings);
         key = L"F9";
         press = en ? L"retry" : L"ще раз";
         lineColor = kError;
     } else {
         lstrcpyW(line, en ? L"Settings, photo mode and mods" : L"Налаштування, фоторежим і моди");
+        if (pad) wsprintfW(sub, en ? L"on the gamepad: %s together" : L"на ґеймпаді: %s разом", PadWord(3));
     }
     const float w = 520, h = sub[0] ? 104 : 84, x = 1280 - w - 28, y = 28;
     // A raised card with a hairline border and rounded corners, as the cards of the site; the red mark sits inside it
@@ -2581,10 +3197,20 @@ void OnFrame(void* device) {
             BuildRows();
         }
     }
+    // The pad's pair, seen by the hook in what the game was about to get (PadForGame); not for a window in the background
+    bool byPad = false;
+    if (InterlockedExchange(&g_padOpenWanted, 0) && foreground && !g_open && g_cfg.menuPadControl) {
+        g_open = true;
+        byPad = true;
+        g_sel = 0;
+        g_scroll = 0;
+        BuildRows();
+    }
+    if (g_open && !wasOpen) PadOpening(byPad);
     // F9: the update, only while the start card shows it or the About page is open (never a stray key in the middle of a game)
     if (foreground && Pressed(VK_F9) && (g_hintVisible || (g_open && GetTickCount() - g_aboutDrawnAt < 500))) UpdateStart();
     if (g_open) SyncDifficultyFromGame();
-    if (g_open) EnsureCursorVisible();
+    if (g_open) EnsureCursorVisible(!g_padMode);
     if (g_open) HandleInput(foreground);
     if (g_open != wasOpen) OpenChanged(foreground);  // F10, Esc or the photo mode key
     if (g_swallowEsc && !Down(VK_ESCAPE)) g_swallowEsc = false;  // a later Esc press is the game's again

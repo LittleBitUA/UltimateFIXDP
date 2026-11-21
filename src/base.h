@@ -47,6 +47,7 @@ struct Config {
     int displayDebug;        // log the first frames and changes of the presenting path, and the window around Esc presses
     int menuOpacity;         // how opaque the F10 panel is, percent 20..100
     int menuAnimations;      // [Menu] Animations: the panel fades in, the selection glides, a switch knob slides
+    int menuPadControl;      // [Menu] PadControl: the F10 menu on a gamepad (View + Menu opens it), the game does not see the pad meanwhile
     int language;            // language of the menu: 0 Ukrainian, 1 English
     int menu;                // F10 settings menu inside the game
     int frameCapture;        // [Debug] FrameCapture: Numpad 0 writes one frame, draw by draw, into a capture folder under UltimateFix
@@ -182,6 +183,7 @@ struct Config {
     int performanceCoresOnly; // hybrid CPUs: run the game on the performance cores only
     int autoProfile;         // start the sampling profiler by itself after 300 slow frames in a row (over 20 ms, over 40 ms in the 30 fps mode)
     int throttleMissingPad;  // reuse a failed joyGetPosEx(0) for half a second instead of asking Windows every frame
+    int padPollThread;       // a missing pad is asked about on a worker thread; the hook answers from its last result
     int menuX, menuY, menuW, menuH;  // place and size of the F10 panel (moved and resized with the mouse)
     int waypoint;            // F7 waypoint: a cross on the pause map, the distance in yards over the place in the world
     int waypointKey;         // virtual key that sets the waypoint (F7)

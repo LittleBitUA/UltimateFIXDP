@@ -329,7 +329,11 @@ void ResidentsScroll(int rows) { g_scroll += rows; }
 void ResidentsPage(float left, float top, float right, float bottom) {
     Refresh();
     const bool en = English();
-    DrawText(en ? L"wheel or ↑ ↓ scroll     Tab section     F10 or Esc close" : L"колесо або ↑ ↓ прокрутка     Tab розділ     F10 або Esc закрити", left, bottom + 8, kFaint, 13);
+    if (PadHintsShown())
+        DrawPadLine(en ? L"↑ ↓ scroll     {LT} {RT} a screen     {LB} {RB} section     {B} close" : L"↑ ↓ прокрутка     {LT} {RT} на екран     {LB} {RB} розділ     {B} закрити",
+                    left, bottom + 8, kFaint, 13, right + 24 - left);
+    else
+        DrawText(en ? L"wheel or ↑ ↓ scroll     Tab section     F10 or Esc close" : L"колесо або ↑ ↓ прокрутка     Tab розділ     F10 або Esc закрити", left, bottom + 8, kFaint, 13);
     if (g_count < 0) {
         const wchar_t* why = en ? L"Off: SafeMode is on, or this DP.exe is not the supported build." : L"Вимкнено: увімкнено безпечний режим (SafeMode) або це не та версія DP.exe.";
         if (g_count == kScheduleNoGame) why = en ? L"The timetable shows while a game is played: load a save or start a game." : L"Розклад видно під час гри: завантажте збереження або почніть гру.";

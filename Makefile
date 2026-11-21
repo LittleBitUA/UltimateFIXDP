@@ -72,6 +72,15 @@ test: test-stepplan
 test-stepplan: $(OUT)/test_stepplan
 	$(OUT)/test_stepplan
 
+# The F10 menu's pad reader (src/menupad.h): edges, hold-to-repeat, the stick's hysteresis; part of `make test`.
+$(OUT)/test_menupad: tests/test_menupad.cpp src/menupad.h
+	@mkdir -p $(OUT)
+	$(HOSTCXX) -std=c++17 -Wall -Wextra -Isrc -o $@ tests/test_menupad.cpp
+
+test: test-menupad
+test-menupad: $(OUT)/test_menupad
+	$(OUT)/test_menupad
+
 $(OUT)/test_surround: tests/test_surround.cpp src/surround.h
 	@mkdir -p $(OUT)
 	$(HOSTCXX) -std=c++17 -Isrc -o $@ tests/test_surround.cpp
@@ -149,4 +158,4 @@ test: test-farshadow
 clean:
 	rm -rf $(OUT)
 
-.PHONY: all test test-stepplan clean hlslcheck test-schedule
+.PHONY: all test test-stepplan test-menupad clean hlslcheck test-schedule

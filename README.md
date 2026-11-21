@@ -63,8 +63,8 @@ port with the Xbox 360 original:
   counter that starts with the game.
 - 🎯 **The 45 FPS mystery** — the game asks Windows about a WinMM gamepad on
   every frame, even with none connected, and on some systems that call takes
-  milliseconds. Found with the mod's own profiler; the mod now asks twice a
-  second.
+  milliseconds. Found with the mod's own profiler; a missing pad is now asked
+  about on a background thread, so the game never waits for that answer.
 - 🌗 **Day and night inside buildings** — the port reads the building list
   (`HOUSE_LIST`) with a wrong byte-order key: 64 of its 81 entries were misread, so
   interiors had the wrong lighting.
@@ -278,6 +278,7 @@ To uninstall, delete `X3DAudio1_7.dll` (and, for the 4 GB flag, put `DP.exe.bak`
 | Key | Action |
 |---|---|
 | **F10** | Settings menu |
+| **View + Menu** (DualSense: **Create + Options**) | Settings menu on a gamepad: the D-pad or left stick moves, A / Cross picks, B / Circle closes, LB / RB the section, LT / RT a screen of rows, Y / Triangle the default (`[Menu] PadControl`) |
 | **F7** | Set a waypoint (on the pause map or in the world) · **Shift+F7** removes it · **Ctrl+F7** to the game's objective |
 | **Shift+S** | Quick turn (on a pad: the Xbox 360 combination) |
 | **F6** | Photo mode |
@@ -371,7 +372,8 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
   Мод дає грі лічильник, який починається разом із нею.
 - 🎯 **Загадка 45 FPS** — гра щокадру питає Windows про ґеймпад WinMM,
   навіть коли його немає, а на деяких системах цей виклик триває мілісекунди.
-  Знайдено вбудованим профайлером мода; тепер мод питає двічі на секунду.
+  Знайдено вбудованим профайлером мода; тепер про відсутній ґеймпад питає
+  фоновий потік, і гра на цю відповідь не чекає.
 - 🌗 **День і ніч у будівлях** — порт читає список будівель (`HOUSE_LIST`)
   з неправильним ключем порядку байтів: 64 з 81 записів читались хибно, тож
   у приміщеннях було не те освітлення.
@@ -572,6 +574,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 | Клавіша | Дія |
 |---|---|
 | **F10** | Меню налаштувань |
+| **View + Menu** (DualSense: **Create + Options**) | Меню налаштувань на ґеймпаді: хрестовина або лівий стік ходять, A / хрестик вибирає, B / коло закриває, LB / RB розділ, LT / RT на екран рядків, Y / трикутник типове (`[Menu] PadControl`) |
 | **F7** | Поставити мітку (на мапі паузи або у світі) · **Shift+F7** прибирає · **Ctrl+F7** на ціль гри |
 | **Shift+S** | Швидкий розворот (на ґеймпаді: комбінація Xbox 360) |
 | **F6** | Фоторежим |
