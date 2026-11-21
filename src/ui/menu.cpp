@@ -194,6 +194,9 @@ Item g_pageDisplay[] = {
     {{L"Прозорість панелі меню, %", L"Menu panel opacity, %"}, &g_cfg.menuOpacity, kInt, 20, 100, 5, false, L"Menu", L"Opacity", nullptr, nullptr,
      {L"Чим менше, тим більше крізь меню видно гру. Текст лишається чітким. Змінюється одразу.", L"The lower, the more of the game shows through the menu. The text stays sharp. Changes at once."},
      {L"Вигляд меню", L"Look of the menu"}},
+    {{L"Анімація меню", L"Menu animation"}, &g_cfg.menuAnimations, kBool, 0, 1, 1, false, L"Menu", L"Animations", nullptr, nullptr,
+     {L"Панель з'являється плавно, виділення ковзає до вибраного рядка й розділу, повзунок перемикача пересувається. Вимкнено: усе змінюється миттєво. Закривається меню завжди одразу.",
+      L"The panel fades in, the selection glides to the chosen row and section, the knob of a switch slides across. Off: everything changes at once. The menu always closes at once."}, NOTR},
     {{L"Перевіряти оновлення", L"Check for updates"}, &g_cfg.checkUpdates, kBool, 0, 1, 1, true, L"Menu", L"CheckUpdates", nullptr, nullptr,
      {L"На старті один анонімний запит до GitHub: чи вийшла нова версія. Якщо так, плашка на старті й сторінка «Про мод» пропонують F9: мод сам завантажить її, замінить X3DAudio1_7.dll та іконки й перезапустить гру. Налаштування, моди й копії збережень лишаються.",
       L"One anonymous request to GitHub at the start: is a new version out. If so, the start card and the About page offer F9: the mod downloads it, replaces X3DAudio1_7.dll and the icons and restarts the game. Settings, mods and save backups stay."}, NOTR},
@@ -1105,6 +1108,72 @@ void RememberKeys() {
     }
 }
 
+// ---- Quiet motion ([Menu] Animations) -----------------------------------------------------------------------------
+// One clock for the whole menu: MotionFrame reads QueryPerformanceCounter once per drawn frame, so every animation runs in
+// seconds and looks the same at 30 fps pacing, at 60 fps or with the physics above 120. Nothing here changes the layout or
+// the hit tests: the fade moves and fades what is drawn (SetOverlayFade), the glides only say where a highlight is drawn.
+long long g_motionFreq = 0;   // ticks per second
+long long g_motionNow = 0;    // the tick of this drawn frame
+float g_motionDt = 0.f;       // seconds since the drawn frame before, at most 0.1
+unsigned g_motionFrame = 16;  // counts drawn frames; jumps by two at every opening, so nothing glides from where it was at the closing
+long long g_openedAt = 0;     // the tick the menu opened at: the fade-in runs from it (closing stays instant)
+float g_openAlpha = 1.f, g_openRise = 0.f;  // this frame's fade-in: the alpha and how far below its place the panel is
+Item* g_flipItem = nullptr;   // the switch flipped last and when: its knob slides over
+long long g_flipAt = 0;
+constexpr float kFadeSeconds = 0.14f, kRiseUnits = 6.f;  // the switch's time is ui.h's kSwitchSeconds
+constexpr float kGlideLag = 0.03f;  // the glide's time constant: within a few units of the row after about 90 ms
+
+void MotionFrame() {
+    LARGE_INTEGER q;
+    if (!g_motionFreq) {
+        QueryPerformanceFrequency(&q);
+        g_motionFreq = q.QuadPart > 0 ? q.QuadPart : 1;
+    }
+    QueryPerformanceCounter(&q);
+    const long long prev = g_motionNow;
+    g_motionNow = q.QuadPart;
+    const float dt = prev ? (float)((double)(g_motionNow - prev) / (double)g_motionFreq) : 0.f;
+    g_motionDt = dt < 0.f ? 0.f : dt > 0.1f ? 0.1f : dt;
+    ++g_motionFrame;
+}
+}  // namespace
+
+bool MotionOn() { return g_cfg.menuAnimations != 0; }
+
+long long MotionStamp() {
+    LARGE_INTEGER q;
+    QueryPerformanceCounter(&q);
+    return q.QuadPart;
+}
+
+float MotionProgress(long long from, float seconds) {
+    if (!MotionOn() || !g_motionFreq || seconds <= 0.f) return 1.f;
+    const float t = (float)((double)(g_motionNow - from) / (double)g_motionFreq) / seconds;
+    if (t <= 0.f) return 0.f;
+    if (t >= 1.f) return 1.f;
+    const float u = 1.f - t;
+    return 1.f - u * u * u;  // ease-out cubic: quick at first, settling softly
+}
+
+float GlideTo(Glide& g, float target, int index, int context) {
+    const int moved = index > g.index ? index - g.index : g.index - index;
+    if (!MotionOn() || g.frame + 1 != g_motionFrame || context != g.context || moved > 6) {
+        g.pos = target;
+    } else {
+        // dt / (dt + lag) of the way that is left: it closes in as an exponential would (no exp() without the C runtime),
+        // the same in seconds at any frame rate
+        g.pos += (target - g.pos) * (g_motionDt / (g_motionDt + kGlideLag));
+        const float left = target - g.pos;
+        if (left < 0.25f && left > -0.25f) g.pos = target;
+    }
+    g.index = index;
+    g.context = context;
+    g.frame = g_motionFrame;
+    return g.pos;
+}
+
+namespace {
+
 void Save(const Item& it) {
     if (!it.key) return;  // not stored (a test)
     wchar_t value[16];
@@ -1127,6 +1196,10 @@ void SetValue(Item& it, int v) {
     if (v > it.hi) v = it.hi;
     if (v == *it.value) return;
     *it.value = v;
+    if (it.kind == kBool) {  // its knob slides over (DrawItemRow)
+        g_flipItem = &it;
+        g_flipAt = MotionStamp();
+    }
     if (g_unsaved && g_unsaved != &it) FlushUnsaved();
     if (g_dragging && it.key) {
         g_unsaved = &it;  // every step of a drag rewrote the whole ini file on the game thread
@@ -1649,11 +1722,8 @@ void DrawEditBox(float y) {
     DrawText(text, kCr - 10 - tw, y + 10, kText, 18);
 }
 
+// `sel` only picks the colours: the highlight under the selected row is drawn by Draw, which lets it glide between rows.
 void DrawItemRow(Item& it, float y, bool sel) {
-    if (sel) {
-        FillRect(kCx - 12, y + 1, kCr - kCx + 24, kRowH - 2, kSelected);
-        FillRect(kCx - 12, y + 1, 3, kRowH - 2, kAccent);
-    }
     // where the control of the row begins (the switch, the value, the first button or the slider): the label stops before it
     float limit = kSliderX - 22;
     if (it.kind == kBool) {
@@ -1699,7 +1769,8 @@ void DrawItemRow(Item& it, float y, bool sel) {
 
     float cy = y + kRowH / 2;
     if (it.kind == kBool) {
-        Switch(kCr - kSwitchW, cy - kSwitchH / 2, *it.value != 0);
+        const float travel = &it == g_flipItem ? MotionProgress(g_flipAt, kSwitchSeconds) : 1.f;
+        Switch(kCr - kSwitchW, cy - kSwitchH / 2, *it.value != 0, travel);
         return;
     }
     if (sel && g_editing) {
@@ -2004,7 +2075,9 @@ u32 Fade(u32 c) {
 
 void Draw() {
     if (g_rowCount == 0) BuildRows();  // never an empty page
+    SetOverlayFade(g_openAlpha, 0.f);  // the dimming fades in with the panel but does not rise: it covers the whole picture
     FillRect(0, 0, 1280, 720, Fade(0x50000000));  // the same light dimming on every page, so the picture does not change when you switch pages
+    SetOverlayFade(g_openAlpha, g_openRise);
     FillRect(kPx, kPy, kPw, kPh, Fade(kPanelBg));
     FillRect(kPx, kPy, kPw, 3, kAccent);
     FillRect(kPx + kPw - 15, kPy + kPh - 5, 11, 2, kFaint);  // the grip in the corner: drag to resize
@@ -2016,13 +2089,14 @@ void Draw() {
     wsprintfW(ver, g_cfg.language == 1 ? L"version %S" : L"версія %S", kVersion);
     DrawText(ver, kPx + 24, kPy + 52, kFaint, 13);
     FillRect(kPx + 20, kPy + 84, kSideW - 40, 1, kLine);
+    // the section highlight, under the names: it glides from the section before (kept relative to the top of the sidebar)
+    static Glide navGlide;
+    const float navY = kNavTop + GlideTo(navGlide, (float)g_page * kNavH, g_page, 0);
+    FillRect(kPx, navY, kSideW, kNavH, kSelected);
+    FillRect(kPx, navY, 4, kNavH, kAccent);
     for (int p = 0; p < kPageCount; ++p) {
         float y = kNavTop + p * kNavH;
         bool cur = p == g_page;
-        if (cur) {
-            FillRect(kPx, y, kSideW, kNavH, kSelected);
-            FillRect(kPx, y, 4, kNavH, kAccent);
-        }
         DrawText(Tx(g_pages[p].title), kPx + 26, y + 12, cur ? kWhite : kMuted, 17);
     }
 
@@ -2039,7 +2113,22 @@ void Draw() {
         else DrawAbout();
         return;
     }
+    // The row highlight first, under the rows: it glides from the row before (relative to the top of the list) and jumps
+    // on another page, when the list scrolled or across more than 6 rows. Not drawn while the selected row is out of sight.
+    static Glide rowGlide;
     float y = kListTop;
+    for (int r = g_scroll; r < g_rowCount; ++r) {
+        float h = RowHeight(g_rows[r]);
+        if (y + h > kListBottom) break;
+        if (g_rows[r].item >= 0 && g_rows[r].item == g_sel) {
+            const float hy = kListTop + GlideTo(rowGlide, y - kListTop, r, g_page * 100000 + g_scroll);
+            FillRect(kCx - 12, hy + 1, kCr - kCx + 24, kRowH - 2, kSelected);
+            FillRect(kCx - 12, hy + 1, 3, kRowH - 2, kAccent);
+            break;
+        }
+        y += h;
+    }
+    y = kListTop;
     int shown = 0;
     for (int r = g_scroll; r < g_rowCount; ++r) {
         float h = RowHeight(g_rows[r]);
@@ -2291,6 +2380,14 @@ void OpenChanged(bool foreground) {
     Log("menu: %s", g_open ? "opened" : "closed");
     if (g_open) {
         g_swallowEsc = false;
+        g_openedAt = MotionStamp();  // the fade-in starts now; the highlights start on their rows (GlideTo)
+        g_motionFrame += 2;
+        g_flipItem = nullptr;
+        static bool motionLogged = false;
+        if (MotionOn() && !motionLogged) {
+            motionLogged = true;
+            Log("menu: animations on (fade-in 140 ms, glide about 90 ms, switch 120 ms)");
+        }
         return;
     }
     if (g_cfg.hideCursor) SetCursor(nullptr);
@@ -2434,7 +2531,12 @@ void OnFrame(void* device) {
         OpenChanged(foreground);
         return;
     }
+    MotionFrame();
+    g_openAlpha = MotionProgress(g_openedAt, kFadeSeconds);
+    g_openRise = (1.f - g_openAlpha) * kRiseUnits;
+    SetOverlayFade(g_openAlpha, g_openRise);
     Draw();
+    SetOverlayFade(1.f, 0.f);  // the notice and the performance panels are drawn after the menu in the same frame
     OverlayEnd();
 }
 

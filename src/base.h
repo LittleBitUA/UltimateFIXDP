@@ -46,6 +46,7 @@ struct Config {
     int scaleToWindow;       // scale the back buffer to the borderless window ourselves (bilinear, keeps 16:9); 0 = the game's Present fills the window
     int displayDebug;        // log the first frames and changes of the presenting path, and the window around Esc presses
     int menuOpacity;         // how opaque the F10 panel is, percent 20..100
+    int menuAnimations;      // [Menu] Animations: the panel fades in, the selection glides, a switch knob slides
     int language;            // language of the menu: 0 Ukrainian, 1 English
     int menu;                // F10 settings menu inside the game
     int frameCapture;        // [Debug] FrameCapture: Numpad 0 writes one frame, draw by draw, into a capture folder under UltimateFix

@@ -460,6 +460,9 @@ static const char kDefaultIni[] =
     "CheckUpdates=1\r\n"
     "; How opaque the F10 panel is, percent 20..100 (lower: the game shows through). Changes at once.\r\n"
     "Opacity=80\r\n"
+    "; 1 = quiet motion in the F10 menu: the panel fades in (0.14 s), the selection glides to the chosen row and section, a\r\n"
+    "; switch knob slides across. 0 = everything changes at once. The menu always closes at once.\r\n"
+    "Animations=1\r\n"
     "; Place and size of the F10 panel in the 1280x720 picture. Drag the header to move it, the corner to resize it, double-click\r\n"
     "; the corner to put it back (the mod writes these four values itself).\r\n"
     "X=100\r\n"
@@ -892,6 +895,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.menuOpacity = (int)GetPrivateProfileIntW(L"Menu", L"Opacity", 80, ini);
     if (g_cfg.menuOpacity < 20) g_cfg.menuOpacity = 20;
     if (g_cfg.menuOpacity > 100) g_cfg.menuOpacity = 100;
+    g_cfg.menuAnimations = GetPrivateProfileIntW(L"Menu", L"Animations", 1, ini) ? 1 : 0;
     g_cfg.language = (int)GetPrivateProfileIntW(L"Menu", L"Language", -1, ini);
     if (g_cfg.language < 0) {  // not chosen yet: Ukrainian or Russian Windows -> Ukrainian, anything else -> English
         WORD lang = PRIMARYLANGID(GetUserDefaultUILanguage());

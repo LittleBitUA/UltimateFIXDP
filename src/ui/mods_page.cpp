@@ -16,6 +16,15 @@ int g_scroll = 0;  // the first row shown
 // geometry of the last frame, for the mouse
 float g_left = 0, g_top = 0, g_right = 0;
 int g_shown = 0;
+Glide g_glide;              // the row highlight glides like the menu's (GlideTo)
+int g_flipRow = -1;         // the switch flipped last and when: its knob slides over
+long long g_flipAt = 0;
+
+void Toggle(int row) {
+    ModToggle(row);
+    g_flipRow = row;
+    g_flipAt = MotionStamp();
+}
 
 bool English() { return g_cfg.language == 1; }
 const wchar_t* T(const wchar_t* uk, const wchar_t* en) { return English() ? en : uk; }
@@ -77,7 +86,7 @@ void ModsPageInput(bool up, bool down, bool toggle, bool raise, bool lower, bool
     if (down) ++g_sel;
     ClampSelection();
     if (toggle) {
-        if (g_sel < count) ModToggle(g_sel);
+        if (g_sel < count) Toggle(g_sel);
         else OpenModsFolder();
     }
     if ((raise || lower) && g_sel < count) {
@@ -85,6 +94,7 @@ void ModsPageInput(bool up, bool down, bool toggle, bool raise, bool lower, bool
         if (g_sel + dir >= 0 && g_sel + dir < count) {
             ModMove(g_sel, dir);
             g_sel += dir;
+            g_flipRow = -1;  // the rows changed places: the knob must not slide on the other mod
         }
     }
     if (!click || mx < g_left || mx > g_right || my < g_top) return;
@@ -96,13 +106,15 @@ void ModsPageInput(bool up, bool down, bool toggle, bool raise, bool lower, bool
         return;
     }
     const float y = g_top + (float)(row - g_scroll) * kRowH;
-    if (mx >= g_left && mx < g_left + kSwitchW + 8) ModToggle(row);                       // the switch
+    if (mx >= g_left && mx < g_left + kSwitchW + 8) Toggle(row);                          // the switch
     else if (mx >= g_right - 2 * kButtonW - 8 && mx < g_right - kButtonW - 8 && my < y + kButtonH + 8 && row > 0) {  // up
         ModMove(row, -1);
         --g_sel;
+        g_flipRow = -1;
     } else if (mx >= g_right - kButtonW && my < y + kButtonH + 8 && row + 1 < count) {  // down
         ModMove(row, 1);
         ++g_sel;
+        g_flipRow = -1;
     }
 }
 
@@ -147,19 +159,21 @@ void ModsPage(float left, float top, float right, float bottom) {
     g_top = y;
     g_right = right;
     g_shown = 0;
+    // the highlight first, under the rows, gliding from the row before (relative to the top of the list)
+    if (g_sel >= g_scroll && g_sel - g_scroll < fit) {
+        const float hy = y + GlideTo(g_glide, (float)(g_sel - g_scroll) * kRowH, g_sel, g_scroll);
+        FillRect(left - 8, hy - 4, right - left + 16, kRowH - 4, kSelected);
+        FillRect(left - 8, hy - 4, 3, kRowH - 4, kAccent);
+    }
     for (int r = g_scroll; r < rows && g_shown < fit; ++r, ++g_shown) {
         const float ry = y + (float)g_shown * kRowH;
         const bool sel = r == g_sel;
-        if (sel) {
-            FillRect(left - 8, ry - 4, right - left + 16, kRowH - 4, kSelected);
-            FillRect(left - 8, ry - 4, 3, kRowH - 4, kAccent);
-        }
         if (r == count) {  // the action row
             DrawText(T(L"Відкрити теку модів", L"Open the mods folder"), left, ry + 8, sel ? kText : kMuted, 18);
             continue;
         }
         const ModInfo& m = *ModAt(r);
-        Switch(left, ry + 2, m.enabled);
+        Switch(left, ry + 2, m.enabled, r == g_flipRow ? MotionProgress(g_flipAt, kSwitchSeconds) : 1.f);
         wchar_t title[200];
         if (m.version[0] && m.author[0]) wsprintfW(title, L"%s  %s  ·  %s", m.name, m.version, m.author);
         else if (m.version[0]) wsprintfW(title, L"%s  %s", m.name, m.version);

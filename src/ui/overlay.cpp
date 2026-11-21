@@ -232,6 +232,22 @@ float ScaleX() { return g_outputW ? (float)g_outputW / 1280.f : 1.f; }
 float ScaleY() { return g_outputW && g_outputH ? (float)g_outputH / 720.f : ScaleX(); }
 int FontPx(int px) { return (int)((float)px * ScaleY() + 0.5f); }  // the font is rendered at the real size
 
+// The fade of the menu's opening (SetOverlayFade): every overlay primitive multiplies its alpha by g_fadeAlpha and moves
+// down by g_fadeOffset layout units. Applied where the shapes reach back buffer pixels (FillRect, DrawText, RoundPixels),
+// so a shape drawn through another (a square fallback, a framed shape) is faded and moved once, and never in Quad: the
+// final-image passes draw with it too.
+float g_fadeAlpha = 1.f;
+float g_fadeOffset = 0.f;
+
+u32 Faded(u32 argb) {
+    if (g_fadeAlpha >= 1.f) return argb;
+    const int a = (int)((float)(argb >> 24) * g_fadeAlpha + 0.5f);
+    return (argb & 0x00FFFFFFu) | ((u32)(a < 0 ? 0 : a > 255 ? 255 : a) << 24);
+}
+
+// The offset in whole back buffer pixels: the text stays on whole pixels while it rises (see DrawText).
+float FadeOffsetPixels() { return g_fadeOffset != 0.f ? SnapWhole(g_fadeOffset * ScaleY()) : 0.f; }
+
 // Draws a quad in back buffer pixels.
 void Quad(float x0, float y0, float x1, float y1, u32 color, float u0, float v0, float u1, float v1) {
     // -0.5 aligns texels with pixels for pre-transformed vertices
@@ -379,7 +395,13 @@ void FillRect(float x, float y, float w, float h, u32 argb) {
     float x0, x1, y0, y1;
     SnapSpan(x, w, ScaleX(), &x0, &x1);
     SnapSpan(y, h, ScaleY(), &y0, &y1);
-    Quad(x0, y0, x1, y1, argb, 0.f, 0.f, 1.f, 1.f);
+    const float o = FadeOffsetPixels();
+    Quad(x0, y0 + o, x1, y1 + o, Faded(argb), 0.f, 0.f, 1.f, 1.f);
+}
+
+void SetOverlayFade(float alpha, float offsetY) {
+    g_fadeAlpha = alpha < 0.f ? 0.f : alpha > 1.f ? 1.f : alpha;
+    g_fadeOffset = offsetY;
 }
 
 // ---- Rounded shapes ---------------------------------------------------------------------------------------------
@@ -471,6 +493,10 @@ void EndRound() { SetSampler(SAMP_MIPFILTER, 0); }
 // A rounded rectangle in back buffer pixels, x0..x1 and y0..y1 on whole pixels, corner radius r in pixels (any fraction).
 void RoundPixels(float x0, float y0, float x1, float y1, float r, u32 argb) {
     if (x1 <= x0 || y1 <= y0) return;
+    const float o = FadeOffsetPixels();  // the menu's fade-in (SetOverlayFade), once per shape
+    y0 += o;
+    y1 += o;
+    argb = Faded(argb);
     const float half = (x1 - x0 < y1 - y0 ? x1 - x0 : y1 - y0) * 0.5f;
     if (r > half) r = half;
     if (r < 0.f) r = 0.f;
@@ -538,19 +564,40 @@ void FillRoundFramed(float x, float y, float w, float h, float r, u32 fill, u32 
     EndRound();
 }
 
-void Switch(float x, float y, bool on) {
+namespace {
+// a + (b - a) * t for every channel of two colours, t 0..1
+u32 MixColor(u32 a, u32 b, float t) {
+    if (t <= 0.f) return a;
+    if (t >= 1.f) return b;
+    u32 out = 0;
+    for (int shift = 0; shift < 32; shift += 8) {
+        const float ca = (float)((a >> shift) & 0xFF), cb = (float)((b >> shift) & 0xFF);
+        out |= (u32)(int)(ca + (cb - ca) * t + 0.5f) << shift;
+    }
+    return out;
+}
+}  // namespace
+
+void Switch(float x, float y, bool on, float travel) {
     float x0, x1, y0, y1;
     SnapSpan(x, kSwitchW, ScaleX(), &x0, &x1);
     SnapSpan(y, kSwitchH, ScaleY(), &y0, &y1);
     // the knob is inset 3 units (18 of 24 at 1x, as the site's switch), in whole pixels on every side
     const float inset = SnapWhole(3.f * ScaleY()), knob = (y1 - y0) - 2.f * inset;
-    const float kx = on ? x1 - inset - knob : x0 + inset;
+    // Where the knob is between its two rests (0 = off, 1 = on): `travel` is how far it has come from the other side since
+    // the flip. The knob stays on whole pixels and the track colour follows it from grey to red.
+    if (travel < 0.f) travel = 0.f;
+    if (travel > 1.f) travel = 1.f;
+    const float at = on ? travel : 1.f - travel;
+    const float offX = x0 + inset, onX = x1 - inset - knob;
+    const float kx = SnapWhole(offX + (onX - offX) * at);
+    const u32 track = MixColor(theme::kLine2, theme::kAccent, at);
     if (!BeginRound()) {  // square, as the switch was before
-        FillRect(x, y, kSwitchW, kSwitchH, on ? theme::kAccent : theme::kLine2);
+        FillRect(x, y, kSwitchW, kSwitchH, track);
         FillRect(kx / ScaleX(), (y0 + inset) / ScaleY(), knob / ScaleX(), knob / ScaleY(), theme::kWhite);
         return;
     }
-    RoundPixels(x0, y0, x1, y1, (y1 - y0) * 0.5f, on ? theme::kAccent : theme::kLine2);
+    RoundPixels(x0, y0, x1, y1, (y1 - y0) * 0.5f, track);
     RoundPixels(kx, y0 + inset, kx + knob, y0 + inset + knob, knob * 0.5f, theme::kWhite);
     EndRound();
 }
@@ -587,8 +634,8 @@ float DrawText(const wchar_t* text, float x, float y, u32 argb, int px, int weig
     SetTSS(TSS_ALPHAARG2, TA_DIFFUSE);
     // On whole pixels: each texel of the GDI bitmap lands on exactly one pixel. A fractional start (every odd layout unit at
     // scale 1.5, any centred label, a panel dragged by the mouse) made the bilinear sampler smear the glyphs over two pixels.
-    float px0 = SnapWhole(x * ScaleX()) - 2.f, py0 = SnapWhole(y * ScaleY()) - 2.f;
-    Quad(px0, py0, px0 + (float)e->width, py0 + (float)e->height, argb, 0.f, 0.f, 1.f, 1.f);
+    float px0 = SnapWhole(x * ScaleX()) - 2.f, py0 = SnapWhole(y * ScaleY()) - 2.f + FadeOffsetPixels();
+    Quad(px0, py0, px0 + (float)e->width, py0 + (float)e->height, Faded(argb), 0.f, 0.f, 1.f, 1.f);
     return (float)(e->width - 4) / ScaleX();
 }
 
