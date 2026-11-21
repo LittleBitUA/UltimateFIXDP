@@ -425,54 +425,44 @@ bool CurrentPsIsSmoke() {
 }
 // With TraceWater: each lit particle draw (the prologue's black smoke) explained once per particle texture, at most 8, in
 // UltimateFix\smoke_<caller>_<texture>.txt with its vertex shader, the vertices and its texture as PNG.
-// SmokeFix. The prologue's smoke is an animated model of sheets drawn with the lit particle shader (blended, no depth writes)
-// and a DXT3 texture whose colour blocks are all black: the smoke is only in the alpha. The shader multiplies the texture colour by
-// the light, so on PC it came out as a black patch; the Xbox 360 shows light grey wisps, i.e. its texture gave the colour as well
-// (most likely a one-channel DXT3A, read as grey and alpha alike, that the port turned into DXT3 with a black colour). For such a
-// texture a copy is made once whose colour blocks carry the alpha as grey (per 4x4 block: the lightest and darkest alpha as the two
-// end colours, each pixel at the nearest of the four steps), and it is bound in its place for these draws only.
-struct SmokeCopy {
+// SmokeFix. The prologue's smoke has a volume (FUN_006D69E0, the G-buffer material at 006D6E1B) cut by the alpha of a 256x256
+// cloud picture at 0.953: only the densest wisps are kept, which the light shows as grey streaks over the dark smoke sheets. The
+// cloud is made each frame by FUN_006DB2C0 from three scrolled layers of one noise texture (the draw at 006DB5D9). On PC that noise
+// is DXT1, which has no alpha (always 1), so the cloud's alpha is full everywhere, nothing is cut and the volume is one solid dark
+// patch. On the Xbox 360 the noise most likely came in a one-channel format read as grey and alpha alike. For that draw the noise
+// is replaced by a copy (A8R8G8B8, all levels) whose alpha is its grey; the colour stays as it was.
+struct NoiseCopy {
     void* src;
-    void* copy;  // nullptr: not a black DXT3 (left as it is)
+    void* copy;  // nullptr: not a DXT1 (left as it is)
 };
-SmokeCopy g_smoke[64];
-int g_smokeCount = 0;
+NoiseCopy g_noise[8];
+int g_noiseCount = 0;
 
-u16 Grey565(u32 v) { return (u16)((((v * 31 + 127) / 255) << 11) | (((v * 63 + 127) / 255) << 5) | ((v * 31 + 127) / 255)); }
-
-// One DXT3 block: the colour half rebuilt from the alpha half
-void GreyFromAlpha(const u8* in, u8* out) {
-    u32 a[16], lo = 255, hi = 0;
+// One DXT1 block to 16 pixels A8R8G8B8 (alpha = the grey of the colour)
+void DecodeDxt1Grey(const u8* b, u32* out16) {
+    const u32 c0 = b[0] | b[1] << 8, c1 = b[2] | b[3] << 8;
+    u32 r[4], g[4], bl[4];
+    r[0] = ((c0 >> 11) & 31) * 255 / 31; g[0] = ((c0 >> 5) & 63) * 255 / 63; bl[0] = (c0 & 31) * 255 / 31;
+    r[1] = ((c1 >> 11) & 31) * 255 / 31; g[1] = ((c1 >> 5) & 63) * 255 / 63; bl[1] = (c1 & 31) * 255 / 31;
+    if (c0 > c1) {
+        r[2] = (2 * r[0] + r[1]) / 3; g[2] = (2 * g[0] + g[1]) / 3; bl[2] = (2 * bl[0] + bl[1]) / 3;
+        r[3] = (r[0] + 2 * r[1]) / 3; g[3] = (g[0] + 2 * g[1]) / 3; bl[3] = (bl[0] + 2 * bl[1]) / 3;
+    } else {
+        r[2] = (r[0] + r[1]) / 2; g[2] = (g[0] + g[1]) / 2; bl[2] = (bl[0] + bl[1]) / 2;
+        r[3] = g[3] = bl[3] = 0;
+    }
+    const u32 idx = b[4] | b[5] << 8 | b[6] << 16 | (u32)b[7] << 24;
     for (int i = 0; i < 16; ++i) {
-        const u32 nib = (in[i / 2] >> ((i & 1) * 4)) & 15;
-        a[i] = nib * 17;
-        if (a[i] < lo) lo = a[i];
-        if (a[i] > hi) hi = a[i];
+        const u32 k = (idx >> (i * 2)) & 3;
+        const u32 grey = (r[k] * 77 + g[k] * 150 + bl[k] * 29) >> 8;
+        out16[i] = grey << 24 | r[k] << 16 | g[k] << 8 | bl[k];
     }
-    for (int i = 0; i < 8; ++i) out[i] = in[i];
-    const u16 c0 = Grey565(hi), c1 = Grey565(lo);
-    u32 idx = 0;
-    if (hi > lo) {
-        for (int i = 0; i < 16; ++i) {
-            const u32 t = (a[i] - lo) * 6 / (hi - lo);  // 0..6: nearest of 0, 1/3, 2/3, 1 in sixths
-            const u32 code = t >= 5 ? 0 : t >= 3 ? 2 : t >= 1 ? 3 : 1;  // DXT3 colour: 0 = c0, 1 = c1, 2 = 2/3 c0, 3 = 1/3 c0
-            idx |= code << (i * 2);
-        }
-    }
-    out[8] = (u8)c0;
-    out[9] = (u8)(c0 >> 8);
-    out[10] = (u8)c1;
-    out[11] = (u8)(c1 >> 8);
-    out[12] = (u8)idx;
-    out[13] = (u8)(idx >> 8);
-    out[14] = (u8)(idx >> 16);
-    out[15] = (u8)(idx >> 24);
 }
 
-void* SmokeCopyOf(void* dev, void* tex) {
-    for (int i = 0; i < g_smokeCount; ++i) if (g_smoke[i].src == tex) return g_smoke[i].copy;
-    if (g_smokeCount >= 64) return nullptr;
-    SmokeCopy& e = g_smoke[g_smokeCount++];
+void* NoiseCopyOf(void* dev, void* tex) {
+    for (int i = 0; i < g_noiseCount; ++i) if (g_noise[i].src == tex) return g_noise[i].copy;
+    if (g_noiseCount >= 8) return nullptr;
+    NoiseCopy& e = g_noise[g_noiseCount++];
     e.src = tex;
     e.copy = nullptr;
     void** vt = *(void***)tex;
@@ -488,48 +478,15 @@ void* SmokeCopyOf(void* dev, void* tex) {
     const UINT levels = ((LevelsFn)vt[13])(tex);
     u32 d0[8] = {};
     if (!levels || FAILED(((DescFn)vt[17])(tex, 0, d0))) return nullptr;
-    if (d0[0] != 0x33545844u /*DXT3*/) {
-        Log("smoke: a %ux%u smoke texture of format %08X (not DXT3), left as it is", d0[6], d0[7], d0[0]);
-        return nullptr;
-    }
-    // black everywhere in the first level? Decoded: a block is black when every colour its pixels pick is black (an end colour
-    // that no pixel uses may hold anything)
-    Locked lr = {0, nullptr};
-    if (FAILED(((LockFn)vt[19])(tex, 0, &lr, nullptr, 0x10 /*READONLY*/)) || !lr.bits) {
-        Log("smoke: a %ux%u DXT3 smoke texture could not be read, left as it is", d0[6], d0[7]);
-        return nullptr;
-    }
-    bool black = true;
-    u32 badX = 0, badY = 0, badC0 = 0, badC1 = 0;
-    const UINT bw = (d0[6] + 3) / 4, bh = (d0[7] + 3) / 4;
-    for (UINT y = 0; y < bh && black; ++y)
-        for (UINT x = 0; x < bw && black; ++x) {
-            const u8* b = (const u8*)lr.bits + y * lr.pitch + x * 16;
-            const u16 c0 = (u16)(b[8] | b[9] << 8), c1 = (u16)(b[10] | b[11] << 8);
-            const u32 idx = b[12] | b[13] << 8 | b[14] << 16 | (u32)b[15] << 24;
-            bool uses[4] = {false, false, false, false};
-            for (int i = 0; i < 16; ++i) uses[(idx >> (i * 2)) & 3] = true;
-            // 0 = c0, 1 = c1, 2 and 3 mix both; a 565 colour below 8 in every channel counts as black
-            auto dark = [](u16 c) { return ((c >> 11) & 31) <= 1 && ((c >> 5) & 63) <= 2 && (c & 31) <= 1; };
-            const bool ok = (!uses[0] || dark(c0)) && (!uses[1] || dark(c1)) && (!(uses[2] || uses[3]) || (dark(c0) && dark(c1)));
-            if (!ok) {
-                black = false;
-                badX = x;
-                badY = y;
-                badC0 = c0;
-                badC1 = c1;
-            }
-        }
-    ((UnlockFn)vt[20])(tex, 0);
-    if (!black) {
-        Log("smoke: a %ux%u DXT3 smoke texture has colour (block %u,%u: %04X %04X), left as it is", d0[6], d0[7], badX, badY, badC0, badC1);
+    if (d0[0] != 0x31545844u /*DXT1*/) {
+        Log("smoke: the cloud's noise is %ux%u of format %08X (not DXT1), left as it is", d0[6], d0[7], d0[0]);
         return nullptr;
     }
     void* copy = nullptr;
     CreateTextureFn make = r_CreateTexture ? r_CreateTexture : (CreateTextureFn)(*(void***)dev)[kCreateTexture];
-    const HRESULT made = make(dev, d0[6], d0[7], levels, 0, 0x33545844u, 1 /*MANAGED*/, &copy, nullptr);
+    const HRESULT made = make(dev, d0[6], d0[7], levels, 0, 21 /*A8R8G8B8*/, 1 /*MANAGED*/, &copy, nullptr);
     if (FAILED(made) || !copy) {
-        Log("smoke: the grey copy of a %ux%u texture could not be made (%08X)", d0[6], d0[7], (u32)made);
+        Log("smoke: the copy of the cloud's noise could not be made (%08X)", (u32)made);
         return nullptr;
     }
     void** cvt = *(void***)copy;
@@ -537,44 +494,40 @@ void* SmokeCopyOf(void* dev, void* tex) {
     for (UINT lv = 0; lv < levels && ok; ++lv) {
         u32 d[8] = {};
         Locked s = {0, nullptr}, t = {0, nullptr};
-        ok = SUCCEEDED(((DescFn)vt[17])(tex, lv, d)) && SUCCEEDED(((LockFn)vt[19])(tex, lv, &s, nullptr, 0x10)) && s.bits;
+        ok = SUCCEEDED(((DescFn)vt[17])(tex, lv, d)) && SUCCEEDED(((LockFn)vt[19])(tex, lv, &s, nullptr, 0x10 /*READONLY*/)) && s.bits;
         if (!ok) break;
         ok = SUCCEEDED(((LockFn)cvt[19])(copy, lv, &t, nullptr, 0)) && t.bits;
         if (ok) {
-            const UINT w = (d[6] + 3) / 4, h = (d[7] + 3) / 4;
-            for (UINT y = 0; y < h; ++y)
-                for (UINT x = 0; x < w; ++x) GreyFromAlpha((const u8*)s.bits + y * s.pitch + x * 16, (u8*)t.bits + y * t.pitch + x * 16);
+            const UINT w = d[6], h = d[7];
+            for (UINT by = 0; by < (h + 3) / 4; ++by)
+                for (UINT bx = 0; bx < (w + 3) / 4; ++bx) {
+                    u32 px[16];
+                    DecodeDxt1Grey((const u8*)s.bits + by * s.pitch + bx * 8, px);
+                    for (UINT y = 0; y < 4 && by * 4 + y < h; ++y)
+                        for (UINT x = 0; x < 4 && bx * 4 + x < w; ++x)
+                            ((u32*)((u8*)t.bits + (by * 4 + y) * t.pitch))[bx * 4 + x] = px[y * 4 + x];
+                }
             ((UnlockFn)cvt[20])(copy, lv);
         }
         ((UnlockFn)vt[20])(tex, lv);
     }
     if (!ok) {
-        Log("smoke: the grey copy of a %ux%u texture could not be filled", d0[6], d0[7]);
+        Log("smoke: the copy of the cloud's noise could not be filled");
         ((RelFn)cvt[2])(copy);
         return nullptr;
     }
     e.copy = copy;
-    Log("smoke: a black %ux%u DXT3 smoke texture got its grey from the alpha (%u levels, %d so far)", d0[6], d0[7], levels, g_smokeCount);
+    Log("smoke: the cloud's %ux%u DXT1 noise got its alpha from the grey (%u levels): the smoke volume is cut into wisps again", d0[6], d0[7],
+        levels);
     return copy;
 }
 
-// The texture to draw the smoke with, or nullptr when this draw is not black smoke
-void* SmokeTextureFor(void* dev) {
-    if (!g_cfg.smokeFix || !g_stageTex[0] || !CurrentPsIsSmoke()) return nullptr;
-    typedef HRESULT(WINAPI * GetRsFn)(void*, DWORD, DWORD*);
-    GetRsFn getRs = (GetRsFn)(*(void***)dev)[58];
-    DWORD blend = 0, zwrite = 1;
-    getRs(dev, 27 /*ALPHABLENDENABLE*/, &blend);
-    getRs(dev, 14 /*ZWRITEENABLE*/, &zwrite);
-    if (!blend || zwrite) return nullptr;
+// The noise to draw the cloud with, or nullptr when this is not the cloud draw (FUN_006DB2C0's DrawPrimitive returns to 006DB5D9)
+void* SmokeTextureFor(void* dev, u32 from) {
+    if (!g_cfg.smokeFix || from != 0x6DB5D9u || !g_stageTex[0]) return nullptr;
     typedef DWORD(WINAPI * TypeFn)(void*);
-    static bool s_seen = false;
-    if (!s_seen) {
-        s_seen = true;
-        Log("smoke: the first blended draw of the lit particle shader (SmokeFix looks at its texture)");
-    }
     if (((TypeFn)(*(void***)g_stageTex[0])[10])(g_stageTex[0]) != 3) return nullptr;
-    return SmokeCopyOf(dev, g_stageTex[0]);
+    return NoiseCopyOf(dev, g_stageTex[0]);
 }
 
 // With TraceWater: every draw that reads the 256x256 cloud target (the smoke's noise picture) explained once per caller in
@@ -1143,7 +1096,7 @@ HRESULT WINAPI H_DrawIp(void* dev, DWORD prim, INT base, UINT minIdx, UINT verts
         ExplainCloudWriter(dev, from);
     }
     if (g_cfg.traceWater && HuntSkips(dev, from, count)) return 0;
-    if (void* grey = SmokeTextureFor(dev)) {
+    if (void* grey = SmokeTextureFor(dev, from)) {
         void* own = g_stageTex[0];
         r_SetTexture(dev, 0, grey);
         const HRESULT hr = r_DrawIp(dev, prim, base, minIdx, verts, start, count);
@@ -1163,7 +1116,7 @@ HRESULT WINAPI H_DrawP(void* dev, DWORD prim, UINT start, UINT count) {
         ExplainCloudWriter(dev, from);
     }
     if (g_cfg.traceWater && HuntSkips(dev, from, count)) return 0;
-    if (void* grey = SmokeTextureFor(dev)) {
+    if (void* grey = SmokeTextureFor(dev, from)) {
         void* own = g_stageTex[0];
         r_SetTexture(dev, 0, grey);
         const HRESULT hr = r_DrawP(dev, prim, start, count);
