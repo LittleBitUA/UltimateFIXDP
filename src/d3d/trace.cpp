@@ -255,14 +255,39 @@ bool NamesMirror(const DWORD* code) {
     return false;
 }
 
-// Every pixel shader with its bytecode, so one draw can be explained (DumpDraw).
+// Every pixel shader with its bytecode, so one draw can be explained (DumpDraw), and whether it writes a second colour target
+// (oC1: the normal of the G-buffer pass).
 void* g_psObj[2048];
 const DWORD* g_psCode[2048];
+bool g_psOC1[2048];
 int g_psCount = 0;
+
+// True when the shader bytecode writes oC1. Instructions are walked by their length field (ps_2_0 and later), and the def
+// instructions (their float values could look like register tokens) are skipped.
+bool WritesOC1(const DWORD* code) {
+    if (!code || (code[0] & 0xFFFF0000u) != 0xFFFF0000u || ((code[0] >> 8) & 0xFF) < 2) return false;
+    for (int i = 1; i < 8192;) {
+        const DWORD tok = code[i];
+        if (tok == 0x0000FFFFu) break;                       // end
+        if ((tok & 0xFFFF) == 0xFFFE) { i += 1 + (int)((tok >> 16) & 0x7FFF); continue; }  // comment
+        const DWORD op = tok & 0xFFFF, len = (tok >> 24) & 0xF;
+        if (op != 0x51 && op != 0x52 && op != 0x53 && len) {
+            const DWORD dst = code[i + 1];
+            const DWORD type = ((dst >> 28) & 7) | ((dst >> 8) & 0x18);
+            if ((dst & 0x80000000u) && type == 8 /*COLOROUT*/ && (dst & 0x7FF) == 1) return true;
+        }
+        i += 1 + (int)len;
+    }
+    return false;
+}
+bool CurrentPsWritesOC1() {
+    for (int i = 0; i < g_psCount; ++i) if (g_psObj[i] == g_curPs) return g_psOC1[i];
+    return false;
+}
 
 HRESULT WINAPI H_CreatePs(void* dev, const DWORD* code, void** out) {
     HRESULT hr = r_CreatePs(dev, code, out);
-    if (SUCCEEDED(hr) && out && *out && g_psCount < 2048) { g_psObj[g_psCount] = *out; g_psCode[g_psCount++] = code; }
+    if (SUCCEEDED(hr) && out && *out && g_psCount < 2048) { g_psObj[g_psCount] = *out; g_psCode[g_psCount] = code; g_psOC1[g_psCount++] = WritesOC1(code); }
     if (SUCCEEDED(hr) && out && *out && NamesMirror(code) && g_waterShaderCount < 512) {
         g_waterShaders[g_waterShaderCount++] = *out;
         if (g_waterShaderCount == 1) Log("water: water pixel shaders recognised (g_vMirror); the first is from %08X", (u32)(uintptr_t)code);
@@ -293,6 +318,7 @@ bool NoteWaterDraw(UINT count, u32 from) {
     if (!g_curPs) return false;
     bool water = false;
     for (int i = 0; i < g_waterShaderCount && !water; ++i) water = g_waterShaders[i] == g_curPs;
+    if (!g_cfg.traceWater) return water;  // the hooks are also in for FogFix: no log lines then
     if (water && g_waterKeyCount < 40) {
         {
             u32 key = (u32)(uintptr_t)g_curPs * 31u + (u32)(uintptr_t)g_stageTex[0] * 7u + (u32)(uintptr_t)g_stageTex[1] * 13u +
@@ -430,6 +456,14 @@ HRESULT WINAPI H_DrawIp(void* dev, DWORD prim, INT base, UINT minIdx, UINT verts
 HRESULT WINAPI H_DrawIp(void* dev, DWORD prim, INT base, UINT minIdx, UINT verts, UINT start, UINT count) {
     const u32 from = Caller();
     if (g_cfg.traceWater && from == 0x6D6E1Bu) DumpDraw(dev, from);  // the prologue fog
+    // FogFix: the smoke volumes (the prologue's doorways) are drawn by FUN_006D69E0 into the G-buffer like a solid wall: the
+    // depth/normal shader (it writes oC1) keeps every pixel whose cloud alpha is 0.953 or more, and the cloud target (256x256)
+    // has alpha 1 on PC, so the whole volume becomes a dark surface. That one draw is left out; nothing else is touched.
+    if (g_cfg.fogFix && from == 0x6D6E1Bu && SmallSquareTarget(g_stageTex[0]) == 256 && CurrentPsWritesOC1()) {
+        static int told = 0;
+        if (!told++) Log("fog: a smoke volume left out of the G-buffer (it was drawn there as a solid dark wall)");
+        return 0;
+    }
     const bool w = NoteWaterDraw(count, from);
     return WaterDraw(dev, w, [&] { return r_DrawIp(dev, prim, base, minIdx, verts, start, count); });
 }
@@ -516,7 +550,7 @@ void PatchDevice(void* dev) {
         bool t = PatchSlot(vt, kSetTexture, (void*)H_SetTexture, (void**)&r_SetTexture);
         Log("d3d: icon atlas swap hooked (%d)", t);
     }
-    if (g_cfg.traceWater || g_cfg.waterTest) {
+    if (g_cfg.traceWater || g_cfg.waterTest || g_cfg.fogFix) {
         const bool a = PatchSlot(vt, kSetPixelShaderConstantF, (void*)H_SetPsConstF, (void**)&r_SetPsConstF);
         const bool b = PatchSlot(vt, kSetVertexShaderConstantF, (void*)H_SetVsConstF, (void**)&r_SetVsConstF);
         const bool c = PatchSlot(vt, kSetTexture, (void*)H_SetTexture, (void**)&r_SetTexture);
@@ -525,8 +559,11 @@ void PatchDevice(void* dev) {
         const bool f = PatchSlot(vt, kDrawIndexedPrimitive, (void*)H_DrawIp, (void**)&r_DrawIp);
         const bool g = PatchSlot(vt, kDrawPrimitive, (void*)H_DrawP, (void**)&r_DrawP);
         g_waterHooked = a && f && g;
-        Log("water: diagnostic hooked (%d%d%d%d%d%d%d): each distinct water draw goes to the log once; Numpad 1 switches WaterTest", a, b, c, d,
-            e, f, g);
+        if (g_cfg.traceWater || g_cfg.waterTest)
+            Log("water: diagnostic hooked (%d%d%d%d%d%d%d): each distinct water draw goes to the log once; Numpad 1 switches WaterTest", a, b,
+                c, d, e, f, g);
+        else
+            Log("fog: draw hooks in (%d%d%d): smoke volumes are kept out of the G-buffer", c, d && e, f);
     }
     if (g_cfg.shadowPrecision && !g_cfg.traceResources)
         PatchSlot(vt, kCreateTexture, (void*)H_CreateTexture, (void**)&r_CreateTexture);

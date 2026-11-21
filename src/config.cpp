@@ -84,6 +84,9 @@ static const char kDefaultIni[] =
     "AutoLargeAddress=1\r\n"
     "; 1 = the stick-waggle QTE (alternate A/D) counts every swap as at 60 FPS; above 60 the game counted each swap less. Restart needed.\r\n"
     "QteFix=1\r\n"
+    "; 1 = smoke volumes (the doorways of the prologue) are not drawn into the G-buffer: the PC port drew them there as a solid\r\n"
+    "; wall, which lit as a black hole. Restart needed.\r\n"
+    "FogFix=1\r\n"
     "; 1 = the lock-on aims at the chest. The game aims at the waist bone and lowers the point by a tenth of the distance\r\n"
     "; (at 6 m the knees). This removes the drop and aims LockOnHeight tenths of a unit above the waist. Restart needed.\r\n"
     "LockOnAim=1\r\n"
@@ -899,6 +902,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.compressBackups = GetPrivateProfileIntW(L"Save", L"CompressBackups", 1, ini) ? 1 : 0;
     g_cfg.fasterLoading = GetPrivateProfileIntW(L"Fixes", L"FasterLoading", 1, ini) ? 1 : 0;
     g_cfg.qteFix = GetPrivateProfileIntW(L"Fixes", L"QteFix", 1, ini) ? 1 : 0;
+    g_cfg.fogFix = GetPrivateProfileIntW(L"Fixes", L"FogFix", 1, ini) ? 1 : 0;
     g_cfg.lockOnAim = GetPrivateProfileIntW(L"Fixes", L"LockOnAim", 1, ini) ? 1 : 0;
     g_cfg.lockOnHeight = (int)GetPrivateProfileIntW(L"Fixes", L"LockOnHeight", 40, ini);
     if (g_cfg.lockOnHeight < -100) g_cfg.lockOnHeight = -100;
