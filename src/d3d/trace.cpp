@@ -487,22 +487,51 @@ void* SmokeCopyOf(void* dev, void* tex) {
     };
     const UINT levels = ((LevelsFn)vt[13])(tex);
     u32 d0[8] = {};
-    if (!levels || FAILED(((DescFn)vt[17])(tex, 0, d0)) || d0[0] != 0x33545844u /*DXT3*/) return nullptr;
-    // black colour blocks everywhere in the first level?
+    if (!levels || FAILED(((DescFn)vt[17])(tex, 0, d0))) return nullptr;
+    if (d0[0] != 0x33545844u /*DXT3*/) {
+        Log("smoke: a %ux%u smoke texture of format %08X (not DXT3), left as it is", d0[6], d0[7], d0[0]);
+        return nullptr;
+    }
+    // black everywhere in the first level? Decoded: a block is black when every colour its pixels pick is black (an end colour
+    // that no pixel uses may hold anything)
     Locked lr = {0, nullptr};
-    if (FAILED(((LockFn)vt[19])(tex, 0, &lr, nullptr, 0x10 /*READONLY*/)) || !lr.bits) return nullptr;
+    if (FAILED(((LockFn)vt[19])(tex, 0, &lr, nullptr, 0x10 /*READONLY*/)) || !lr.bits) {
+        Log("smoke: a %ux%u DXT3 smoke texture could not be read, left as it is", d0[6], d0[7]);
+        return nullptr;
+    }
     bool black = true;
+    u32 badX = 0, badY = 0, badC0 = 0, badC1 = 0;
     const UINT bw = (d0[6] + 3) / 4, bh = (d0[7] + 3) / 4;
     for (UINT y = 0; y < bh && black; ++y)
         for (UINT x = 0; x < bw && black; ++x) {
             const u8* b = (const u8*)lr.bits + y * lr.pitch + x * 16;
-            black = !b[8] && !b[9] && !b[10] && !b[11];
+            const u16 c0 = (u16)(b[8] | b[9] << 8), c1 = (u16)(b[10] | b[11] << 8);
+            const u32 idx = b[12] | b[13] << 8 | b[14] << 16 | (u32)b[15] << 24;
+            bool uses[4] = {false, false, false, false};
+            for (int i = 0; i < 16; ++i) uses[(idx >> (i * 2)) & 3] = true;
+            // 0 = c0, 1 = c1, 2 and 3 mix both; a 565 colour below 8 in every channel counts as black
+            auto dark = [](u16 c) { return ((c >> 11) & 31) <= 1 && ((c >> 5) & 63) <= 2 && (c & 31) <= 1; };
+            const bool ok = (!uses[0] || dark(c0)) && (!uses[1] || dark(c1)) && (!(uses[2] || uses[3]) || (dark(c0) && dark(c1)));
+            if (!ok) {
+                black = false;
+                badX = x;
+                badY = y;
+                badC0 = c0;
+                badC1 = c1;
+            }
         }
     ((UnlockFn)vt[20])(tex, 0);
-    if (!black) return nullptr;
+    if (!black) {
+        Log("smoke: a %ux%u DXT3 smoke texture has colour (block %u,%u: %04X %04X), left as it is", d0[6], d0[7], badX, badY, badC0, badC1);
+        return nullptr;
+    }
     void* copy = nullptr;
     CreateTextureFn make = r_CreateTexture ? r_CreateTexture : (CreateTextureFn)(*(void***)dev)[kCreateTexture];
-    if (FAILED(make(dev, d0[6], d0[7], levels, 0, 0x33545844u, 1 /*MANAGED*/, &copy, nullptr)) || !copy) return nullptr;
+    const HRESULT made = make(dev, d0[6], d0[7], levels, 0, 0x33545844u, 1 /*MANAGED*/, &copy, nullptr);
+    if (FAILED(made) || !copy) {
+        Log("smoke: the grey copy of a %ux%u texture could not be made (%08X)", d0[6], d0[7], (u32)made);
+        return nullptr;
+    }
     void** cvt = *(void***)copy;
     bool ok = true;
     for (UINT lv = 0; lv < levels && ok; ++lv) {
@@ -520,6 +549,7 @@ void* SmokeCopyOf(void* dev, void* tex) {
         ((UnlockFn)vt[20])(tex, lv);
     }
     if (!ok) {
+        Log("smoke: the grey copy of a %ux%u texture could not be filled", d0[6], d0[7]);
         ((RelFn)cvt[2])(copy);
         return nullptr;
     }
@@ -538,6 +568,11 @@ void* SmokeTextureFor(void* dev) {
     getRs(dev, 14 /*ZWRITEENABLE*/, &zwrite);
     if (!blend || zwrite) return nullptr;
     typedef DWORD(WINAPI * TypeFn)(void*);
+    static bool s_seen = false;
+    if (!s_seen) {
+        s_seen = true;
+        Log("smoke: the first blended draw of the lit particle shader (SmokeFix looks at its texture)");
+    }
     if (((TypeFn)(*(void***)g_stageTex[0])[10])(g_stageTex[0]) != 3) return nullptr;
     return SmokeCopyOf(dev, g_stageTex[0]);
 }
