@@ -226,6 +226,12 @@ static const char kDefaultIni[] =
     "; 0 = as the game; 10 = one stop brighter). The game keeps adapting to the light as before. Changes at once.\r\n"
     "BloomStrength=100\r\n"
     "ExposureComp=0\r\n"
+    "; 1 = the game's bloom and the blur of its depth of field are read from their small buffers with a smooth (bicubic\r\n"
+    "; B-spline) filter instead of one bilinear tap: at 1440p and 4K the halos of lamps and headlights and the out-of-focus\r\n"
+    "; edges lose their square steps. The same brightness, a slightly wider glow. Helps most with ScalePostBuffers=0 (with 1\r\n"
+    "; the buffers are already larger). The final picture is then drawn with the mod's copy of the game's shader, with the\r\n"
+    "; PC colours unless XboxLook is on; if that copy cannot be built, the game's own shader draws. Changes at once.\r\n"
+    "SmoothBloom=1\r\n"
     "; The PC port darkens the picture by 0.85 (and 0.75 more in one cutscene state); the console did not.\r\n"
     "; 1 = remove the factors (about 15% brighter). Changes at once.\r\n"
     "XboxExposure=0\r\n"
@@ -795,6 +801,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.bloomStrength = (int)GetPrivateProfileIntW(L"Graphics", L"BloomStrength", 100, ini);
     if (g_cfg.bloomStrength < 0) g_cfg.bloomStrength = 0;
     if (g_cfg.bloomStrength > 300) g_cfg.bloomStrength = 300;
+    g_cfg.smoothBloom = GetPrivateProfileIntW(L"Graphics", L"SmoothBloom", 1, ini) ? 1 : 0;
     g_cfg.exposureComp = (int)GetPrivateProfileIntW(L"Graphics", L"ExposureComp", 0, ini);
     if (g_cfg.exposureComp < -30) g_cfg.exposureComp = -30;
     if (g_cfg.exposureComp > 30) g_cfg.exposureComp = 30;
@@ -856,6 +863,7 @@ void LoadConfig(const wchar_t* ini) {
         g_cfg.antialias = 0;
         g_cfg.ambientOcclusion = 0;
         g_cfg.xboxLook = 0;  // its composite hook (the SSAO one) and its world test are not installed in this mode
+        g_cfg.smoothBloom = 0;  // the same composite hook
         g_cfg.sharpen = 0;
         g_cfg.frameStats = 0;
         g_cfg.perfOverlay = 0;

@@ -30,12 +30,17 @@ bool BuildPixelShader(void* device, const char* source, size_t length, void** sh
 void FinalImagePass(void* device, void** shader, bool* failed, const char* name, const char* source, size_t length,
                     const char* const* profiles, int percent, const float* extra);
 // Xbox 360 look (xbox_look.cpp). Begin runs right before the game's final composite draw: when the bound pixel shader is the
-// game's composite, it is swapped for ours and true is returned; End then puts the shader and the two constants back.
+// game's composite, it is swapped for ours and true is returned; End then puts the shader and the constants back. The same
+// pair draws the smooth upscaling of the bloom and the depth of field ([Graphics] SmoothBloom), with the Xbox look off too.
 struct LookSaved {
     void* shader;        // the game's pixel shader (a reference is held until End)
     float constants[8];  // c20 and c21 as they were
     bool offset;         // c17 was changed for the game's 4-tap filter (GameAliasFilter=2)
     float aliasOffset[4];  // c17 as it was
+    bool smooth;           // c23 was set for the smooth upscaling (SmoothBloom)
+    float sizeRegister[4];  // c23 as it was
+    DWORD filters[4];      // min and mag filter of stages 1 and 3 as they were
+    u32 filterSet;         // which of them were set to linear for the draw (bit i = filters[i])
 };
 bool XboxLookBegin(void* device, LookSaved* saved);
 void XboxLookEnd(void* device, const LookSaved* saved);

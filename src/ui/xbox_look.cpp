@@ -29,6 +29,12 @@
 //    on the game's table entry for index 31, and frames with another variant, the title among them, stay as they are); with
 //    the grading our copy below gets the same taps. Mode 2 only sets c17 to a quarter of an output pixel for that draw.
 //    Whether the Xbox 360 drew with it is not known (the console's capture has not been checked for it yet).
+// 5. Smooth upscaling of the bloom and the depth of field ([Graphics] SmoothBloom), with or without the Xbox look: the
+//    composite reads the bloom (s1) and the blurred scene (s3) from small buffers with one bilinear fetch each, which at a
+//    high output resolution leaves the square steps of their texels in every halo and out-of-focus edge. Our copy reads
+//    both with a cubic B-spline (four bilinear fetches); their sizes go into c23. Without the Xbox look the copy draws with
+//    the neutral constants (no grading, no soft highlights, no colour offset), so the colours stay those of the PC.
+//    Not a console feature: the Xbox showed the same buffers at 720p, where each of their texels covered fewer pixels.
 //
 // Nothing here was run in the game: the HLSL below is compiled on the player's machine by d3dx9_43, and a compile error
 // is written to the log and leaves the game's own shader in place.
@@ -50,8 +56,11 @@ enum { kGetPixelShader = 108, kSetPixelShaderConstantF = 109, kGetPixelShaderCon
 enum { kCreatePixelShader = 106, kGetViewport = 48, kGetTexture = 64, kGetSamplerState = 68, kTexGetLevelDesc = 17 };
 // The register of the filter's offset (g_vAlias in the game's variant 31).
 enum { kAliasRegister = 17 };
-// The registers read back in one call: the game's c9..c16, then up to our own two.
-enum { kFirstRegister = 9, kOurRegister = 20, kRegisterCount = 13 };
+// The registers read back in one call: the game's c9..c16, then up to our own c20, c21 and c23 (the texture sizes of
+// the smooth upscaling; c22 is read only to keep it one call).
+enum { kFirstRegister = 9, kOurRegister = 20, kSizeRegister = 23, kRegisterCount = 15 };
+// IDirect3DResource9::GetType (D3DRTYPE_TEXTURE = 3), and the two stages the smooth upscaling reads.
+enum { kResourceGetType = 10, kTypeTexture = 3, kBloomStage = 1, kBlurStage = 3 };
 
 typedef ULONG(WINAPI* ReleaseFn)(void*);
 typedef HRESULT(WINAPI* GetShaderFn)(void*, void**);
@@ -64,6 +73,8 @@ typedef HRESULT(WINAPI* GetViewportFn)(void*, Viewport*);
 typedef HRESULT(WINAPI* GetTextureFn)(void*, DWORD, void**);
 typedef HRESULT(WINAPI* GetSamplerFn)(void*, DWORD, DWORD, DWORD*);
 typedef HRESULT(WINAPI* LevelDescFn)(void*, UINT, u32*);
+typedef DWORD(WINAPI* GetTypeFn)(void*);
+typedef HRESULT(WINAPI* SetSamplerFn)(void*, DWORD, DWORD, DWORD);
 
 // The game's shader, statement for statement (disassembled from BD4638h), up to `col = col * gain + bloom`: depth of
 // field mix by the packed depth, the bluish night tone by the average luminance, exposure, bloom. The alpha is what the
@@ -82,6 +93,31 @@ const char kLookSource[] =
     "float4 c17 : register(c17);\n"  // xy: offset of the game's 4-tap filter (read only with GAME_ALIAS)
     "float4 c20 : register(c20);\n"  // x contrast scale, y contrast offset, z saturation, w soft highlights 0..1
     "float4 c21 : register(c21);\n"  // rgb colour offset
+    "float4 c23 : register(c23);\n"  // xy: size of the bloom texture (s1), zw: of the blurred scene (s3), in texels (SMOOTH_BLOOM)
+    "#ifdef SMOOTH_BLOOM\n"
+    // A cubic B-spline over the 4x4 texels around uv, from four bilinear fetches: each pair of neighbouring weights is
+    // folded into one fetch placed between the two texels (the known fast-bicubic way). Unlike the single bilinear fetch
+    // it has no kink at the texel borders, so a magnified small buffer shows no squares. The weights add up to 1 (the
+    // brightness stays); the spline does not pass through the texels, so it is a little wider than the bilinear read.
+    // D3D9 texel centres are at (i + 0.5) / size; the sampler must filter linearly (XboxLookBegin sees to that).
+    "float4 Smooth(sampler s, float2 uv, float2 size) {\n"
+    "  float2 p = uv * size - 0.5;\n"
+    "  float2 f = frac(p);\n"
+    "  float2 i = p - f;\n"
+    "  float2 f2 = f * f;\n"
+    "  float2 f3 = f2 * f;\n"
+    "  float2 w0 = (1.0 - 3.0 * f + 3.0 * f2 - f3) / 6.0;\n"
+    "  float2 w1 = (4.0 - 6.0 * f2 + 3.0 * f3) / 6.0;\n"
+    "  float2 w3 = f3 / 6.0;\n"
+    "  float2 w2 = 1.0 - w0 - w1 - w3;\n"
+    "  float2 g0 = w0 + w1;\n"  // texels i - 1 and i; never below 1/6
+    "  float2 g1 = w2 + w3;\n"  // texels i + 1 and i + 2; never below 1/6
+    "  float2 t0 = (i - 0.5 + w1 / g0) / size;\n"
+    "  float2 t1 = (i + 1.5 + w3 / g1) / size;\n"
+    "  return g0.y * (g0.x * tex2D(s, t0) + g1.x * tex2D(s, float2(t1.x, t0.y))) +\n"
+    "         g1.y * (g0.x * tex2D(s, float2(t0.x, t1.y)) + g1.x * tex2D(s, t1));\n"
+    "}\n"
+    "#endif\n"
     "float4 main(float2 uv : TEXCOORD0) : COLOR {\n"
     "  float d = saturate(dot(tex2D(s4, uv).rgb, float3(65535.0, 255.0, 1.0)) * 0.0039215689) * 255.0;\n"
     "  float2 nf = c15.xz - d * c15.yw;\n"
@@ -93,12 +129,19 @@ const char kLookSource[] =
     "#else\n"
     "  float4 sharp = tex2D(s0, uv);\n"
     "#endif\n"
-    "  float3 col = lerp(sharp.rgb, tex2D(s3, uv).rgb, blur);\n"
+    "#ifdef SMOOTH_BLOOM\n"
+    "  float3 dof = Smooth(s3, uv, c23.zw).rgb;\n"
+    "  float4 glow = Smooth(s1, uv, c23.xy);\n"
+    "#else\n"
+    "  float3 dof = tex2D(s3, uv).rgb;\n"
+    "  float4 glow = tex2D(s1, uv);\n"
+    "#endif\n"
+    "  float3 col = lerp(sharp.rgb, dof, blur);\n"
     "  float lum = tex2D(s2, float2(0.5, 0.5)).x;\n"
     "  float night = saturate(1.0 - (lum + 1.5) * 0.24390244);\n"
     "  col = lerp(col, dot(col, float3(0.2125, 0.7154, 0.0721)) * float3(1.05, 0.97, 1.27), night);\n"
     "  float gain = c10.x / (lum + 0.001);\n"
-    "  float4 bloom = tex2D(s1, uv) * c9.x;\n"
+    "  float4 bloom = glow * c9.x;\n"
     "  col = col * gain + bloom.rgb;\n"
     // soft highlights: above 0.6 the luma follows 0.6 + 0.4 * (1 - exp(-(l - 0.6) / 0.4)), which continues with the same
     // slope and never reaches 1; the colour is scaled by the same factor, so the hue stays
@@ -111,9 +154,12 @@ const char kLookSource[] =
     "  col = col + c21.rgb;\n"
     "  return float4(col, sharp.a * gain + bloom.a);\n"
     "}\n";
-// The same text compiled with GAME_ALIAS defined: the copy for the game's 4-tap filter.
+// The same text compiled with GAME_ALIAS defined is the copy for the game's 4-tap filter, with SMOOTH_BLOOM the one with
+// the smooth upscaling. The four copies are indexed by these bits and built when first needed.
 const char kAliasDefine[] = "#define GAME_ALIAS 1\n";
-char g_lookAliasSource[sizeof(kAliasDefine) - 1 + sizeof(kLookSource)];
+const char kSmoothDefine[] = "#define SMOOTH_BLOOM 1\n";
+enum { kCopyAlias = 1, kCopySmooth = 2, kCopyKinds = 4 };
+char g_copySource[sizeof(kAliasDefine) - 1 + sizeof(kSmoothDefine) - 1 + sizeof(kLookSource)];
 // The game draws the composite with a vs_3_0 vertex shader, and Direct3D 9 pairs that only with a ps_3_0 pixel shader.
 const char* const kProfilesLook[] = {"ps_3_0", nullptr};
 
@@ -129,11 +175,10 @@ const char kGammaSource[] =
     "}\n";
 const char* const kProfilesGamma[] = {"ps_2_b", "ps_2_a", "ps_2_0", nullptr};
 
-void* g_lookShader = nullptr;   // IDirect3DPixelShader9
+void* g_copies[kCopyKinds];     // IDirect3DPixelShader9: our copies of the composite (kCopyAlias | kCopySmooth)
+bool g_copyFailed[kCopyKinds];
 bool g_lookFailed = false;
 bool g_lookLogged = false;
-void* g_lookAliasShader = nullptr;  // our copy with the game's 4-tap filter
-bool g_lookAliasFailed = false;
 void* g_aliasShader = nullptr;      // the game's variant 31, made from its bytes in DP.exe
 bool g_aliasFailed = false;
 void* g_gammaShader = nullptr;
@@ -180,7 +225,11 @@ void NoteOtherComposite(void* shader) {
             Log("xboxlook: a frame with the game's plain copy instead of the tone map (no post effects there in the game either)");
             known = true;
         }
-        if (!known && g_otherCount < 8) {
+        if (!known && g_otherCount < 8 && !g_cfg.xboxLook) {
+            // the smooth upscaling alone (on by default) only notes it: the files are for the Xbox look's support
+            g_otherSeen[g_otherCount++] = h;
+            Log("composite: this scene's composite is another shader (%u bytes, hash %08X), drawn as the game does", size, h);
+        } else if (!known && g_otherCount < 8) {
             g_otherSeen[g_otherCount++] = h;
             wchar_t path[MAX_PATH + 40];
             wsprintfW(path, L"%scomposite_%08x.bin", g_paths.dataDir, h);
@@ -231,7 +280,7 @@ void AliasOffsetBegin(void* dev, LookSaved* saved, bool graded) {
     // One line whenever the way it is drawn changes (mode, path, offset), at most 12 per run: the game's c17 as the size it
     // is half a pixel of, the scene texture and how the game samples it (D3DTEXF: 1 point, 2 linear).
     static int lastKey = -1, lines = 0;
-    const int key = g_cfg.gameAlias * 4 + (graded ? 2 : 0) + (saved->offset ? 1 : 0);
+    const int key = g_cfg.gameAlias * 8 + (graded ? (g_cfg.xboxLook ? 4 : 2) : 0) + (saved->offset ? 1 : 0);
     if (key == lastKey || lines >= 12) return;
     lastKey = key;
     ++lines;
@@ -247,7 +296,9 @@ void AliasOffsetBegin(void* dev, LookSaved* saved, bool graded) {
     const int gameW = read && game[0] > 0.f ? Rounded(0.5f / game[0]) : 0, gameH = read && game[1] > 0.f ? Rounded(0.5f / game[1]) : 0;
     Log("composite: the game's own 4-tap filter is on (mode %d, %s), offset %s; the game's c17 is half a pixel of %dx%d, "
         "scene %ux%u, output %ux%u, s0 filter min %u mag %u",
-        g_cfg.gameAlias, graded ? "the mod's copy with the Xbox grading" : "the game's variant 31",
+        g_cfg.gameAlias,
+        graded ? (g_cfg.xboxLook ? "the mod's copy with the Xbox grading" : "the mod's copy without grading, for the smooth bloom")
+               : "the game's variant 31",
         saved->offset ? "a quarter of an output pixel" : (g_cfg.gameAlias == 2 ? "the game's (the mod's could not be set)" : "the game's"),
         gameW, gameH, desc[6], desc[7], (u32)vp.width, (u32)vp.height, (u32)minFilter, (u32)magFilter);
 }
@@ -257,8 +308,14 @@ void AliasOffsetEnd(void* dev, const LookSaved* saved) {
 }
 
 // c20 and c21 for our shader from the game's c11..c14 and the settings. The strength scales the parameters, so 0 gives
-// the neutral set (scale 1, offset 0, saturation 1, nothing added).
+// the neutral set (scale 1, offset 0, saturation 1, nothing added). With the Xbox look off (the copy draws only for the
+// smooth upscaling) the whole set is neutral, soft highlights and colour offset included: the PC colours.
 void LookConstants(const float* game, float* out) {
+    if (!g_cfg.xboxLook) {
+        const float neutral[8] = {1.f, 0.f, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f};
+        for (int i = 0; i < 8; ++i) out[i] = neutral[i];
+        return;
+    }
     const float strength = (float)g_cfg.xboxGrade / 100.f;
     const float k = Clamp(Register(game, 11)[0], -1.f, 1.f);
     const float p = Clamp(Register(game, 12)[0], -1.f, 3.f);  // 1 - 2k as the game worked it out
@@ -310,61 +367,173 @@ void TraceEnv(const float* game) {
         Thousandths(now[4]), Thousandths(Register(game, 14)[3]), Thousandths(Register(game, 10)[0]), Thousandths(Register(game, 9)[0]));
 }
 
+// One of our copies of the composite (kCopyAlias | kCopySmooth), built when first needed; null when it cannot be built.
+void* CopyShader(void* dev, int kind) {
+    if (g_copies[kind] || g_copyFailed[kind]) return g_copies[kind];
+    char* p = g_copySource;
+    if (kind & kCopyAlias) {
+        __builtin_memcpy(p, kAliasDefine, sizeof(kAliasDefine) - 1);
+        p += sizeof(kAliasDefine) - 1;
+    }
+    if (kind & kCopySmooth) {
+        __builtin_memcpy(p, kSmoothDefine, sizeof(kSmoothDefine) - 1);
+        p += sizeof(kSmoothDefine) - 1;
+    }
+    __builtin_memcpy(p, kLookSource, sizeof(kLookSource));  // with its terminating zero
+    const size_t length = (size_t)(p - g_copySource) + sizeof(kLookSource) - 1;
+    if (!BuildPixelShader(dev, g_copySource, length, &g_copies[kind], kProfilesLook, "xboxlook")) {
+        g_copies[kind] = nullptr;
+        g_copyFailed[kind] = true;
+        if (kind)
+            Log("xboxlook: the copy of the composite%s%s could not be built (d3dx9_43, ps_3_0)",
+                (kind & kCopyAlias) ? " with the game's 4-tap filter" : "", (kind & kCopySmooth) ? " with the smooth upscaling" : "");
+    }
+    return g_copies[kind];
+}
+
+// The sizes of the bloom (stage 1) and the blurred scene (stage 3) for the smooth upscaling, read from the textures the game
+// bound for this draw (with ScalePostBuffers or KeepBlurLook they are not the 720p sizes). False when one of them is
+// missing or not a plain 2D texture: that draw is not smoothed.
+bool SmoothSizes(void* dev, float* sizes, u32* dims) {
+    const DWORD stages[2] = {kBloomStage, kBlurStage};
+    for (int i = 0; i < 2; ++i) {
+        void* tex = nullptr;
+        if (FAILED(Method<GetTextureFn>(dev, kGetTexture)(dev, stages[i], &tex)) || !tex) return false;
+        u32 desc[8] = {};  // Format, Type, Usage, Pool, MultiSampleType, MultiSampleQuality, Width, Height
+        const bool plain = Method<GetTypeFn>(tex, kResourceGetType)(tex) == kTypeTexture &&
+                           SUCCEEDED(Method<LevelDescFn>(tex, kTexGetLevelDesc)(tex, 0, desc));
+        Method<ReleaseFn>(tex, kRelease)(tex);
+        if (!plain || desc[6] == 0 || desc[7] == 0 || desc[6] > 16384 || desc[7] > 16384) return false;
+        dims[i * 2] = desc[6];
+        dims[i * 2 + 1] = desc[7];
+        sizes[i * 2] = (float)desc[6];
+        sizes[i * 2 + 1] = (float)desc[7];
+    }
+    return true;
+}
+
+// The spline weighs each pair of texels through the bilinear filter, so a stage the game samples with points (or with no
+// filter) gets linear filtering for this one draw; XboxLookEnd puts back what was changed. Linear and anisotropic stay.
+const DWORD kSmoothStages[2] = {kBloomStage, kBlurStage};
+const DWORD kSmoothFilters[2] = {SAMP_MINFILTER, SAMP_MAGFILTER};
+
+void SmoothFiltersBegin(void* dev, LookSaved* saved) {
+    saved->filterSet = 0;
+    for (int i = 0; i < 4; ++i) {
+        const DWORD stage = kSmoothStages[i >> 1], state = kSmoothFilters[i & 1];
+        DWORD value = 2;
+        if (FAILED(Method<GetSamplerFn>(dev, kGetSamplerState)(dev, stage, state, &value))) value = 2;
+        saved->filters[i] = value;
+        if (value < 2 && SUCCEEDED(Method<SetSamplerFn>(dev, kSetSamplerState)(dev, stage, state, 2 /*LINEAR*/)))
+            saved->filterSet |= 1u << i;
+    }
+}
+
+void SmoothFiltersEnd(void* dev, const LookSaved* saved) {
+    for (int i = 0; i < 4; ++i)
+        if (saved->filterSet & (1u << i))
+            Method<SetSamplerFn>(dev, kSetSamplerState)(dev, kSmoothStages[i >> 1], kSmoothFilters[i & 1], saved->filters[i]);
+}
+
+// One line when the smooth upscaling starts and whenever the buffer sizes change (a new resolution), at most 8 per run.
+// The game's filters as D3DTEXF: 1 point, 2 linear, 3 anisotropic.
+void SmoothLog(const u32* dims, const LookSaved* saved) {
+    static u32 last[4];
+    static int lines = 0;
+    bool same = lines > 0;
+    for (int i = 0; i < 4; ++i) same = same && last[i] == dims[i];
+    if (same || lines >= 8) return;
+    for (int i = 0; i < 4; ++i) last[i] = dims[i];
+    ++lines;
+    Log("composite: smooth upscaling on (cubic B-spline, 4 fetches each): bloom s1 %ux%u, blur s3 %ux%u; the game's filters s1 "
+        "min %u mag %u, s3 min %u mag %u%s; drawn with the mod's copy of the composite (%s)",
+        dims[0], dims[1], dims[2], dims[3], (u32)saved->filters[0], (u32)saved->filters[1], (u32)saved->filters[2],
+        (u32)saved->filters[3], saved->filterSet ? " (point ones set to linear for this draw)" : "",
+        g_cfg.xboxLook ? "with the Xbox grading" : "no grading: the PC colours");
+}
+
 }  // namespace
 
 // Also with every strength at 0: the shader then gives the game's own picture (neutral constants), which is the way to
-// check the copy against the original in the game, and the ENV numbers still reach the log.
+// check the copy against the original in the game, and the ENV numbers still reach the log. With the Xbox look off the
+// copy draws only for the smooth upscaling (SmoothBloom), with the neutral constants.
 bool XboxLookBegin(void* dev, LookSaved* saved) {
     saved->offset = false;
-    if (g_lookFailed) return false;
+    saved->smooth = false;
+    saved->filterSet = 0;
+    const bool grade = g_cfg.xboxLook != 0;
+    if (g_lookFailed || (!grade && !g_cfg.smoothBloom)) return false;
     void* shader = nullptr;
     if (FAILED(Method<GetShaderFn>(dev, kGetPixelShader)(dev, &shader)) || !shader) return false;
     const int variant = CompositeVariant(shader);
     if (!variant) {
         // Another of the game's 32 tone-map variants (other post effects in this scene), or another mod's shader. Each one
-        // is reported once and its byte code saved as UltimateFix\composite_<hash>.bin, so it can be supported later.
+        // is reported once and, with the Xbox look, its byte code saved as UltimateFix\composite_<hash>.bin, so it can be
+        // supported later.
         NoteOtherComposite(shader);
         Method<ReleaseFn>(shader, kRelease)(shader);
         return false;
     }
+    float sizes[4];
+    u32 dims[4];
+    bool smooth = g_cfg.smoothBloom && SmoothSizes(dev, sizes, dims);
+    static bool unsized = false;
+    if (g_cfg.smoothBloom && !smooth && !unsized) {
+        unsized = true;
+        Log("composite: the bloom (s1) or the blur (s3) of a composite is not a plain 2D texture, that one is not smoothed");
+    }
+    if (!grade && !smooth) {
+        Method<ReleaseFn>(shader, kRelease)(shader);
+        return false;
+    }
+    // the game's 4-tap filter is on, or the game drew with it itself: the copy with the same taps
+    bool alias = variant == 31 || g_cfg.gameAlias > 0;
+    int kind = (alias ? kCopyAlias : 0) | (smooth ? kCopySmooth : 0);
+    void* copy = CopyShader(dev, kind);
+    if (!copy && !grade) {
+        // the copy was only for the smoothing: the game's own shader draws (and its variant 31 for GameAliasFilter, ssao.cpp)
+        Method<ReleaseFn>(shader, kRelease)(shader);
+        return false;
+    }
+    // with the grading: without the smoothing first, then without the filter, then the plain copy
+    const int tries[3] = {kind & ~kCopySmooth, kind & ~kCopyAlias, 0};
+    for (int i = 0; i < 3 && !copy; ++i) copy = CopyShader(dev, kind = tries[i]);
+    alias = (kind & kCopyAlias) != 0;
+    smooth = (kind & kCopySmooth) != 0;
     float game[kRegisterCount * 4];
     const char* why = nullptr;
-    if (!g_lookShader && !BuildPixelShader(dev, kLookSource, sizeof(kLookSource) - 1, &g_lookShader, kProfilesLook, "xboxlook"))
+    if (!copy)
         why = "the shader could not be built (d3dx9_43, ps_3_0)";
     else if (FAILED(Method<GetConstFn>(dev, kGetPixelShaderConstantF)(dev, kFirstRegister, game, kRegisterCount)))
         why = "the shader constants of the game could not be read";
-    // the game's 4-tap filter is on, or the game drew with it itself: the copy with the same taps
-    bool alias = !why && (variant == 31 || g_cfg.gameAlias > 0) && !g_lookAliasFailed;
-    if (alias && !g_lookAliasShader) {
-        __builtin_memcpy(g_lookAliasSource, kAliasDefine, sizeof(kAliasDefine) - 1);
-        __builtin_memcpy(g_lookAliasSource + sizeof(kAliasDefine) - 1, kLookSource, sizeof(kLookSource));
-        if (!BuildPixelShader(dev, g_lookAliasSource, sizeof(g_lookAliasSource) - 1, &g_lookAliasShader, kProfilesLook, "xboxlook")) {
-            g_lookAliasFailed = true;
-            alias = false;
-            Log("xboxlook: the copy with the game's 4-tap filter could not be built (d3dx9_43, ps_3_0), graded without the filter");
-        }
-    }
-    void* copy = alias ? g_lookAliasShader : g_lookShader;
     if (!why) {
         float ours[8];
         LookConstants(game, ours);
         Method<SetConstFn>(dev, kSetPixelShaderConstantF)(dev, kOurRegister, ours, 2);
+        if (smooth) Method<SetConstFn>(dev, kSetPixelShaderConstantF)(dev, kSizeRegister, sizes, 1);
         if (FAILED(Method<SetShaderFn>(dev, kSetPixelShader)(dev, copy))) {
             Method<SetConstFn>(dev, kSetPixelShaderConstantF)(dev, kOurRegister, Register(game, kOurRegister), 2);
+            if (smooth) Method<SetConstFn>(dev, kSetPixelShaderConstantF)(dev, kSizeRegister, Register(game, kSizeRegister), 1);
             why = "the device refused the shader";
         }
     }
     if (why) {
         g_lookFailed = true;
-        Log("xboxlook: %s, the scene grading is off (the game's own shader draws)", why);
+        Log("xboxlook: %s, the mod's copy of the composite is off: no scene grading, no smooth bloom (the game's own shader draws)", why);
         Method<ReleaseFn>(shader, kRelease)(shader);
         return false;
     }
-    TraceEnv(game);
+    if (grade) TraceEnv(game);
     saved->shader = shader;
     for (int i = 0; i < 8; ++i) saved->constants[i] = Register(game, kOurRegister)[i];
+    if (smooth) {
+        saved->smooth = true;
+        for (int i = 0; i < 4; ++i) saved->sizeRegister[i] = Register(game, kSizeRegister)[i];
+        SmoothFiltersBegin(dev, saved);
+        SmoothLog(dims, saved);
+    }
     if (alias) AliasOffsetBegin(dev, saved, true);
-    if (!g_lookLogged) {
+    if (grade && !g_lookLogged) {
         g_lookLogged = true;
         Log("xboxlook: the final composite is drawn with the mod's shader (grading %d%%, contrast formula %d, chroma formula %d, "
             "soft highlights %d%%)", g_cfg.xboxGrade, g_cfg.xboxContrast, g_cfg.xboxChroma, g_cfg.xboxShoulder);
@@ -377,6 +546,10 @@ bool XboxLookBegin(void* dev, LookSaved* saved) {
 void XboxLookEnd(void* dev, const LookSaved* saved) {
     Method<SetShaderFn>(dev, kSetPixelShader)(dev, saved->shader);
     Method<SetConstFn>(dev, kSetPixelShaderConstantF)(dev, kOurRegister, saved->constants, 2);
+    if (saved->smooth) {
+        Method<SetConstFn>(dev, kSetPixelShaderConstantF)(dev, kSizeRegister, saved->sizeRegister, 1);
+        SmoothFiltersEnd(dev, saved);
+    }
     AliasOffsetEnd(dev, saved);
     Method<ReleaseFn>(saved->shader, kRelease)(saved->shader);
 }
