@@ -173,7 +173,9 @@ HRESULT WINAPI H_FromMemoryEx(void* dev, const void* data, UINT size, UINT w, UI
         const Entry* e = Find(hash);
         if (e) {
             wchar_t path[MAX_PATH + 16];
-            wsprintfW(path, L"%s%s%08x.%s", g_paths.gameDir, kDirNames[e->dir], hash, e->png ? L"png" : L"dds");
+            // e->dir indexes g_dirs (the mods' textures folders first, then the own three), which hold full paths. It used to index
+            // kDirNames, so a mod's texture was looked for in UltimateFix\textures\override\ and failed (D3DXERR_INVALIDDATA).
+            wsprintfW(path, L"%s%08x.%s", g_dirs[e->dir], hash, e->png ? L"png" : L"dds");
             HRESULT hr = g_fromFile(dev, path, 0xFFFFFFFFu, 0xFFFFFFFFu, mips, usage, fmt, pool, filter, mipFilter, colorKey,
                                     info, palette, out);
             if (hr >= 0) {
