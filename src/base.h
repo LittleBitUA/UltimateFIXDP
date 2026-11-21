@@ -222,6 +222,16 @@ HWND GameWindowHandle();
 // log.cpp
 void LogInit(const wchar_t* path);
 void Log(const char* fmt, ...);
+// Timing for the log only (no behaviour depends on it). The ticks are the real QueryPerformanceCounter of kernel32: the hook
+// of RelativeQpc sits in DP.exe's import table, not in ours. wsprintf has no %f, so a time is printed as "%u.%u ms" from
+// MsWhole and MsTenth of a span in microseconds.
+u64 TickNow();
+u32 TickMicros(u64 from, u64 to);  // saturates at about 71 minutes
+inline u32 MsWhole(u32 micros) { return micros / 1000; }
+inline u32 MsTenth(u32 micros) { return micros / 100 % 10; }
+// "shader <name>: compiled in N ms (<profile>)", or that no profile compiled when `profile` is null. Every shader of the
+// mod is compiled at its first use on the render thread and kept for the run, so each name is logged once.
+void LogShaderTime(const char* name, const char* profile, u64 started);
 
 // config.cpp
 void LoadConfig(const wchar_t* iniFile);
@@ -295,6 +305,11 @@ void ApplySurround();      // follows [Audio] Surround (also called from the men
 bool InstallMapFix();
 void ApplyMapFix();
 bool InstallTextureOverride();
+// texture_override.cpp: what the texture loads cost (log only). Per kind of load: 0 = mipmaps made by D3DX (GenerateMips),
+// 1 = as the game gave it, 2 = a file of a pack or a mod. False when the texture hook is not in (then nothing is counted).
+constexpr int kLoadKinds = 3;
+bool TextureLoadTotals(u32* loads, u32* micros);  // both kLoadKinds long, counted since the start (wrapping)
+void TextureLoadFrame();                          // once per frame from the Present hook: ends a run of loads in the log
 void* GlyphAtlasFor(void* device, void* texture);  // SetTexture hook: the pad icons instead of the keyboard atlas
 bool SonyPadActive();
 bool InstallWorldExtra();

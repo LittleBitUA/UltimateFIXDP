@@ -843,12 +843,16 @@ typedef HRESULT(WINAPI* SetPsFn)(void*, void*);
 typedef HRESULT(WINAPI* SetTexFn2)(void*, DWORD, void*);
 typedef HRESULT(WINAPI* SetPsConstFn)(void*, UINT, const float*, UINT);
 
-// With `logName` the compiler's message for a profile that failed is written to the log (it is plain text).
-bool BuildShader(void* dev, const char* source, size_t length, void** shader, const char* const* profiles, const char* logName = nullptr) {
+// With `logName` the compiler's message for a profile that failed is written to the log (it is plain text). The time the
+// render thread waited (every profile tried, the shader object made) goes to the log under `timeName`, or `logName`.
+bool BuildShader(void* dev, const char* source, size_t length, void** shader, const char* const* profiles, const char* logName = nullptr,
+                 const char* timeName = nullptr) {
     HMODULE d3dx = GetModuleHandleW(L"d3dx9_43.dll");
     if (!d3dx) d3dx = LoadLibraryW(L"d3dx9_43.dll");
     CompileFn compile = d3dx ? (CompileFn)(void*)GetProcAddress(d3dx, "D3DXCompileShader") : nullptr;
     if (!compile) return false;
+    const char* name = timeName ? timeName : logName ? logName : "(unnamed)";
+    const u64 started = TickNow();
     for (; *profiles; ++profiles) {
         void *code = nullptr, *errors = nullptr, *table = nullptr;
         HRESULT hr = compile(source, (UINT)length, nullptr, nullptr, "main", *profiles, 0, &code, &errors, &table);
@@ -859,8 +863,12 @@ bool BuildShader(void* dev, const char* source, size_t length, void** shader, co
         const DWORD* bytes = (const DWORD*)Method<BufPtrFn>(code, 3)(code);
         hr = Method<CreatePsFn>(dev, 106)(dev, bytes, shader);
         Method<ReleaseFn>(code, kRelease)(code);
-        if (SUCCEEDED(hr) && *shader) return true;
+        if (SUCCEEDED(hr) && *shader) {
+            LogShaderTime(name, *profiles, started);
+            return true;
+        }
     }
+    LogShaderTime(name, nullptr, started);
     return false;
 }
 
@@ -1306,7 +1314,7 @@ void RunPass(void* dev, void** shader, bool* failed, const char* name, const cha
     UINT w, h, fmt;
     void* back = BackBufferInfo(dev, &w, &h, &fmt);
     if (!back) return;
-    if (!*shader && !BuildShader(dev, source, length, shader, profiles)) {
+    if (!*shader && !BuildShader(dev, source, length, shader, profiles, nullptr, name)) {
         *failed = true;
         Log("%s: the shader could not be built (d3dx9_43), the pass is off", name);
         Method<ReleaseFn>(back, kRelease)(back);
@@ -1852,7 +1860,7 @@ void AmbientOcclusionPass(void* dev, int strengthPercent, int radiusPixels) {
         return;
     }
     if (radiusPixels > 20) radiusPixels = 20;  // the plain pass: 12 taps and no blur show their pattern on a wider ring
-    if (!g_aoShader && !BuildShader(dev, kAoSource, sizeof(kAoSource) - 1, &g_aoShader, kProfilesAo)) {
+    if (!g_aoShader && !BuildShader(dev, kAoSource, sizeof(kAoSource) - 1, &g_aoShader, kProfilesAo, nullptr, "ssao (plain)")) {
         g_aoFailed = true;
         Log("ssao: the shader could not be built (d3dx9_43), the pass is off");
         releaseAll();
