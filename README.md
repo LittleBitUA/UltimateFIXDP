@@ -26,8 +26,8 @@ _Універсальний фікс для_ **Deadly Premonition: The Director'
 One DLL in the game folder instead of DPfix, a stability fix, a map fix and a crash fix.
 No installer: press **F10** in game and everything is there. The mod also gives the game 4 GB of memory by itself (from the second start).
 
-> **Version 0.7.3.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
-> <br>New in 0.7.3: a mod's name, author and version in a plain `mod.txt` — see [What's new](#whats-new-in-073). In 0.7.2: **updates itself** (F9 on the start card), a much smaller archive — see [What's new](#whats-new-in-072). In 0.7.1: fixes for the **thread races** behind the crashes and hangs on entering buildings, the **QTE at high FPS**, **4 GB of memory by itself**, checked and compressed save backups, the game's own Xbox icons — see [What's new](#whats-new-in-071).
+> **Version 0.7.4.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
+> <br>New in 0.7.4: **York can fly** (cheats, F3), the lock-on aims at the chest instead of the hips — see [What's new](#whats-new-in-074). In 0.7.3: a mod's name, author and version in a plain `mod.txt`. In 0.7.2: **updates itself** (F9 on the start card), a much smaller archive — see [What's new](#whats-new-in-072). In 0.7.1: fixes for the **thread races** behind the crashes and hangs on entering buildings, the **QTE at high FPS**, **4 GB of memory by itself**, checked and compressed save backups, the game's own Xbox icons — see [What's new](#whats-new-in-071).
 
 ### Features
 
@@ -49,7 +49,7 @@ No installer: press **F10** in game and everything is there. The mod also gives 
 - 📖 **Story and residents** — where the story stands and where to go next, side quests, and the timetable of every resident of Greenvale
 - 🖱️ **Camera** — field of view in play, Xbox 360 quick turn, mouse sensitivity and inversion per axis
 - 📷 **Photo mode** — free camera, frozen time, 13 filters with grain, sepia, aberration and letterbox, your own presets, FOV, costumes, poses, PNG screenshots
-- 🧰 **Tools** — frame statistics panel, built-in profiler, cheats page (money, time, weather, ammo, god mode)
+- 🧰 **Tools** — frame statistics panel, built-in profiler, cheats page (money, time, weather, ammo, god mode, York flies)
 - 🇺🇦🇬🇧 **Two languages** — Ukrainian and English, switched in the menu
 
 ### Engine fixes (RE-based)
@@ -100,6 +100,14 @@ port with the Xbox 360 original:
   next start, the original kept as `DP.exe.bak`).
 - 🧍 **Residents walking into nowhere** — a failed route lookup moved the
   resident to (0, 0, 0); now the resident stays where it stood.
+
+### What's new in 0.7.4
+
+- **York flies** (F10 → Cheats, or F3): WASD relative to the camera, the mouse or Q/E turn, Space up, Ctrl down, Shift four times faster, speed slider on the page. Handy for testing a translation. While he flies the game sees no input, and his physics (ground, fall, collisions) waits; turning it off lands him through the game's own teleport sync. Turn it off near the ground: from a height he falls (invulnerability helps).
+- **The lock-on aims at the chest.** The game aims at the enemy's waist and lowers the point by a tenth of the distance, so a few metres away it was the hips or the knees. Now the point stays a little above the waist (`[Fixes] LockOnAim`, `LockOnHeight`).
+- **DualSense Edge**: when a Sony pad cannot be opened (another program such as DSX, DS4Windows or HidHide holds or hides it) or reports another model, the log now says so.
+- For testers: `[Debug] TraceCamera=1` + Numpad 2 marks the camera at a moment; `[Debug] TraceWater=1` logs how the game draws water and which reflection it renders (Numpad 1 tries other water settings).
+- The mod list in the log shows Cyrillic names correctly.
 
 ### What's new in 0.7.3
 
@@ -262,8 +270,8 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 Одна DLL у теці гри замість DPfix, фіксу стабільності, фіксу мапи й фіксу вильотів.
 Без інсталятора: натисніть **F10** у грі, і все там. Мод також сам дає грі 4 ГБ пам'яті (з другого запуску).
 
-> **Версія 0.7.3.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
-> <br>Нове в 0.7.3: назва, автор і версія мода у звичайному `mod.txt` — див. [Що нового](#що-нового-в-073). У 0.7.2: **оновлюється сам** (F9 на стартовій плашці), значно менший архів — див. [Що нового](#що-нового-в-072). У 0.7.1: виправлено **гонки потоків**, через які гра падала й зависала при вході в будівлі, **QTE на високому FPS**, **4 ГБ пам'яті самі собою**, перевірені й стиснені копії збережень, оригінальні іконки Xbox — див. [Що нового](#що-нового-в-071).
+> **Версія 0.7.4.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
+> <br>Нове в 0.7.4: **Йорк літає** (читкоди, F3), автоприціл цілиться в груди, а не в стегна — див. [Що нового](#що-нового-в-074). У 0.7.3: назва, автор і версія мода у звичайному `mod.txt`. У 0.7.2: **оновлюється сам** (F9 на стартовій плашці), значно менший архів — див. [Що нового](#що-нового-в-072). У 0.7.1: виправлено **гонки потоків**, через які гра падала й зависала при вході в будівлі, **QTE на високому FPS**, **4 ГБ пам'яті самі собою**, перевірені й стиснені копії збережень, оригінальні іконки Xbox — див. [Що нового](#що-нового-в-071).
 
 ### Можливості
 
@@ -285,7 +293,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 - 📖 **Сюжет і жителі** — де ви в сюжеті й куди йти далі, побічні завдання і розклад кожного жителя Ґрінвейла
 - 🖱️ **Камера** — кут огляду в грі, швидкий розворот як на Xbox 360, чутливість миші й інверсія по кожній осі
 - 📷 **Фоторежим** — вільна камера, зупинка часу, 13 фільтрів із зерном, сепією, аберацією й кінорамкою, власні пресети, кут огляду, костюми, пози, знімки PNG
-- 🧰 **Інструменти** — панель статистики кадру, вбудований профайлер, сторінка читкодів (гроші, час, погода, набої, невразливість)
+- 🧰 **Інструменти** — панель статистики кадру, вбудований профайлер, сторінка читкодів (гроші, час, погода, набої, невразливість, політ Йорка)
 - 🇺🇦🇬🇧 **Дві мови** — українська та англійська, перемикаються в меню
 
 ### Виправлення рушія (на основі reverse engineering)
@@ -335,6 +343,14 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
   запуску, оригінал лишається як `DP.exe.bak`).
 - 🧍 **Жителі, що йдуть «в нікуди»** — невдалий пошук маршруту переносив жителя
   в (0, 0, 0); тепер він лишається там, де стояв.
+
+### Що нового в 0.7.4
+
+- **Йорк літає** (F10 → Читкоди або F3): WASD відносно камери, мишка або Q/E повертають, Space вгору, Ctrl вниз, Shift учетверо швидше, повзунок швидкості на сторінці. Зручно для перевірки перекладу. Поки він летить, гра не бачить вводу, а його фізика (земля, падіння, зіткнення) чекає; після вимкнення гра сама ставить його на землю, як після свого телепорту. Вимикайте біля землі: з висоти він упаде (згодиться невразливість).
+- **Автоприціл цілиться в груди.** Гра цілилась у пояс ворога й ще опускала точку на десяту частину відстані, тож за кілька метрів це були стегна чи коліна. Тепер точка трохи вище пояса (`[Fixes] LockOnAim`, `LockOnHeight`).
+- **DualSense Edge**: якщо пад Sony не вдається відкрити (його тримає чи ховає інша програма, як-от DSX, DS4Windows, HidHide) або він іншої моделі, тепер це видно в журналі.
+- Для тестувальників: `[Debug] TraceCamera=1` + Numpad 2 позначає камеру в потрібну мить; `[Debug] TraceWater=1` пише, як гра малює воду і яке відбиття рендерить (Numpad 1 пробує інші параметри води).
+- Список модів у журналі показує кириличні назви правильно.
 
 ### Що нового в 0.7.3
 

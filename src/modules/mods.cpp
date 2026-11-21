@@ -347,8 +347,12 @@ void ScanMods() {
     Log("mods: %d found in UltimateFix\\mods, %d on%s", g_count, on, tooMany ? " (only the first 32 are used)" : "");
     for (int i = 0; i < g_count; ++i) {
         const ModInfo& m = g_mods[i];
-        Log("mods:   %d. %s %S%s%S: text %s, %d texture files, %d game files", i + 1, m.enabled ? "on " : "off", m.name, m.version[0] ? " " : "",
-            m.version, m.textJson ? "mes_all.json" : (m.textFiles ? "corrections" : "none"), m.textures, m.files);
+        // %S would go through the ANSI code page: the log is UTF-8, so the name and version are converted here
+        char name[200], version[64];
+        WideCharToMultiByte(CP_UTF8, 0, m.name, -1, name, sizeof name, nullptr, nullptr);
+        WideCharToMultiByte(CP_UTF8, 0, m.version, -1, version, sizeof version, nullptr, nullptr);
+        Log("mods:   %d. %s %s%s%s: text %s, %d texture files, %d game files", i + 1, m.enabled ? "on " : "off", name, m.version[0] ? " " : "",
+            version, m.textJson ? "mes_all.json" : (m.textFiles ? "corrections" : "none"), m.textures, m.files);
     }
     if (tooLong) Log("mods: a folder with a name of 64 or more characters was skipped");
     if (texts > 1) Log("mods: %d mods carry text: only the first of them (%S) is used, text is not mixed from several mods", texts, g_mods[g_textMod].name);
