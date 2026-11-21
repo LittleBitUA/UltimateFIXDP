@@ -425,6 +425,123 @@ bool CurrentPsIsSmoke() {
 }
 // With TraceWater: each lit particle draw (the prologue's black smoke) explained once per particle texture, at most 8, in
 // UltimateFix\smoke_<caller>_<texture>.txt with its vertex shader, the vertices and its texture as PNG.
+// SmokeFix. The prologue's smoke is an animated model of sheets drawn with the lit particle shader (blended, no depth writes)
+// and a DXT3 texture whose colour blocks are all black: the smoke is only in the alpha. The shader multiplies the texture colour by
+// the light, so on PC it came out as a black patch; the Xbox 360 shows light grey wisps, i.e. its texture gave the colour as well
+// (most likely a one-channel DXT3A, read as grey and alpha alike, that the port turned into DXT3 with a black colour). For such a
+// texture a copy is made once whose colour blocks carry the alpha as grey (per 4x4 block: the lightest and darkest alpha as the two
+// end colours, each pixel at the nearest of the four steps), and it is bound in its place for these draws only.
+struct SmokeCopy {
+    void* src;
+    void* copy;  // nullptr: not a black DXT3 (left as it is)
+};
+SmokeCopy g_smoke[64];
+int g_smokeCount = 0;
+
+u16 Grey565(u32 v) { return (u16)((((v * 31 + 127) / 255) << 11) | (((v * 63 + 127) / 255) << 5) | ((v * 31 + 127) / 255)); }
+
+// One DXT3 block: the colour half rebuilt from the alpha half
+void GreyFromAlpha(const u8* in, u8* out) {
+    u32 a[16], lo = 255, hi = 0;
+    for (int i = 0; i < 16; ++i) {
+        const u32 nib = (in[i / 2] >> ((i & 1) * 4)) & 15;
+        a[i] = nib * 17;
+        if (a[i] < lo) lo = a[i];
+        if (a[i] > hi) hi = a[i];
+    }
+    for (int i = 0; i < 8; ++i) out[i] = in[i];
+    const u16 c0 = Grey565(hi), c1 = Grey565(lo);
+    u32 idx = 0;
+    if (hi > lo) {
+        for (int i = 0; i < 16; ++i) {
+            const u32 t = (a[i] - lo) * 6 / (hi - lo);  // 0..6: nearest of 0, 1/3, 2/3, 1 in sixths
+            const u32 code = t >= 5 ? 0 : t >= 3 ? 2 : t >= 1 ? 3 : 1;  // DXT3 colour: 0 = c0, 1 = c1, 2 = 2/3 c0, 3 = 1/3 c0
+            idx |= code << (i * 2);
+        }
+    }
+    out[8] = (u8)c0;
+    out[9] = (u8)(c0 >> 8);
+    out[10] = (u8)c1;
+    out[11] = (u8)(c1 >> 8);
+    out[12] = (u8)idx;
+    out[13] = (u8)(idx >> 8);
+    out[14] = (u8)(idx >> 16);
+    out[15] = (u8)(idx >> 24);
+}
+
+void* SmokeCopyOf(void* dev, void* tex) {
+    for (int i = 0; i < g_smokeCount; ++i) if (g_smoke[i].src == tex) return g_smoke[i].copy;
+    if (g_smokeCount >= 64) return nullptr;
+    SmokeCopy& e = g_smoke[g_smokeCount++];
+    e.src = tex;
+    e.copy = nullptr;
+    void** vt = *(void***)tex;
+    typedef DWORD(WINAPI * LevelsFn)(void*);
+    typedef HRESULT(WINAPI * DescFn)(void*, UINT, u32*);
+    typedef HRESULT(WINAPI * LockFn)(void*, UINT, void*, const RECT*, DWORD);
+    typedef HRESULT(WINAPI * UnlockFn)(void*, UINT);
+    typedef ULONG(WINAPI * RelFn)(void*);
+    struct Locked {
+        INT pitch;
+        void* bits;
+    };
+    const UINT levels = ((LevelsFn)vt[13])(tex);
+    u32 d0[8] = {};
+    if (!levels || FAILED(((DescFn)vt[17])(tex, 0, d0)) || d0[0] != 0x33545844u /*DXT3*/) return nullptr;
+    // black colour blocks everywhere in the first level?
+    Locked lr = {0, nullptr};
+    if (FAILED(((LockFn)vt[19])(tex, 0, &lr, nullptr, 0x10 /*READONLY*/)) || !lr.bits) return nullptr;
+    bool black = true;
+    const UINT bw = (d0[6] + 3) / 4, bh = (d0[7] + 3) / 4;
+    for (UINT y = 0; y < bh && black; ++y)
+        for (UINT x = 0; x < bw && black; ++x) {
+            const u8* b = (const u8*)lr.bits + y * lr.pitch + x * 16;
+            black = !b[8] && !b[9] && !b[10] && !b[11];
+        }
+    ((UnlockFn)vt[20])(tex, 0);
+    if (!black) return nullptr;
+    void* copy = nullptr;
+    CreateTextureFn make = r_CreateTexture ? r_CreateTexture : (CreateTextureFn)(*(void***)dev)[kCreateTexture];
+    if (FAILED(make(dev, d0[6], d0[7], levels, 0, 0x33545844u, 1 /*MANAGED*/, &copy, nullptr)) || !copy) return nullptr;
+    void** cvt = *(void***)copy;
+    bool ok = true;
+    for (UINT lv = 0; lv < levels && ok; ++lv) {
+        u32 d[8] = {};
+        Locked s = {0, nullptr}, t = {0, nullptr};
+        ok = SUCCEEDED(((DescFn)vt[17])(tex, lv, d)) && SUCCEEDED(((LockFn)vt[19])(tex, lv, &s, nullptr, 0x10)) && s.bits;
+        if (!ok) break;
+        ok = SUCCEEDED(((LockFn)cvt[19])(copy, lv, &t, nullptr, 0)) && t.bits;
+        if (ok) {
+            const UINT w = (d[6] + 3) / 4, h = (d[7] + 3) / 4;
+            for (UINT y = 0; y < h; ++y)
+                for (UINT x = 0; x < w; ++x) GreyFromAlpha((const u8*)s.bits + y * s.pitch + x * 16, (u8*)t.bits + y * t.pitch + x * 16);
+            ((UnlockFn)cvt[20])(copy, lv);
+        }
+        ((UnlockFn)vt[20])(tex, lv);
+    }
+    if (!ok) {
+        ((RelFn)cvt[2])(copy);
+        return nullptr;
+    }
+    e.copy = copy;
+    Log("smoke: a black %ux%u DXT3 smoke texture got its grey from the alpha (%u levels, %d so far)", d0[6], d0[7], levels, g_smokeCount);
+    return copy;
+}
+
+// The texture to draw the smoke with, or nullptr when this draw is not black smoke
+void* SmokeTextureFor(void* dev) {
+    if (!g_cfg.smokeFix || !g_stageTex[0] || !CurrentPsIsSmoke()) return nullptr;
+    typedef HRESULT(WINAPI * GetRsFn)(void*, DWORD, DWORD*);
+    GetRsFn getRs = (GetRsFn)(*(void***)dev)[58];
+    DWORD blend = 0, zwrite = 1;
+    getRs(dev, 27 /*ALPHABLENDENABLE*/, &blend);
+    getRs(dev, 14 /*ZWRITEENABLE*/, &zwrite);
+    if (!blend || zwrite) return nullptr;
+    typedef DWORD(WINAPI * TypeFn)(void*);
+    if (((TypeFn)(*(void***)g_stageTex[0])[10])(g_stageTex[0]) != 3) return nullptr;
+    return SmokeCopyOf(dev, g_stageTex[0]);
+}
+
 void ExplainSmoke(void* dev, u32 from) {
     // the smoke particles only: blended (ALPHABLENDENABLE 1), no depth writes, a DXT3 texture; the same shader family also draws
     // opaque characters, which filled the first list
@@ -920,6 +1037,13 @@ HRESULT WINAPI H_DrawIp(void* dev, DWORD prim, INT base, UINT minIdx, UINT verts
     g_drawFirstVertex = (UINT)(base + (INT)minIdx);
     if (g_cfg.traceWater && CurrentPsIsSmoke()) ExplainSmoke(dev, from);
     if (g_cfg.traceWater && HuntSkips(dev, from, count)) return 0;
+    if (void* grey = SmokeTextureFor(dev)) {
+        void* own = g_stageTex[0];
+        r_SetTexture(dev, 0, grey);
+        const HRESULT hr = r_DrawIp(dev, prim, base, minIdx, verts, start, count);
+        r_SetTexture(dev, 0, own);
+        return hr;
+    }
     const bool w = NoteWaterDraw(count, from);
     return WaterDraw(dev, w, [&] { return r_DrawIp(dev, prim, base, minIdx, verts, start, count); });
 }
@@ -929,6 +1053,13 @@ HRESULT WINAPI H_DrawP(void* dev, DWORD prim, UINT start, UINT count) {
     g_drawFirstVertex = start;
     if (g_cfg.traceWater && CurrentPsIsSmoke()) ExplainSmoke(dev, from);
     if (g_cfg.traceWater && HuntSkips(dev, from, count)) return 0;
+    if (void* grey = SmokeTextureFor(dev)) {
+        void* own = g_stageTex[0];
+        r_SetTexture(dev, 0, grey);
+        const HRESULT hr = r_DrawP(dev, prim, start, count);
+        r_SetTexture(dev, 0, own);
+        return hr;
+    }
     const bool w = NoteWaterDraw(count, from);
     return WaterDraw(dev, w, [&] { return r_DrawP(dev, prim, start, count); });
 }
@@ -1010,7 +1141,7 @@ void PatchDevice(void* dev) {
         bool t = PatchSlot(vt, kSetTexture, (void*)H_SetTexture, (void**)&r_SetTexture);
         Log("d3d: icon atlas swap hooked (%d)", t);
     }
-    if (g_cfg.traceWater || g_cfg.waterTest || g_cfg.fogFix) {
+    if (g_cfg.traceWater || g_cfg.waterTest || g_cfg.fogFix || g_cfg.smokeFix) {
         const bool a = PatchSlot(vt, kSetPixelShaderConstantF, (void*)H_SetPsConstF, (void**)&r_SetPsConstF);
         const bool b = PatchSlot(vt, kSetVertexShaderConstantF, (void*)H_SetVsConstF, (void**)&r_SetVsConstF);
         const bool c = PatchSlot(vt, kSetTexture, (void*)H_SetTexture, (void**)&r_SetTexture);
@@ -1023,7 +1154,8 @@ void PatchDevice(void* dev) {
             Log("water: diagnostic hooked (%d%d%d%d%d%d%d): each distinct water draw goes to the log once; Numpad 1 switches WaterTest", a, b,
                 c, d, e, f, g);
         else
-            Log("fog: draw hooks in (%d%d%d): smoke volumes are kept out of the G-buffer", c, d && e, f);
+            Log("fog: draw hooks in (%d%d%d): %s%s", c, d && e, f, g_cfg.smokeFix ? "black smoke textures get their colour from the alpha" : "",
+                g_cfg.fogFix ? (g_cfg.smokeFix ? ", smoke volumes kept out of the G-buffer" : "smoke volumes kept out of the G-buffer") : "");
     }
     if (g_cfg.shadowPrecision && !g_cfg.traceResources)
         PatchSlot(vt, kCreateTexture, (void*)H_CreateTexture, (void**)&r_CreateTexture);

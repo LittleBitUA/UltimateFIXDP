@@ -28,6 +28,7 @@ struct Config {
     int routeFlushWait;      // a level change lets RouteThread finish its request before the queue is cleared
     int lockOnAim;           // the lock-on aims at the chest: no drop with distance, LockOnHeight above the waist
     int lockOnHeight;        // tenths of a game unit above the target's waist bone (40 = 4.0)
+    int smokeFix;            // smoke drawn with a black DXT3 texture gets its colour back from the alpha (the prologue doorways)
     int fogFix;              // smoke volumes are kept out of the G-buffer (the black hole in the prologue doorways)
     int qteFix;              // the stick-waggle QTE counts a swap as at 60 FPS (restart needed)
     int checkUpdates;        // ask GitHub for a newer release at the start (F9 on the start card / About page updates)
