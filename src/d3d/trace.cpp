@@ -620,6 +620,12 @@ int g_smokeSheetNo = 0;           // 256x128 sheets drawn so far in that frame
 bool g_smokeSwap = false;         // Numpad 6: the first sheet of the frame is model 2
 void* g_smokeLight = nullptr;     // the light buffer seen in s8 at a smoke draw of this frame
 u32 g_smokeLightFrame = ~0u;
+// The game's UV scroll (g_vScrlParam, c243 = scale x, y and offset u, v) at the two mask draws of the frame. The PC port gives the
+// models' running scroll to their mask sheets; on the Xbox it moves the sheet (c200 = 1, 1, 0, -t for model 1 and +t for model 2:
+// the two layers crawl in opposite directions), so it is taken from there for the sheets.
+float g_smokeScroll[2][4];
+int g_smokeScrollCount = 0;
+u32 g_smokeScrollFrame = ~0u;
 
 // Draws a smoke sheet the Xbox way when this is one; false when the game draws it as it is
 template <typename Draw> bool SmokeDraw(void* dev, Draw draw, HRESULT* hr) {
@@ -658,9 +664,26 @@ template <typename Draw> bool SmokeDraw(void* dev, Draw draw, HRESULT* hr) {
             g_smokeLightFrame = g_smokeFrame;
         }
     }
+    typedef HRESULT(WINAPI * GetCFn)(void*, UINT, float*, UINT);
     if (maskSheet) {  // the Xbox draws no sheet of the bare mask: it is only read by the sheets
         g_smokeMask = g_stageTex[0];
         g_smokeMaskFrame = g_smokeFrame;
+        if (g_smokeScrollFrame != g_smokeFrame) {
+            g_smokeScrollFrame = g_smokeFrame;
+            g_smokeScrollCount = 0;
+        }
+        if (g_smokeScrollCount < 2) {
+            float* sc = g_smokeScroll[g_smokeScrollCount++];
+            ((GetCFn)dvt[95])(dev, 243, sc, 1);  // GetVertexShaderConstantF: the scroll the game set for this draw
+            static int toldScroll = 0;
+            static u32 lastTold = 0;
+            if (toldScroll < 6 && g_smokeFrame - lastTold >= 120) {  // a few samples, 2 s apart at 60 FPS, to see it run
+                lastTold = g_smokeFrame;
+                ++toldScroll;
+                Log("smoke: the game's scroll at mask draw %d of frame %u: %d %d %d %d (thousandths)", g_smokeScrollCount, g_smokeFrame,
+                    Milli(sc[0]), Milli(sc[1]), Milli(sc[2]), Milli(sc[3]));
+            }
+        }
         static bool told[2];
         if (!told[deferred]) {
             told[deferred] = true;
@@ -683,11 +706,19 @@ template <typename Draw> bool SmokeDraw(void* dev, Draw draw, HRESULT* hr) {
     typedef HRESULT(WINAPI * SetVsFn)(void*, void*);
     typedef HRESULT(WINAPI * GetSsFn)(void*, DWORD, DWORD, DWORD*);
     typedef HRESULT(WINAPI * SetSsFn)(void*, DWORD, DWORD, DWORD);
-    typedef HRESULT(WINAPI * GetCFn)(void*, UINT, float*, UINT);
     GetSsFn getSs = (GetSsFn)dvt[68];
     SetSsFn setSs = (SetSsFn)dvt[69];
-    // UV1 = UV + (0, -4.895) for model 1, (0, +4.895) for model 2 (the Xbox c200 of each draw); the sheet wraps
-    const float scroll[4] = {1.f, 1.f, 0.f, modelB ? 4.89506f : -4.89506f};
+    // UV1 = UV * scale + offset, the running scroll of the model (the Xbox c200: 1, 1, 0, -t for model 1, +t for model 2); the
+    // sheet wraps. From the frame's mask draws: by the sign of the offset when they differ, else in their order. Without them
+    // (never seen so far), the value of the Xbox capture, standing still.
+    float scroll[4] = {1.f, 1.f, 0.f, modelB ? 4.89506f : -4.89506f};
+    if (g_smokeScrollFrame == g_smokeFrame && g_smokeScrollCount > 0) {
+        int pick = g_smokeScrollCount > 1 ? (no & 1) : 0;
+        if (g_smokeScrollCount > 1 && (g_smokeScroll[0][3] < 0.f) != (g_smokeScroll[1][3] < 0.f))
+            pick = (g_smokeScroll[0][3] < 0.f) == !modelB ? 0 : 1;  // model 1 crawls with -t, model 2 with +t
+        for (int k = 0; k < 4; ++k) scroll[k] = g_smokeScroll[pick][k];
+        if (g_smokeScrollCount == 1 && modelB == (scroll[3] < 0.f)) scroll[3] = -scroll[3];  // one mask seen: the other way
+    }
     float ownVs243[4];
     ((GetCFn)dvt[95])(dev, 243, ownVs243, 1);  // GetVertexShaderConstantF
     void* ownVs = nullptr;
@@ -1888,7 +1919,7 @@ void WaterFrame() {
         }
         HuntFrame(hit[0], hit[1], hit[2], hit[3]);
     }
-    if (g_cfg.smokeFix) {  // Numpad 6: which of the frame's two smoke sheets is the Xbox model 2 (the grey one)
+    if (g_cfg.smokeFix && g_cfg.traceWater) {  // Numpad 6 (TraceWater): which of the frame's two smoke sheets is the Xbox model 2 (the grey one)
         static bool held6 = false;
         const bool d6 = ours && (GetAsyncKeyState(VK_NUMPAD6) & 0x8000);
         if (d6 && !held6) {
