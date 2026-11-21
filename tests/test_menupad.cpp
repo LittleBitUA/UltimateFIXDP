@@ -167,6 +167,11 @@ int main() {
         r.buttons = kXbB | kXbY | kXbLB | kXbRB;
         f = MenuPadUpdate(p, r, 2016);
         CHECK(f.pressed == (kPadBack | kPadReset | kPadPrevSection | kPadNextSection), "B Y LB RB (%x)", f.pressed);
+        r.buttons = kXbX;
+        f = MenuPadUpdate(p, r, 2032);
+        CHECK(f.pressed == kPadAction, "X (%x)", f.pressed);
+        f = MenuPadUpdate(p, r, 4000);
+        CHECK(f.pressed == 0, "X does not repeat (%x)", f.pressed);
     }
     // The menu opened with the pair: it is still held on the first frame of the open menu and must not close it again.
     {

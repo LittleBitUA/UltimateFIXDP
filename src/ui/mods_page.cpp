@@ -470,13 +470,19 @@ void ClampSelection() {
 
 }  // namespace
 
-void ModsPageInput(bool up, bool down, bool toggle, bool raise, bool lower, bool click, float mx, float my) {
+// `openFolder` is the pad's X / Square: the card's "open its folder" button, which a pad cannot click (on the last row, and
+// without mods, the mods folder itself). Up and Down are the pad's left and right already.
+void ModsPageInput(bool up, bool down, bool toggle, bool openFolder, bool raise, bool lower, bool click, float mx, float my) {
     const int count = ModCount();
     if (up) --g_sel;
     if (down) ++g_sel;
     ClampSelection();
     if (toggle) {
         if (g_sel < count) Toggle(g_sel);
+        else OpenModsFolder();
+    }
+    if (openFolder) {
+        if (g_sel < count) ModOpenFolder(g_sel);
         else OpenModsFolder();
     }
     if (raise || lower) Move(raise ? -1 : 1);
@@ -504,7 +510,16 @@ void ModsPage(float left, float top, float right, float bottom) {
     const int count = ModCount();
     ClampSelection();
     g_hitCount = 0;
-    if (count == 0)
+    // One key line, for the device in use: the pad's names its buttons as key caps (DrawPadLine), X / Square among them for
+    // the card's folder button. It may run past `right` into the panel's margin, as the other pages' pad lines do
+    if (PadHintsShown() && count == 0)
+        DrawPadLine(T(L"{A} відкрити теку модів     {LB} {RB} розділ     {B} закрити", L"{A} open the mods folder     {LB} {RB} section     {B} close"),
+                    left, bottom + 8, kFaint, 13, right + 24 - left);
+    else if (PadHintsShown())
+        DrawPadLine(T(L"↑ ↓ вибір     {A} вмк. / вимк.     ← → вище / нижче     {X} тека мода     {LB} {RB} розділ     {B} закрити",
+                      L"↑ ↓ select     {A} on / off     ← → higher / lower     {X} its folder     {LB} {RB} section     {B} close"),
+                    left, bottom + 8, kFaint, 13, right + 24 - left);
+    else if (count == 0)
         DrawFitted(T(L"Enter відкрити теку модів     Tab розділ     F10 або Esc закрити", L"Enter open the mods folder     Tab section     F10 or Esc close"),
                    left, bottom + 8, kFaint, 13, right - left);
     else

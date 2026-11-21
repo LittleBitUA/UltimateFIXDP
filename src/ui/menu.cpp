@@ -210,8 +210,8 @@ Item g_pageDisplay[] = {
      {L"Панель з'являється плавно, виділення ковзає до вибраного рядка й розділу, повзунок перемикача пересувається. Вимкнено: усе змінюється миттєво. Закривається меню завжди одразу.",
       L"The panel fades in, the selection glides to the chosen row and section, the knob of a switch slides across. Off: everything changes at once. The menu always closes at once."}, NOTR},
     {{L"Керування меню ґеймпадом", L"Gamepad control of the menu"}, &g_cfg.menuPadControl, kBool, 0, 1, 1, false, L"Menu", L"PadControl", nullptr, nullptr,
-     {L"Меню F10 працює й на ґеймпаді: View + Menu разом (на DualSense Create + Options) відкриває і закриває його, хрестовина або лівий стік ходять, A / хрестик вибирає, B / коло закриває, LB / RB (L1 / R1) перемикають розділ, LT / RT гортають на екран, Y / трикутник повертає типове. Гра в цей час ґеймпада не бачить. Діє з наступного відкриття меню.",
-      L"The F10 menu also works on a gamepad: View + Menu together (Create + Options on a DualSense) opens and closes it, the D-pad or the left stick moves, A / Cross picks, B / Circle closes, LB / RB (L1 / R1) switch the section, LT / RT scroll a screen, Y / Triangle restores the default. The game does not see the pad meanwhile. Takes effect the next time the menu opens."}, NOTR},
+     {L"Меню F10 працює й на ґеймпаді: View + Menu разом (на DualSense Create + Options) відкриває і закриває його, хрестовина або лівий стік ходять, A / хрестик вибирає, B / коло закриває, LB / RB (L1 / R1) перемикають розділ, LT / RT гортають на екран, Y / трикутник повертає типове, X / квадрат на сторінці «Моди» відкриває теку мода. Гра в цей час ґеймпада не бачить. Діє з наступного відкриття меню.",
+      L"The F10 menu also works on a gamepad: View + Menu together (Create + Options on a DualSense) opens and closes it, the D-pad or the left stick moves, A / Cross picks, B / Circle closes, LB / RB (L1 / R1) switch the section, LT / RT scroll a screen, Y / Triangle restores the default, X / Square opens a mod's folder on the Mods page. The game does not see the pad meanwhile. Takes effect the next time the menu opens."}, NOTR},
     {{L"Перевіряти оновлення", L"Check for updates"}, &g_cfg.checkUpdates, kBool, 0, 1, 1, true, L"Menu", L"CheckUpdates", nullptr, nullptr,
      {L"На старті один анонімний запит до GitHub: чи вийшла нова версія. Якщо так, плашка на старті й сторінка «Про мод» пропонують F9: мод сам завантажить її, замінить X3DAudio1_7.dll та іконки й перезапустить гру. Налаштування, моди й копії збережень лишаються.",
       L"One anonymous request to GitHub at the start: is a new version out. If so, the start card and the About page offer F9: the mod downloads it, replaces X3DAudio1_7.dll and the icons and restarts the game. Settings, mods and save backups stay."}, NOTR},
@@ -1694,10 +1694,10 @@ void HandleInput(bool foreground) {
             // A held direction moves the selection again and again, but a mod goes up or down the list once per press.
             const unsigned once = pad & ~g_padRepeat;
             ModsPageInput(Pressed(VK_UP) || g_wheel > 0 || (pad & kPadUp), Pressed(VK_DOWN) || g_wheel < 0 || (pad & kPadDown),
-                          Pressed(VK_RETURN) || Pressed(VK_SPACE) || (pad & kPadAccept), Pressed(VK_LEFT) || (once & kPadLeft),
+                          Pressed(VK_RETURN) || Pressed(VK_SPACE) || (pad & kPadAccept), (pad & kPadAction) != 0, Pressed(VK_LEFT) || (once & kPadLeft),
                           Pressed(VK_RIGHT) || (once & kPadRight), click && !SidebarClick(mx, my), mx, my);
             for (int i = 0; (pad & (kPadPageUp | kPadPageDown)) && i < PageRows(); ++i)
-                ModsPageInput((pad & kPadPageUp) != 0, (pad & kPadPageDown) != 0, false, false, false, false, 0, 0);
+                ModsPageInput((pad & kPadPageUp) != 0, (pad & kPadPageDown) != 0, false, false, false, false, false, 0, 0);
         } else if (click) {
             SidebarClick(mx, my);
         }
@@ -1967,7 +1967,7 @@ const wchar_t* PadWord(int which) {
 }
 
 // One button as a small key cap: a disc for a face button, a rounded box for the others. Only characters every font of
-// Windows and Wine has (WGL4: × ○ ▲), so no button turns into an empty box. Returns its width; `draw` false only measures.
+// Windows and Wine has (WGL4: × ○ ▲ □), so no button turns into an empty box. Returns its width; `draw` false only measures.
 // The cap is px + 3 high and starts one unit above the line, so the caps of the two hint lines (16 units apart) never overlap.
 float PadCap(const wchar_t* label, bool disc, float x, float y, int px, bool draw) {
     const int fpx = px - 2;
@@ -1980,7 +1980,7 @@ float PadCap(const wchar_t* label, bool disc, float x, float y, int px, bool dra
     return w;
 }
 
-// The cap(s) of a token: {A} {B} {Y} {LB} {RB} {LT} {RT} {OPEN}. Returns the width, 0 for an unknown token.
+// The cap(s) of a token: {A} {B} {X} {Y} {LB} {RB} {LT} {RT} {OPEN}. Returns the width, 0 for an unknown token.
 float PadToken(const wchar_t* t, int n, float x, float y, int px, bool draw) {
     auto is = [t, n](const wchar_t* s) {
         int i = 0;
@@ -1990,6 +1990,7 @@ float PadToken(const wchar_t* t, int n, float x, float y, int px, bool draw) {
     const bool ps = PadSony();
     if (is(L"A")) return PadCap(ps ? L"×" : L"A", true, x, y, px, draw);
     if (is(L"B")) return PadCap(ps ? L"○" : L"B", true, x, y, px, draw);
+    if (is(L"X")) return PadCap(ps ? L"□" : L"X", true, x, y, px, draw);
     if (is(L"Y")) return PadCap(ps ? L"▲" : L"Y", true, x, y, px, draw);
     if (is(L"LB")) return PadCap(ps ? L"L1" : L"LB", false, x, y, px, draw);
     if (is(L"RB")) return PadCap(ps ? L"R1" : L"RB", false, x, y, px, draw);
@@ -2468,11 +2469,6 @@ void Draw() {
         else if (pg.residents) ResidentsPage(kCx, kListTop, kCr, kPy + kPh - 44);
         else if (pg.mods) ModsPage(kCx, kListTop, kCr, kPy + kPh - 44);
         else DrawAbout();
-        // The mods page draws its own key line (mods_page.cpp); the pad's goes under it, where the other pages have their second line.
-        if (pg.mods && g_padMode)
-            DrawPadLineImpl(g_cfg.language == 1 ? L"↑ ↓ select     {A} on / off     ← → higher / lower     {LB} {RB} section     {B} close"
-                                                : L"↑ ↓ вибір     {A} вмк. / вимк.     ← → вище / нижче     {LB} {RB} розділ     {B} закрити",
-                            kCx, kPy + kPh - 20, kFaint, 12, kCr + 24 - kCx);
         // These pages have no description box: a notice floats over the top of the content, under the page's title (the
         // floating box of the closed menu would land right on it). It is drawn last, over the page.
         DrawNoticeBelow((kCx + kCr) / 2, kPy + 108, kCr - kCx - 32);

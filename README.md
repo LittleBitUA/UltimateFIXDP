@@ -278,7 +278,7 @@ To uninstall, delete `X3DAudio1_7.dll` (and, for the 4 GB flag, put `DP.exe.bak`
 | Key | Action |
 |---|---|
 | **F10** | Settings menu |
-| **View + Menu** (DualSense: **Create + Options**) | Settings menu on a gamepad: the D-pad or left stick moves, A / Cross picks, B / Circle closes, LB / RB the section, LT / RT a screen of rows, Y / Triangle the default (`[Menu] PadControl`) |
+| **View + Menu** (DualSense: **Create + Options**) | Settings menu on a gamepad: the D-pad or left stick moves, A / Cross picks, B / Circle closes, LB / RB the section, LT / RT a screen of rows, Y / Triangle the default, X / Square a mod's folder on the Mods page (`[Menu] PadControl`) |
 | **F7** | Set a waypoint (on the pause map or in the world) · **Shift+F7** removes it · **Ctrl+F7** to the game's objective |
 | **Shift+S** | Quick turn (on a pad: the Xbox 360 combination) |
 | **F6** | Photo mode |
@@ -574,7 +574,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 | Клавіша | Дія |
 |---|---|
 | **F10** | Меню налаштувань |
-| **View + Menu** (DualSense: **Create + Options**) | Меню налаштувань на ґеймпаді: хрестовина або лівий стік ходять, A / хрестик вибирає, B / коло закриває, LB / RB розділ, LT / RT на екран рядків, Y / трикутник типове (`[Menu] PadControl`) |
+| **View + Menu** (DualSense: **Create + Options**) | Меню налаштувань на ґеймпаді: хрестовина або лівий стік ходять, A / хрестик вибирає, B / коло закриває, LB / RB розділ, LT / RT на екран рядків, Y / трикутник типове, X / квадрат теку мода на сторінці «Моди» (`[Menu] PadControl`) |
 | **F7** | Поставити мітку (на мапі паузи або у світі) · **Shift+F7** прибирає · **Ctrl+F7** на ціль гри |
 | **Shift+S** | Швидкий розворот (на ґеймпаді: комбінація Xbox 360) |
 | **F6** | Фоторежим |
