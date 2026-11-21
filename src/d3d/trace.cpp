@@ -255,8 +255,14 @@ bool NamesMirror(const DWORD* code) {
     return false;
 }
 
+// Every pixel shader with its bytecode, so one draw can be explained (DumpDraw).
+void* g_psObj[2048];
+const DWORD* g_psCode[2048];
+int g_psCount = 0;
+
 HRESULT WINAPI H_CreatePs(void* dev, const DWORD* code, void** out) {
     HRESULT hr = r_CreatePs(dev, code, out);
+    if (SUCCEEDED(hr) && out && *out && g_psCount < 2048) { g_psObj[g_psCount] = *out; g_psCode[g_psCount++] = code; }
     if (SUCCEEDED(hr) && out && *out && NamesMirror(code) && g_waterShaderCount < 512) {
         g_waterShaders[g_waterShaderCount++] = *out;
         if (g_waterShaderCount == 1) Log("water: water pixel shaders recognised (g_vMirror); the first is from %08X", (u32)(uintptr_t)code);
@@ -359,9 +365,72 @@ template <typename Draw> HRESULT WaterDraw(void* dev, bool water, Draw draw) {
     r_SetPsConstF(dev, 10, g_psC[10], 1);
     return hr;
 }
+// One draw explained, once per caller address of interest (the prologue fog at 006D6E1B): the pixel shader disassembled into
+// UltimateFix\draw_<caller>.txt with its constants c0..c31 and the blend, alpha and depth states, to see why it comes out black.
+float g_psCx[32][4];
+void DumpDraw(void* dev, u32 from) {
+    static u32 done[8];
+    static int doneCount = 0;
+    for (int i = 0; i < doneCount; ++i) if (done[i] == from) return;
+    if (doneCount >= 8) return;
+    done[doneCount++] = from;
+    const DWORD* code = nullptr;
+    for (int i = 0; i < g_psCount && !code; ++i) if (g_psObj[i] == g_curPs) code = g_psCode[i];
+    wchar_t path[MAX_PATH + 64];
+    wsprintfW(path, L"%sUltimateFix\\draw_%08X.txt", g_paths.gameDir, from);
+    HANDLE f = CreateFileW(path, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return;
+    DWORD put;
+    char line[256];
+    int n = wsprintfA(line, "draw from %08X, pixel shader %08X, bytecode at %08X\r\n\r\n", from, (u32)(uintptr_t)g_curPs, (u32)(uintptr_t)code);
+    WriteFile(f, line, n, &put, nullptr);
+    typedef HRESULT(WINAPI * DisFn)(const DWORD*, BOOL, const char*, void**);
+    HMODULE d3dx = GetModuleHandleW(L"d3dx9_43.dll");
+    DisFn dis = d3dx ? (DisFn)(void*)GetProcAddress(d3dx, "D3DXDisassembleShader") : nullptr;
+    void* buf = nullptr;
+    if (code && dis && SUCCEEDED(dis(code, FALSE, nullptr, &buf)) && buf) {
+        void** vt = *(void***)buf;
+        typedef void*(WINAPI * PtrFn)(void*);
+        typedef DWORD(WINAPI * SizeFn)(void*);
+        typedef ULONG(WINAPI * RelFn)(void*);
+        const char* text = (const char*)((PtrFn)vt[3])(buf);
+        DWORD size = ((SizeFn)vt[4])(buf);
+        while (size && text[size - 1] == 0) --size;
+        WriteFile(f, text, size, &put, nullptr);
+        ((RelFn)vt[2])(buf);
+    } else {
+        n = wsprintfA(line, "(no disassembly)\r\n");
+        WriteFile(f, line, n, &put, nullptr);
+    }
+    n = wsprintfA(line, "\r\nPS constants (thousandths):\r\n");
+    WriteFile(f, line, n, &put, nullptr);
+    for (int r = 0; r < 32; ++r) {
+        n = wsprintfA(line, "c%d %d %d %d %d\r\n", r, Milli(g_psCx[r][0]), Milli(g_psCx[r][1]), Milli(g_psCx[r][2]), Milli(g_psCx[r][3]));
+        WriteFile(f, line, n, &put, nullptr);
+    }
+    typedef HRESULT(WINAPI * GetRsFn)(void*, DWORD, DWORD*);
+    GetRsFn getRs = (GetRsFn)(*(void***)dev)[58];  // IDirect3DDevice9::GetRenderState
+    static const struct { DWORD id; const char* name; } states[] = {
+        {7, "ZENABLE"}, {14, "ZWRITEENABLE"}, {15, "ALPHATESTENABLE"}, {24, "ALPHAREF"}, {25, "ALPHAFUNC"}, {27, "ALPHABLENDENABLE"},
+        {19, "SRCBLEND"}, {20, "DESTBLEND"}, {171, "BLENDOP"}, {206, "SEPARATEALPHABLENDENABLE"}, {207, "SRCBLENDALPHA"},
+        {208, "DESTBLENDALPHA"}, {209, "BLENDOPALPHA"}, {168, "COLORWRITEENABLE"}, {22, "CULLMODE"}, {28, "FOGENABLE"}, {194, "SRGBWRITEENABLE"}};
+    n = wsprintfA(line, "\r\nrender states:\r\n");
+    WriteFile(f, line, n, &put, nullptr);
+    for (const auto& st : states) {
+        DWORD v = 0;
+        getRs(dev, st.id, &v);
+        n = wsprintfA(line, "%s = %u\r\n", st.name, v);
+        WriteFile(f, line, n, &put, nullptr);
+    }
+    CloseHandle(f);
+    Log("water: the draw from %08X explained in %S", from, path);
+}
+
 HRESULT WINAPI H_DrawIp(void* dev, DWORD prim, INT base, UINT minIdx, UINT verts, UINT start, UINT count) __attribute__((noinline));
 HRESULT WINAPI H_DrawIp(void* dev, DWORD prim, INT base, UINT minIdx, UINT verts, UINT start, UINT count) {
-    const bool w = NoteWaterDraw(count, Caller());
+    const u32 from = Caller();
+    if (g_cfg.traceWater && from == 0x6D6E1Bu) DumpDraw(dev, from);  // the prologue fog
+    const bool w = NoteWaterDraw(count, from);
     return WaterDraw(dev, w, [&] { return r_DrawIp(dev, prim, base, minIdx, verts, start, count); });
 }
 HRESULT WINAPI H_DrawP(void* dev, DWORD prim, UINT start, UINT count) __attribute__((noinline));
@@ -372,6 +441,9 @@ HRESULT WINAPI H_DrawP(void* dev, DWORD prim, UINT start, UINT count) {
 
 void NotePsConst(UINT start, const float* data, UINT count) {
     if (!data) return;
+    for (UINT i = 0; i < count; ++i)
+        if (start + i < 32)
+            for (int k = 0; k < 4; ++k) g_psCx[start + i][k] = data[i * 4 + k];
     for (UINT i = 0; i < count; ++i)
         if (start + i < 16)
             for (int k = 0; k < 4; ++k) g_psC[start + i][k] = data[i * 4 + k];
