@@ -1007,6 +1007,7 @@ int g_sel = 0;     // selected item of the page
 int g_scroll = 0;  // first visible row
 u8 g_prev[256];    // previous key states, for edge detection
 bool g_dragging = false;
+bool g_padHolding = false;  // this frame's change is a repeat of a held pad Left/Right: written to the ini once it is let go
 volatile int g_wheel = 0;  // wheel steps since the last frame (taken from the game's wheel word)
 int g_chipSel = 0;          // the highlighted button on a row of action buttons (the arrows move it, Enter presses it)
 int g_chipRow = -1;         // the item that highlight belongs to
@@ -1243,7 +1244,7 @@ void Save(const Item& it) {
     WritePrivateProfileStringW(it.section, it.key, value, g_paths.iniFile);
 }
 
-Item* g_unsaved = nullptr;  // a slider dragged right now: written to the ini and the log once, when the drag ends
+Item* g_unsaved = nullptr;  // a slider dragged (or a value held on the pad) right now: written to the ini and the log once, when it ends
 
 void FlushUnsaved() {
     if (!g_unsaved) return;
@@ -1263,9 +1264,12 @@ void SetValue(Item& it, int v) {
         g_flipAt = MotionStamp();
     }
     if (g_unsaved && g_unsaved != &it) FlushUnsaved();
-    if (g_dragging && it.key) {
-        g_unsaved = &it;  // every step of a drag rewrote the whole ini file on the game thread
+    // Every step of a drag, or every repeat of a held pad direction (about 11 a second), rewrote the whole ini file on the
+    // game thread and logged a line.
+    if ((g_dragging || g_padHolding) && it.key) {
+        g_unsaved = &it;
     } else {
+        if (g_unsaved == &it) g_unsaved = nullptr;  // written now: the flush would only write and log the same value again
         Save(it);
         if (it.key) Log("menu: %S = %d", it.key, v);
     }
@@ -1423,6 +1427,7 @@ void SelectPage(int page) {
     g_scroll = 0;
     g_editing = false;
     g_confirm = 0;
+    FlushUnsaved();  // a value held on the pad when RB / LB left its page: the About or Mods page never gets to the flush
     BuildRows();
 }
 
@@ -1752,6 +1757,7 @@ void HandleInput(bool foreground) {
             if (!(again && it.kind == kBool)) {  // a held direction must not flip a switch on and off ten times a second
                 dir = bit == kPadRight ? +1 : -1;
                 if (again && slider) scale = MenuPadStepScale(MenuPadRepeats(g_pad, bit));
+                g_padHolding = again;  // the first press is written at once, the repeats when the direction is let go
             }
         }
         if (dir) {
@@ -1775,6 +1781,7 @@ void HandleInput(bool foreground) {
                 Change(it, dir * scale);
             }
         }
+        g_padHolding = false;  // A, Y or a key below writes at once
         if (action) {  // Enter, Space or A presses the highlighted button
             if (Pressed(VK_RETURN) || Pressed(VK_SPACE) || (pad & kPadAccept)) {
                 int i = g_chipSel < 0 ? 0 : (g_chipSel >= it.presetCount ? it.presetCount - 1 : g_chipSel);
@@ -1817,7 +1824,8 @@ void HandleInput(bool foreground) {
     g_hoverRow = -1;  // found again below while the mouse is over a button
     if (!held) {
         g_dragging = false;
-        FlushUnsaved();
+        // A pad hold writes its value when Left/Right is let go, not in the gaps between its repeats.
+        if (!g_padOn || !(g_pad.down & (kPadLeft | kPadRight))) FlushUnsaved();
     }
     if (MousePosition(&mx, &my)) {
         // moving and resizing the panel: the header (the top strip) moves it, the corner resizes it, a double click on the corner resets it
