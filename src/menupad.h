@@ -95,7 +95,7 @@ inline unsigned MenuPadStick(unsigned held, unsigned x, unsigned y) {
     return 0;
 }
 
-// The hat's directions: a diagonal holds both of its neighbours.
+// The hat's directions: a diagonal holds both of its neighbours (MenuPadUpdate then keeps one of them).
 inline unsigned MenuPadHat(unsigned pov) {
     if (pov >= 36000) return 0;
     unsigned d = 0;
@@ -111,7 +111,12 @@ inline MenuPadFrame MenuPadUpdate(MenuPad& p, const MenuPadRaw& raw, unsigned no
     unsigned d = 0;
     if (raw.valid) {
         p.stick = MenuPadStick(p.stick, raw.x, raw.y);
-        d |= p.stick | MenuPadHat(raw.pov);
+        unsigned hat = MenuPadHat(raw.pov);
+        // A diagonal keeps the axis already held: a thumb rolling off Right onto up-right must not also move the row (the
+        // held Right would then change the new one); a fresh diagonal counts as up / down.
+        if ((hat & (kPadUp | kPadDown)) && (hat & (kPadLeft | kPadRight)))
+            hat &= (p.down & (kPadLeft | kPadRight)) ? (kPadLeft | kPadRight) : (kPadUp | kPadDown);
+        d |= p.stick | hat;
         const unsigned b = raw.buttons;
         if ((b & kPadOpenPair) == kPadOpenPair) d |= kPadOpen;
         if (b & kXbA) d |= kPadAccept;

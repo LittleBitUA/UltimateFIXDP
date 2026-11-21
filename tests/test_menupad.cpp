@@ -107,6 +107,29 @@ int main() {
     CHECK(MenuPadHat(22500) == (kPadDown | kPadLeft), "down-left");
     CHECK(MenuPadHat(0) == kPadUp && MenuPadHat(27000) == kPadLeft, "up, left");
     CHECK(MenuPadHat(0xFFFF) == 0 && MenuPadHat(0xFFFFFFFFu) == 0, "centred");
+    // In the reader a diagonal keeps the axis already held, and a fresh one is up / down: one frame never moves the row and
+    // changes a value at once.
+    {
+        MenuPad p;
+        MenuPadRaw r = Idle();
+        MenuPadUpdate(p, r, 0);
+        r.pov = 9000;
+        MenuPadFrame f = MenuPadUpdate(p, r, 16);
+        CHECK(f.pressed == kPadRight, "hat right (%x)", f.pressed);
+        r.pov = 4500;
+        f = MenuPadUpdate(p, r, 32);
+        CHECK(f.down == kPadRight && f.pressed == 0, "rolled onto up-right: still only right (%x %x)", f.down, f.pressed);
+        r.pov = 0xFFFF;
+        MenuPadUpdate(p, r, 48);
+        r.pov = 4500;
+        f = MenuPadUpdate(p, r, 64);
+        CHECK(f.down == kPadUp && f.pressed == kPadUp, "a fresh up-right is up (%x %x)", f.down, f.pressed);
+        r.pov = 0xFFFF;
+        MenuPadUpdate(p, r, 80);
+        r.pov = 22500;
+        f = MenuPadUpdate(p, r, 96);
+        CHECK(f.down == kPadDown && f.pressed == kPadDown, "a fresh down-left is down (%x %x)", f.down, f.pressed);
+    }
     // Triggers: on the shared axis only when it is the trigger axis; the buttons 10/11 always.
     {
         MenuPad p;
