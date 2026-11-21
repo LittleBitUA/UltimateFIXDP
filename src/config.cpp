@@ -170,6 +170,11 @@ static const char kDefaultIni[] =
     "SmaaQuality=2\r\n"
     "; Sharpen the final picture (unsharp mask), percent 0..100. 0 = off, 50 by default. Changes at once.\r\n"
     "Sharpen=50\r\n"
+    "; 1 = smoothing, sharpening and GameLook go onto the 3D picture only, before the game draws its interface: subtitles,\r\n"
+    "; icons, the map and the game's menus stay sharp (the console never filtered them either). The TV gamma and the photo\r\n"
+    "; mode sliders still cover the whole frame. Frames without the game's 3D picture (title, loading screens, videos) are\r\n"
+    "; filtered as a whole as before. 0 = everything on the finished frame with the interface. Changes at once.\r\n"
+    "FiltersUnderHud=1\r\n"
     "; PNG screenshot of the picture without the menu into UltimateFix\\screenshots. Virtual key code, 122 = F11, 0 = off.\r\n"
     "ScreenshotKey=122\r\n"
     "; Interface icons. The game loads ONE icon atlas at start and only switches the coordinates between keyboard and\r\n"
@@ -751,6 +756,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.sharpen = (int)GetPrivateProfileIntW(L"Graphics", L"Sharpen", 50, ini);
     if (g_cfg.sharpen < 0) g_cfg.sharpen = 0;
     if (g_cfg.sharpen > 100) g_cfg.sharpen = 100;
+    g_cfg.filtersUnderHud = GetPrivateProfileIntW(L"Graphics", L"FiltersUnderHud", 1, ini) != 0 ? 1 : 0;
     g_cfg.screenshotKey = (int)GetPrivateProfileIntW(L"Graphics", L"ScreenshotKey", 122, ini);
     g_cfg.glyphTheme = (int)GetPrivateProfileIntW(L"Graphics", L"GlyphTheme", 1, ini);
     if (g_cfg.glyphTheme < 0 || g_cfg.glyphTheme > 3) g_cfg.glyphTheme = 1;

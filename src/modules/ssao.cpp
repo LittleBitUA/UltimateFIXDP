@@ -49,6 +49,8 @@ HRESULT WINAPI CompositeDrawHook(void* dev, DWORD type, UINT start, UINT count) 
     HRESULT hr = ((HRESULT(WINAPI*)(void*, DWORD, UINT, UINT))vtable[81])(dev, type, start, count);
     if (graded) ui::XboxLookEnd(dev, &look);
     if (tune) ((SetPsConstFn)vtable[109])(dev, 9, tuned, 2);
+    // after the game's own state is back: the passes save and restore all of it around themselves
+    if (SUCCEEDED(hr)) ui::PostFiltersAfterComposite(dev);
     return hr;
 }
 

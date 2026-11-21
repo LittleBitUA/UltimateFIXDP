@@ -303,10 +303,13 @@ HRESULT WINAPI OurPresent(void* dev, const RECT* src, const RECT* dst, HWND wnd,
         WaterFrame();        // diagnostic, Numpad 1 only with [Debug] TraceWater=1
     }
     if (windowThread && !src && !dst) {
+        // FiltersUnderHud: what already ran after this frame's composite, under the game's interface, is not run again
+        bool lookDone = false;
+        const bool filtersDone = ui::TakePostFiltersUnderHud(&lookDone);
         ui::PerfPostBegin(dev);
-        if (g_cfg.antialias > 0) ui::AntialiasFrame(dev, g_cfg.antialias);
-        ui::ColorFrame(dev);
-        if (g_cfg.sharpen > 0) ui::SharpenFrame(dev, g_cfg.sharpen);
+        if (!filtersDone && g_cfg.antialias > 0) ui::AntialiasFrame(dev, g_cfg.antialias);
+        if (!lookDone) ui::ColorFrame(dev);  // in photo mode its sliders: always here, on the whole frame
+        if (!filtersDone && g_cfg.sharpen > 0) ui::SharpenFrame(dev, g_cfg.sharpen);
         ui::XboxGammaFrame(dev);  // last: it stands for the screen of the console, behind everything the game and the filters drew
         ui::PerfPostEnd(dev);
         ui::ScreenshotFrame(dev);

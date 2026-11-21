@@ -92,6 +92,7 @@ struct Config {
     int antialiasMode;       // how the edges are smoothed: 0 the FXAA-like pass, 1 SMAA 1x (falls back to 0 when it cannot run)
     int smaaQuality;         // SMAA: 0 low, 1 medium, 2 high (how far along an edge its end is looked for)
     int sharpen;             // sharpening of the final picture in percent (0 = off)
+    int filtersUnderHud;     // smoothing, sharpening and the in-game look run after the game's composite, under its 2D layer
     int screenshotKey;       // virtual key code for a PNG screenshot, 0 = off
     int glyphTheme;          // interface icons for the pad: 0 off, 1 auto (PlayStation for a DualSense), 2 Xbox, 3 PlayStation
     int dumpTextures;        // write the original textures to UltimateFix\\textures\\dump (diagnostic)
@@ -415,6 +416,10 @@ bool ScreenshotHidesHud();  // a shot without the HUD is being prepared (freecam
 void OpenPhotoPage();
 void PerfPostBegin(void* device);
 void PerfPostEnd(void* device);
+// FiltersUnderHud: right after the game's final composite (ssao.cpp) the smoothing, sharpening and in-game look go onto the
+// 3D picture before the game draws its 2D layer; at Present the second says what already ran this frame (and forgets it).
+void PostFiltersAfterComposite(void* device);
+bool TakePostFiltersUnderHud(bool* lookDone);
 void PerfOverlayFrame(void* device, double fps, double frameMs, double presentMs, double physicsMs);
 void FrameStatsPush(double frameMs);  // one finished frame for the graph
 void FrameStatsPanel(void* device, double totalMs, double gameMs, double physicsMs, double presentMs, double worstMs, double busyMs);
