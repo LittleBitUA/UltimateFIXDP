@@ -2234,6 +2234,19 @@ float PadCap(const wchar_t* label, bool disc, float x, float y, int px, bool dra
     return w;
 }
 
+// A button as the pad's own icon from the mod's glyph atlas (UltimateFix\glyphs\gamepad\xbox.png or playstation.png: the
+// pictures the game shows for its buttons, 8x8 cells of 128), the size and place of a key cap, so the menu's hints look like
+// the game's. Returns the width, 0 when the atlas cannot be read (the caller then draws a key cap).
+float PadIcon(int row, int col, float x, float y, int px, bool draw) {
+    wchar_t path[MAX_PATH + 64];
+    wsprintfW(path, L"%sUltimateFix\\glyphs\\gamepad\\%s", g_paths.gameDir, PadSony() ? L"playstation.png" : L"xbox.png");
+    void* tex = ImageTexture(path, nullptr, nullptr);
+    if (!tex) return 0.f;
+    const float s = (float)px + 5.f;  // the icons fill about 120 of their 128-pixel cell
+    if (draw) DrawImage(tex, x, y - 2.f, s, s, (float)col / 8.f, (float)row / 8.f, (float)(col + 1) / 8.f, (float)(row + 1) / 8.f);
+    return s;
+}
+
 // The cap(s) of a token: {A} {B} {X} {Y} {LB} {RB} {LT} {RT} {R3} {L3} {OPEN}. Returns the width, 0 for an unknown token.
 float PadToken(const wchar_t* t, int n, float x, float y, int px, bool draw) {
     auto is = [t, n](const wchar_t* s) {
@@ -2242,22 +2255,27 @@ float PadToken(const wchar_t* t, int n, float x, float y, int px, bool draw) {
         return i == n && !s[i];
     };
     const bool ps = PadSony();
-    if (is(L"A")) return PadCap(ps ? L"×" : L"A", true, x, y, px, draw);
-    if (is(L"B")) return PadCap(ps ? L"○" : L"B", true, x, y, px, draw);
-    if (is(L"X")) return PadCap(ps ? L"□" : L"X", true, x, y, px, draw);
-    if (is(L"Y")) return PadCap(ps ? L"▲" : L"Y", true, x, y, px, draw);
-    if (is(L"LB")) return PadCap(ps ? L"L1" : L"LB", false, x, y, px, draw);
-    if (is(L"RB")) return PadCap(ps ? L"R1" : L"RB", false, x, y, px, draw);
-    if (is(L"LT")) return PadCap(ps ? L"L2" : L"LT", false, x, y, px, draw);
-    if (is(L"RT")) return PadCap(ps ? L"R2" : L"RT", false, x, y, px, draw);
-    if (is(L"R3")) return PadCap(L"R3", false, x, y, px, draw);  // the description box says "R3" on both families
-    if (is(L"L3")) return PadCap(L"L3", false, x, y, px, draw);
+    // the icon from the atlas cell (row, col), or a key cap with the label when the atlas is missing
+    auto button = [&](int row, int col, const wchar_t* label, bool disc, float at) {
+        const float w = PadIcon(row, col, at, y, px, draw);
+        return w > 0.f ? w : PadCap(label, disc, at, y, px, draw);
+    };
+    if (is(L"A")) return button(0, 0, ps ? L"×" : L"A", true, x);
+    if (is(L"B")) return button(0, 1, ps ? L"○" : L"B", true, x);
+    if (is(L"X")) return button(0, 2, ps ? L"□" : L"X", true, x);
+    if (is(L"Y")) return button(0, 3, ps ? L"▲" : L"Y", true, x);
+    if (is(L"LB")) return button(2, 1, ps ? L"L1" : L"LB", false, x);
+    if (is(L"RB")) return button(2, 2, ps ? L"R1" : L"RB", false, x);
+    if (is(L"LT")) return button(2, 3, ps ? L"L2" : L"LT", false, x);
+    if (is(L"RT")) return button(2, 4, ps ? L"R2" : L"RT", false, x);
+    if (is(L"R3")) return button(2, 6, L"R3", false, x);
+    if (is(L"L3")) return button(2, 5, L"L3", false, x);
     if (is(L"OPEN")) {
-        float w = PadCap(ps ? L"Create" : L"View", false, x, y, px, draw);
+        float w = button(2, 0, ps ? L"Create" : L"View", false, x);
         const float plus = TextWidth(L"+", px);
         if (draw) DrawText(L"+", x + w + 4.f, y, kFaint, px);
         w += 8.f + plus;
-        return w + PadCap(ps ? L"Options" : L"Menu", false, x + w, y, px, draw);
+        return w + button(1, 7, ps ? L"Options" : L"Menu", false, x + w);
     }
     return 0.f;
 }
