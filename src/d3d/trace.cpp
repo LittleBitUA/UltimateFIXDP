@@ -279,7 +279,6 @@ void* g_psObj[2048];
 const DWORD* g_psCode[2048];
 bool g_psOC1[2048];
 bool g_psSmoke[2048];     // the lit shader family (g_vDensity + g_tShadow): the prologue's black smoke is drawn with it
-bool g_psParticle[2048];  // its forward particle form (point lights g_vLitPos, no deferred light buffer): the one SmokeFix replaces
 int g_psCount = 0;
 
 // True when the shader bytecode writes oC1. Instructions are walked by their length field (ps_2_0 and later), and the def
@@ -311,7 +310,6 @@ HRESULT WINAPI H_CreatePs(void* dev, const DWORD* code, void** out) {
         g_psObj[g_psCount] = *out;
         g_psCode[g_psCount] = code;
         g_psSmoke[g_psCount] = NamesConstant(code, "g_vDensity") && NamesConstant(code, "g_tShadow");
-        g_psParticle[g_psCount] = g_psSmoke[g_psCount] && NamesConstant(code, "g_vLitPos") && !NamesConstant(code, "g_tDeffered");
         g_psOC1[g_psCount++] = WritesOC1(code);
     }
     if (SUCCEEDED(hr) && out && *out && NamesMirror(code) && g_waterShaderCount < 512) {
@@ -422,9 +420,9 @@ template <typename Draw> HRESULT WaterDraw(void* dev, bool water, Draw draw) {
 float g_psCx[32][4];
 void WriteDrawFile(void* dev, u32 from, const wchar_t* path);
 UINT g_drawFirstVertex = 0;  // the draw being explained: its first vertex in stream 0 (base + min index), 0 for DrawPrimitive's start
-bool CurrentPsIsParticle() {
-    for (int i = 0; i < g_psCount; ++i) if (g_psObj[i] == g_curPs) return g_psParticle[i];
-    return false;
+const DWORD* CurrentPsCode() {
+    for (int i = 0; i < g_psCount; ++i) if (g_psObj[i] == g_curPs) return g_psCode[i];
+    return nullptr;
 }
 bool CurrentPsIsSmoke() {
     for (int i = 0; i < g_psCount; ++i) if (g_psObj[i] == g_curPs) return g_psSmoke[i];
@@ -432,70 +430,34 @@ bool CurrentPsIsSmoke() {
 }
 // With TraceWater: each lit particle draw (the prologue's black smoke) explained once per particle texture, at most 8, in
 // UltimateFix\smoke_<caller>_<texture>.txt with its vertex shader, the vertices and its texture as PNG.
-// SmokeFix. The prologue's smoke is an animated model of sheets drawn with the lit particle shader (point lights, shadow, density,
-// fog; blended, no depth writes) and a DXT3 texture whose colour is all black: the shape is only in the alpha. The game makes an
-// animated 256x256 cloud each frame (FUN_006DB2C0) and keeps it in the special material table (A000C8); on the Xbox 360 it lay over
-// the smoke as light grey wisps, but no PC shader reads it, so the smoke is one dark patch. For these draws the mod uses its own copy
-// of the game's particle shader that takes the colour from the cloud and thins the alpha by it.
-const char kSmokePs[] =
-    "float4 lit0 : register(c0); float4 lit1 : register(c1); float4 lit2 : register(c2); float4 litDir : register(c3);\n"
-    "float4 pos1 : register(c7); float4 pos2 : register(c8); float4 density : register(c12); float4 fogColor : register(c63);\n"
-    "float4 cloudParam : register(c220); float4 cloudScale : register(c221);\n"  // brightness in y, alpha where the cloud is dark (z) / light (w); tiling
-    "sampler2D diffuse : register(s0); sampler2D cloud : register(s1); sampler2D shadow : register(s7);\n"
-    "float4 main(float2 uv : TEXCOORD0, float4 nrm : TEXCOORD1, float3 wp : TEXCOORD2, float4 sp : TEXCOORD5, float4 col : COLOR0) : COLOR {\n"
-    "  float3 n = normalize(nrm.xyz);\n"
-    "  float3 d1 = pos1.xyz - wp; float3 s1 = d1 * pos1.w; float a1 = saturate(1 - dot(s1, s1));\n"
-    "  float3 light = saturate(dot(n, normalize(d1))) * lit1.rgb * a1;\n"
-    "  light += lit0.rgb * saturate(dot(n, -litDir.xyz));\n"
-    "  float3 d2 = pos2.xyz - wp; float3 s2 = d2 * pos2.w; float a2 = saturate(1 - dot(s2, s2));\n"
-    "  light += saturate(dot(n, normalize(d2))) * lit2.rgb * a2;\n"
-    "  float lum = dot(light, float3(0.299, 0.587, 0.114));\n"
-    "  float4 sh = tex2Dproj(shadow, sp);\n"
-    "  float t = saturate((1 - sh.w) * lum * density.z + sh.w);\n"
-    "  float2 m = max(t.xx, density.xy);\n"
-    "  float3 lighting = light * m.x + m.y * col.rgb;\n"
-    "  float4 tex = tex2D(diffuse, uv);\n"
-    "  float c = tex2D(cloud, uv * cloudScale.xy).r;\n"
-    "  float3 colour = tex.rgb + c * cloudParam.y;\n"
-    "  float a = tex.a * col.a * lerp(cloudParam.z, cloudParam.w, c);\n"
-    "  return float4(nrm.w * (colour * lighting - fogColor.rgb) + fogColor.rgb, a);\n"
-    "}\n";
-
+// SmokeFix. The prologue's smoke is an animated model of sheets (skinned) with a black DXT3 texture: the smoke is only in its
+// alpha. On the Xbox 360 its material used the game's special material slot 0 (the table at A000A0, filled by FUN_006D1610): the
+// animated cloud's normal map in s1 (g_tNormal, A000C8), a mask in s2 (g_tMask, A000CC), specular (1.0, 128.0, 2.0) and a UV scale
+// of (1.5, 1.0): the light glints over the black sheets along the moving cloud, the grey wisps. In the PC data no material asks for
+// that slot, so the smoke is drawn with the plain particle shader and stays one dark patch. The game's own pair for it is still in
+// DP.exe: the skinned vertex shader with tangents and the UV scale (bytecode at A36BE8) and the particle pixel shader with normal,
+// mask and specular for the same lights (ABE804, the plain one being ABD8D0). For the smoke sheets the mod draws with that pair and
+// the table's textures and values; nothing of its own.
+constexpr u32 kSmokePlainPs = 0x00ABD8D0, kSmokeNormalPs = 0x00ABE804, kSmokeNormalVs = 0x00A36BE8;
 void* g_smokePs = nullptr;
-bool g_smokePsTried = false;
-float g_smokeBright = 0.4f, g_smokeAlphaDark = 0.4f, g_smokeAlphaLight = 1.0f;
-const float kSmokeScale[4] = {1.5f, 1.0f, 0.f, 0.f};  // the UV step of the cloud slot in the game's table (A000AC: 1.5, 1.0)
+void* g_smokeVs = nullptr;
+bool g_smokeShadersTried = false;
 
-void BuildSmokePs(void* dev) {
-    if (g_smokePsTried) return;
-    g_smokePsTried = true;
-    typedef HRESULT(WINAPI * CompileFn)(const char*, UINT, const void*, void*, const char*, const char*, DWORD, void**, void**, void**);
-    typedef void*(WINAPI * PtrFn)(void*);
-    typedef DWORD(WINAPI * SizeFn)(void*);
-    typedef ULONG(WINAPI * RelFn)(void*);
-    HMODULE d3dx = GetModuleHandleW(L"d3dx9_43.dll");
-    CompileFn compile = d3dx ? (CompileFn)(void*)GetProcAddress(d3dx, "D3DXCompileShader") : nullptr;
-    if (!compile) {
-        Log("smoke: D3DXCompileShader not found, no smoke shader");
+void BuildSmokeShaders(void* dev) {
+    if (g_smokeShadersTried) return;
+    g_smokeShadersTried = true;
+    const DWORD* ps = (const DWORD*)(uintptr_t)kSmokeNormalPs;
+    const DWORD* vs = (const DWORD*)(uintptr_t)kSmokeNormalVs;
+    if (ps[0] != 0xFFFF0300u || vs[0] != 0xFFFE0300u) {
+        Log("smoke: the game's shaders at %08X / %08X differ from DP.exe 1.01b, no smoke fix", kSmokeNormalPs, kSmokeNormalVs);
         return;
     }
-    void *code = nullptr, *errors = nullptr;
-    const HRESULT hr = compile(kSmokePs, sizeof(kSmokePs) - 1, nullptr, nullptr, "main", "ps_3_0", 0, &code, &errors, nullptr);
-    if (errors) {
-        char msg[300];
-        const char* text = (const char*)((PtrFn)(*(void***)errors)[3])(errors);
-        const DWORD size = ((SizeFn)(*(void***)errors)[4])(errors);
-        int n = 0;
-        for (DWORD i = 0; text && i < size && text[i] && n < 299; ++i) msg[n++] = (text[i] == '\r' || text[i] == '\n') ? ' ' : text[i];
-        msg[n] = 0;
-        if (FAILED(hr)) Log("smoke: the smoke shader did not compile (%08X): %s", (u32)hr, msg);
-        ((RelFn)(*(void***)errors)[2])(errors);
-    }
-    if (FAILED(hr) || !code) return;
-    CreatePsFn make = r_CreatePs ? r_CreatePs : (CreatePsFn)(*(void***)dev)[kCreatePixelShader];
-    const HRESULT made = make(dev, (const DWORD*)((PtrFn)(*(void***)code)[3])(code), &g_smokePs);
-    ((RelFn)(*(void***)code)[2])(code);
-    Log("smoke: the smoke shader with the cloud %s (%08X)", SUCCEEDED(made) && g_smokePs ? "is ready" : "was refused", (u32)made);
+    typedef HRESULT(WINAPI * MakeFn)(void*, const DWORD*, void**);
+    CreatePsFn makePs = r_CreatePs ? r_CreatePs : (CreatePsFn)(*(void***)dev)[kCreatePixelShader];
+    MakeFn makeVs = (MakeFn)(*(void***)dev)[91];  // IDirect3DDevice9::CreateVertexShader
+    const HRESULT a = makePs(dev, ps, &g_smokePs);
+    const HRESULT b = makeVs(dev, vs, &g_smokeVs);
+    Log("smoke: the game's shaders for the cloud material made (pixel %08X, vertex %08X)", (u32)a, (u32)b);
 }
 
 // A DXT3 texture whose colour is black wherever its pixels look (decoded per block), cached per texture
@@ -546,60 +508,98 @@ void NoteGreyCloud(u32 from) {
         g_greyCloud = g_stageTex[0];
     }
 }
-void* GameCloudTexture() { return g_greyCloud; }
 
-bool CurrentPsIsParticle();
+// The texture of a holder in the special material table (the way FUN_006B6020 picks it)
+void* HolderTexture(u32 slotVa) {
+    const u8* holder = *(const u8* const*)(uintptr_t)slotVa;
+    if (!holder) return nullptr;
+    void* t = *(void* const*)(holder + 0x14);
+    if (!t) t = *(void* const*)(holder + 0x18);
+    if (!t) t = *(void* const*)(holder + 0x1C);
+    return t;
+}
 
-// Draws a smoke sheet with the cloud when this is one; false when the game draws it as it is
+const DWORD* CurrentPsCode();
+
+// Draws a smoke sheet with the game's cloud material when this is one; false when the game draws it as it is
 template <typename Draw> bool SmokeDraw(void* dev, Draw draw, HRESULT* hr) {
-    if (!g_cfg.smokeFix || !g_stageTex[0] || !CurrentPsIsParticle()) return false;
+    if (!g_cfg.smokeFix || !g_stageTex[0] || CurrentPsCode() != (const DWORD*)(uintptr_t)kSmokePlainPs) return false;
     typedef HRESULT(WINAPI * GetRsFn)(void*, DWORD, DWORD*);
-    GetRsFn getRs = (GetRsFn)(*(void***)dev)[58];
+    void** dvt = *(void***)dev;
+    GetRsFn getRs = (GetRsFn)dvt[58];
     DWORD blend = 0, zwrite = 1;
     getRs(dev, 27 /*ALPHABLENDENABLE*/, &blend);
     getRs(dev, 14 /*ZWRITEENABLE*/, &zwrite);
     if (!blend || zwrite) return false;
     typedef DWORD(WINAPI * TypeFn)(void*);
     if (((TypeFn)(*(void***)g_stageTex[0])[10])(g_stageTex[0]) != 3 || !IsBlackDxt3(g_stageTex[0])) return false;
-    void* cloud = GameCloudTexture();
-    BuildSmokePs(dev);
-    if (!cloud || !g_smokePs || !r_SetPs || !r_SetTexture || !r_SetPsConstF) {
+    BuildSmokeShaders(dev);
+    void* normal = HolderTexture(0x00A000C8);
+    void* mask = HolderTexture(0x00A000CC);
+    if (!g_smokePs || !g_smokeVs || !normal || !r_SetPs || !r_SetTexture || !r_SetPsConstF || !r_SetVsConstF) {
         static bool told = false;
         if (!told) {
             told = true;
-            Log("smoke: no cloud over the smoke (cloud %08X, shader %08X)", (u32)(uintptr_t)cloud, (u32)(uintptr_t)g_smokePs);
+            Log("smoke: the cloud material cannot be drawn (shaders %08X %08X, normal map %08X, mask %08X)", (u32)(uintptr_t)g_smokePs,
+                (u32)(uintptr_t)g_smokeVs, (u32)(uintptr_t)normal, (u32)(uintptr_t)mask);
         }
         return false;
     }
+    typedef HRESULT(WINAPI * GetVsFn)(void*, void**);
+    typedef HRESULT(WINAPI * SetVsFn)(void*, void*);
     typedef HRESULT(WINAPI * GetSsFn)(void*, DWORD, DWORD, DWORD*);
     typedef HRESULT(WINAPI * SetSsFn)(void*, DWORD, DWORD, DWORD);
-    void** dvt = *(void***)dev;
+    typedef HRESULT(WINAPI * GetPsCFn)(void*, UINT, float*, UINT);
+    typedef ULONG(WINAPI * RelFn)(void*);
     GetSsFn getSs = (GetSsFn)dvt[68];
     SetSsFn setSs = (SetSsFn)dvt[69];
-    static const DWORD kStates[5] = {1 /*ADDRESSU*/, 2 /*ADDRESSV*/, 5 /*MAGFILTER*/, 6 /*MINFILTER*/, 7 /*MIPFILTER*/};
-    static const DWORD kValues[5] = {1 /*WRAP*/, 1, 2 /*LINEAR*/, 2, 0 /*NONE*/};
-    DWORD saved[5];
-    for (int i = 0; i < 5; ++i) {
-        saved[i] = 0;
-        getSs(dev, 1, kStates[i], &saved[i]);
-        setSs(dev, 1, kStates[i], kValues[i]);
-    }
+    // the table's values: UV scale/offset at A000AC (VS c243 g_vScrlParam), specular at A000BC.. (PS c9 g_vSpecular)
+    const float* table = (const float*)(uintptr_t)0x00A000A0;
+    const float scroll[4] = {table[3], table[4], table[5], table[6]};
+    const float specular[4] = {table[7], table[8], table[9], 0.f};
+    const float* cam = (const float*)(uintptr_t)(0x00BD9648 + 4);  // CRdCamera: the eye
+    const float eye[4] = {cam[0], cam[1], cam[2], 1.f};
+    float ownVs243[4], ownPs9[4], ownPs62[4];
+    ((GetPsCFn)dvt[95])(dev, 243, ownVs243, 1);  // GetVertexShaderConstantF
+    ((GetPsCFn)dvt[110])(dev, 9, ownPs9, 1);     // GetPixelShaderConstantF
+    ((GetPsCFn)dvt[110])(dev, 62, ownPs62, 1);
+    void* ownVs = nullptr;
+    ((GetVsFn)dvt[93])(dev, &ownVs);
     void* ownPs = g_curPs;
     void* ownTex1 = g_stageTex[1];
-    const float param[4] = {0.f, g_smokeBright, g_smokeAlphaDark, g_smokeAlphaLight};
+    void* ownTex2 = g_stageTex[2];
+    static const DWORD kStates[5] = {1 /*ADDRESSU*/, 2 /*ADDRESSV*/, 5 /*MAGFILTER*/, 6 /*MINFILTER*/, 7 /*MIPFILTER*/};
+    static const DWORD kValues[5] = {1 /*WRAP*/, 1, 2 /*LINEAR*/, 2, 2 /*LINEAR*/};
+    DWORD saved[2][5];
+    for (int st = 1; st <= 2; ++st)
+        for (int i = 0; i < 5; ++i) {
+            saved[st - 1][i] = 0;
+            getSs(dev, st, kStates[i], &saved[st - 1][i]);
+            setSs(dev, st, kStates[i], kValues[i]);
+        }
+    ((SetVsFn)dvt[92])(dev, g_smokeVs);
     r_SetPs(dev, g_smokePs);
-    r_SetTexture(dev, 1, cloud);
-    r_SetPsConstF(dev, 220, param, 1);
-    r_SetPsConstF(dev, 221, kSmokeScale, 1);
+    r_SetTexture(dev, 1, normal);
+    r_SetTexture(dev, 2, mask);
+    r_SetVsConstF(dev, 243, scroll, 1);
+    r_SetPsConstF(dev, 9, specular, 1);
+    r_SetPsConstF(dev, 62, eye, 1);
     *hr = draw();
-    r_SetPs(dev, ownPs);
+    r_SetPsConstF(dev, 62, ownPs62, 1);
+    r_SetPsConstF(dev, 9, ownPs9, 1);
+    r_SetVsConstF(dev, 243, ownVs243, 1);
+    r_SetTexture(dev, 2, ownTex2);
     r_SetTexture(dev, 1, ownTex1);
-    for (int i = 0; i < 5; ++i) setSs(dev, 1, kStates[i], saved[i]);
+    r_SetPs(dev, ownPs);
+    ((SetVsFn)dvt[92])(dev, ownVs);
+    if (ownVs) ((RelFn)(*(void***)ownVs)[2])(ownVs);
+    for (int st = 1; st <= 2; ++st)
+        for (int i = 0; i < 5; ++i) setSs(dev, st, kStates[i], saved[st - 1][i]);
     static bool told = false;
     if (!told) {
         told = true;
-        Log("smoke: the cloud goes over the smoke (brightness %d%%, alpha %d..%d%%)", (int)(g_smokeBright * 100), (int)(g_smokeAlphaDark * 100),
-            (int)(g_smokeAlphaLight * 100));
+        Log("smoke: drawn with the game's cloud material (UV %d %d, specular %d %d %d, thousandths)", Milli(scroll[0]), Milli(scroll[1]),
+            Milli(specular[0]), Milli(specular[1]), Milli(specular[2]));
     }
     return true;
 }
@@ -1158,6 +1158,161 @@ void HuntFrame(bool k3, bool, bool, bool) {
     }
 }
 
+// [Debug] FrameCapture: Numpad 0 arms, the next frame (Present to Present) is written draw by draw to UltimateFix\capture_<time>\.
+struct FrameCap {
+    bool armed, on;
+    HANDLE list;
+    wchar_t dir[MAX_PATH];
+    int draws, pngs;
+    void* shaders[512];
+    int shaderCount;
+    void* textures[512];
+    int textureCount;
+} g_cap;
+void* g_capDev = nullptr;  // the device of the last draw
+
+void CapWrite(const char* text, int n) {
+    DWORD put;
+    if (g_cap.list != INVALID_HANDLE_VALUE && g_cap.list) WriteFile(g_cap.list, text, (DWORD)n, &put, nullptr);
+}
+
+// The disassembly of a shader (bytecode from the device object) into <dir>\<kind>_<ptr>.txt, once
+void CapShader(void* shader, const char* kind) {
+    if (!shader) return;
+    for (int i = 0; i < g_cap.shaderCount; ++i) if (g_cap.shaders[i] == shader) return;
+    if (g_cap.shaderCount < 512) g_cap.shaders[g_cap.shaderCount++] = shader;
+    typedef HRESULT(WINAPI * GetFuncFn)(void*, void*, UINT*);
+    typedef HRESULT(WINAPI * DisFn)(const DWORD*, BOOL, const char*, void**);
+    typedef void*(WINAPI * PtrFn)(void*);
+    typedef DWORD(WINAPI * SizeFn)(void*);
+    typedef ULONG(WINAPI * RelFn)(void*);
+    UINT size = 0;
+    ((GetFuncFn)(*(void***)shader)[4])(shader, nullptr, &size);
+    if (!size || size > (1u << 20)) return;
+    DWORD* code = (DWORD*)VirtualAlloc(nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!code) return;
+    HMODULE d3dx = GetModuleHandleW(L"d3dx9_43.dll");
+    DisFn dis = d3dx ? (DisFn)(void*)GetProcAddress(d3dx, "D3DXDisassembleShader") : nullptr;
+    void* buf = nullptr;
+    if (SUCCEEDED(((GetFuncFn)(*(void***)shader)[4])(shader, code, &size)) && dis && SUCCEEDED(dis(code, FALSE, nullptr, &buf)) && buf) {
+        wchar_t path[MAX_PATH + 64];
+        wsprintfW(path, L"%s\\%S_%08X.txt", g_cap.dir, kind, (u32)(uintptr_t)shader);
+        HANDLE f = CreateFileW(path, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        if (f != INVALID_HANDLE_VALUE) {
+            const char* text = (const char*)((PtrFn)(*(void***)buf)[3])(buf);
+            DWORD n = ((SizeFn)(*(void***)buf)[4])(buf), put;
+            while (n && text[n - 1] == 0) --n;
+            WriteFile(f, text, n, &put, nullptr);
+            CloseHandle(f);
+        }
+        ((RelFn)(*(void***)buf)[2])(buf);
+    }
+    VirtualFree(code, 0, MEM_RELEASE);
+}
+
+// A texture as <dir>\tex_<ptr>.png, once, 2D and at most 1024 on a side (bigger targets take D3DX seconds)
+void CapTexture(void* tex) {
+    if (!tex || g_cap.pngs >= 400) return;
+    for (int i = 0; i < g_cap.textureCount; ++i) if (g_cap.textures[i] == tex) return;
+    if (g_cap.textureCount < 512) g_cap.textures[g_cap.textureCount++] = tex;
+    typedef DWORD(WINAPI * TypeFn)(void*);
+    typedef HRESULT(WINAPI * DescFn)(void*, UINT, void*);
+    typedef HRESULT(WINAPI * SaveFn)(const wchar_t*, DWORD, void*, const void*);
+    void** vt = *(void***)tex;
+    u32 d[8] = {0};
+    if (((TypeFn)vt[10])(tex) != 3 || FAILED(((DescFn)vt[17])(tex, 0, d)) || d[6] > 1024 || d[7] > 1024) return;
+    HMODULE d3dx = GetModuleHandleW(L"d3dx9_43.dll");
+    SaveFn save = d3dx ? (SaveFn)(void*)GetProcAddress(d3dx, "D3DXSaveTextureToFileW") : nullptr;
+    if (!save) return;
+    wchar_t path[MAX_PATH + 64];
+    wsprintfW(path, L"%s\\tex_%08X.png", g_cap.dir, (u32)(uintptr_t)tex);
+    save(path, 3 /*PNG*/, tex, nullptr);
+    ++g_cap.pngs;
+}
+
+void CapDraw(void* dev, u32 from, const char* kind, DWORD prim, UINT count) {
+    if (g_cap.draws >= 4000) return;
+    void** dvt = *(void***)dev;
+    typedef HRESULT(WINAPI * GetVsFn)(void*, void**);
+    typedef HRESULT(WINAPI * GetRsFn)(void*, DWORD, DWORD*);
+    typedef ULONG(WINAPI * RelFn)(void*);
+    void* vs = nullptr;
+    ((GetVsFn)dvt[93])(dev, &vs);
+    GetRsFn getRs = (GetRsFn)dvt[58];
+    DWORD st[9] = {};
+    static const DWORD kIds[9] = {7 /*Z*/, 14 /*ZWRITE*/, 27 /*BLEND*/, 19 /*SRC*/, 20 /*DST*/, 15 /*ATEST*/, 24 /*AREF*/, 168 /*CWRITE*/, 22 /*CULL*/};
+    for (int i = 0; i < 9; ++i) getRs(dev, kIds[i], &st[i]);
+    char rt[48] = "?";
+    if (g_rt0) {
+        typedef HRESULT(WINAPI * SurfDescFn)(void*, u32*);
+        u32 d[8] = {};
+        if (SUCCEEDED(((SurfDescFn)(*(void***)g_rt0)[12])(g_rt0, d))) wsprintfA(rt, "%ux%u fmt %u", d[6], d[7], d[0]);
+    }
+    const DWORD* code = CurrentPsCode();
+    char line[900];
+    int n = wsprintfA(line, "%4d %s from %08X prim %u count %u | vs %08X ps %08X (bytecode %08X) | rt %08X %s | z %u zw %u blend %u %u/%u atest %u ref %u cw %X cull %u |",
+                      g_cap.draws, kind, from, prim, count, (u32)(uintptr_t)vs, (u32)(uintptr_t)g_curPs, (u32)(uintptr_t)code,
+                      (u32)(uintptr_t)g_rt0, rt, st[0], st[1], st[2], st[3], st[4], st[5], st[6], st[7], st[8]);
+    for (int s = 0; s < 8; ++s) {
+        char t[48];
+        DescribeTexture(g_stageTex[s], t);
+        n += wsprintfA(line + n, " s%d %08X %s;", s, (u32)(uintptr_t)g_stageTex[s], t);
+        if (n > 820) break;
+    }
+    line[n++] = '\r';
+    line[n++] = '\n';
+    CapWrite(line, n);
+    ++g_cap.draws;
+    CapShader(vs, "vs");
+    CapShader(g_curPs, "ps");
+    for (int s = 0; s < 8; ++s) CapTexture(g_stageTex[s]);
+    if (vs) ((RelFn)(*(void***)vs)[2])(vs);
+}
+
+// From WaterFrame at every Present: Numpad 0 arms; the frame after the arming Present is the one written
+void CapFrame(void* dev, bool key) {
+    if (g_cap.on) {  // the captured frame ends here: the picture, then close
+        g_cap.on = false;
+        typedef HRESULT(WINAPI * SaveSurfFn)(const wchar_t*, DWORD, void*, const void*, const RECT*);
+        typedef HRESULT(WINAPI * GetBbFn)(void*, UINT, UINT, DWORD, void**);
+        typedef ULONG(WINAPI * RelFn)(void*);
+        HMODULE d3dx = GetModuleHandleW(L"d3dx9_43.dll");
+        SaveSurfFn save = d3dx ? (SaveSurfFn)(void*)GetProcAddress(d3dx, "D3DXSaveSurfaceToFileW") : nullptr;
+        void* bb = nullptr;
+        if (save && dev && SUCCEEDED(((GetBbFn)(*(void***)dev)[18])(dev, 0, 0, 0, &bb)) && bb) {
+            wchar_t path[MAX_PATH + 32];
+            wsprintfW(path, L"%s\\frame.png", g_cap.dir);
+            save(path, 3, bb, nullptr, nullptr);
+            ((RelFn)(*(void***)bb)[2])(bb);
+        }
+        if (g_cap.list && g_cap.list != INVALID_HANDLE_VALUE) CloseHandle(g_cap.list);
+        g_cap.list = nullptr;
+        Log("capture: %d draws, %d shaders, %d textures written to %S", g_cap.draws, g_cap.shaderCount, g_cap.pngs, g_cap.dir);
+        ShowNotice(L"Кадр записано", L"Frame captured", g_cap.dir, g_cap.dir, 6);
+        return;
+    }
+    if (g_cap.armed) {  // the frame from this Present to the next one
+        g_cap.armed = false;
+        SYSTEMTIME t;
+        GetLocalTime(&t);
+        wsprintfW(g_cap.dir, L"%sUltimateFix\\capture_%04u%02u%02u_%02u%02u%02u", g_paths.gameDir, t.wYear, t.wMonth, t.wDay, t.wHour, t.wMinute,
+                  t.wSecond);
+        CreateDirectoryW(g_cap.dir, nullptr);
+        wchar_t path[MAX_PATH + 32];
+        wsprintfW(path, L"%s\\frame.txt", g_cap.dir);
+        g_cap.list = CreateFileW(path, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+        g_cap.draws = g_cap.pngs = g_cap.shaderCount = g_cap.textureCount = 0;
+        const char head[] = "draws of one frame in order; z/zw/blend etc. are render states; cw = colour write mask; sN = texture stage N\r\n";
+        CapWrite(head, (int)sizeof(head) - 1);
+        g_cap.on = true;
+        return;
+    }
+    if (key) {
+        g_cap.armed = true;
+        Log("capture: the next frame will be written (Numpad 0)");
+    }
+}
+
 HRESULT WINAPI H_DrawIp(void* dev, DWORD prim, INT base, UINT minIdx, UINT verts, UINT start, UINT count) __attribute__((noinline));
 HRESULT WINAPI H_DrawIp(void* dev, DWORD prim, INT base, UINT minIdx, UINT verts, UINT start, UINT count) {
     const u32 from = Caller();
@@ -1171,6 +1326,8 @@ HRESULT WINAPI H_DrawIp(void* dev, DWORD prim, INT base, UINT minIdx, UINT verts
         return 0;
     }
     g_drawFirstVertex = (UINT)(base + (INT)minIdx);
+    g_capDev = dev;
+    if (g_cap.on) CapDraw(dev, from, "DIP", prim, count);
     if (g_cfg.traceWater && CurrentPsIsSmoke()) ExplainSmoke(dev, from);
     if (g_cfg.traceWater) {
         ExplainCloudReader(dev, from);
@@ -1189,6 +1346,8 @@ HRESULT WINAPI H_DrawP(void* dev, DWORD prim, UINT start, UINT count) __attribut
 HRESULT WINAPI H_DrawP(void* dev, DWORD prim, UINT start, UINT count) {
     const u32 from = Caller();
     g_drawFirstVertex = start;
+    g_capDev = dev;
+    if (g_cap.on) CapDraw(dev, from, "DP ", prim, count);
     if (g_cfg.traceWater && CurrentPsIsSmoke()) ExplainSmoke(dev, from);
     if (g_cfg.traceWater) {
         ExplainCloudReader(dev, from);
@@ -1281,7 +1440,7 @@ void PatchDevice(void* dev) {
         bool t = PatchSlot(vt, kSetTexture, (void*)H_SetTexture, (void**)&r_SetTexture);
         Log("d3d: icon atlas swap hooked (%d)", t);
     }
-    if (g_cfg.traceWater || g_cfg.waterTest || g_cfg.fogFix || g_cfg.smokeFix) {
+    if (g_cfg.traceWater || g_cfg.waterTest || g_cfg.fogFix || g_cfg.smokeFix || g_cfg.frameCapture) {
         const bool a = PatchSlot(vt, kSetPixelShaderConstantF, (void*)H_SetPsConstF, (void**)&r_SetPsConstF);
         const bool b = PatchSlot(vt, kSetVertexShaderConstantF, (void*)H_SetVsConstF, (void**)&r_SetVsConstF);
         const bool c = PatchSlot(vt, kSetTexture, (void*)H_SetTexture, (void**)&r_SetTexture);
@@ -1289,13 +1448,13 @@ void PatchDevice(void* dev) {
         const bool e = PatchSlot(vt, kSetPixelShader, (void*)H_SetPs, (void**)&r_SetPs);
         const bool f = PatchSlot(vt, kDrawIndexedPrimitive, (void*)H_DrawIp, (void**)&r_DrawIp);
         const bool g = PatchSlot(vt, kDrawPrimitive, (void*)H_DrawP, (void**)&r_DrawP);
-        if (g_cfg.traceWater) PatchSlot(vt, kSetRenderTarget, (void*)H_SetRt, (void**)&r_SetRt);
+        if (g_cfg.traceWater || g_cfg.frameCapture) PatchSlot(vt, kSetRenderTarget, (void*)H_SetRt, (void**)&r_SetRt);
         g_waterHooked = a && f && g;
         if (g_cfg.traceWater || g_cfg.waterTest)
             Log("water: diagnostic hooked (%d%d%d%d%d%d%d): each distinct water draw goes to the log once; Numpad 1 switches WaterTest", a, b,
                 c, d, e, f, g);
         else
-            Log("fog: draw hooks in (%d%d%d): %s%s", c, d && e, f, g_cfg.smokeFix ? "the cloud goes over the black smoke (SmokeFix)" : "",
+            Log("fog: draw hooks in (%d%d%d): %s%s", c, d && e, f, g_cfg.smokeFix ? "the smoke gets the game's cloud material (SmokeFix)" : "",
                 g_cfg.fogFix ? (g_cfg.smokeFix ? ", smoke volumes kept out of the G-buffer" : "smoke volumes kept out of the G-buffer") : "");
     }
     if (g_cfg.shadowPrecision && !g_cfg.traceResources)
@@ -1542,6 +1701,15 @@ void InstallReflectionProbe() {
 // Once per frame (display.cpp): with the water hooks on, Numpad 1 switches the water test, so the same view can be compared.
 void WaterFrame() {
     if (!g_waterHooked) return;
+    if (g_cfg.frameCapture) {
+        static bool held0 = false;
+        DWORD pid0 = 0;
+        HWND fg0 = GetForegroundWindow();
+        if (fg0) GetWindowThreadProcessId(fg0, &pid0);
+        const bool down = pid0 == GetCurrentProcessId() && !ui::IsOpen() && (GetAsyncKeyState(VK_NUMPAD0) & 0x8000);
+        CapFrame(g_huntDev ? g_huntDev : g_capDev, down && !held0);
+        held0 = down;
+    }
     static DWORD s_start = 0;
     static bool s_counted = false;
     if (!s_start) s_start = GetTickCount();
@@ -1587,25 +1755,6 @@ void WaterFrame() {
             held[k] = d;
         }
         HuntFrame(hit[0], hit[1], hit[2], hit[3]);
-        static bool held2[3];
-        bool hit2[3];
-        for (int k = 0; k < 3; ++k) {
-            const bool d = ours && (GetAsyncKeyState(VK_NUMPAD7 + k) & 0x8000);
-            hit2[k] = d && !held2[k];
-            held2[k] = d;
-        }
-        if (hit2[0] || hit2[1] || hit2[2]) {  // Numpad 7/8: the cloud's brightness on the smoke; Numpad 9: how thin the dark parts are
-            if (hit2[0] && g_smokeBright > 0.05f) g_smokeBright -= 0.05f;
-            if (hit2[1] && g_smokeBright < 2.0f) g_smokeBright += 0.05f;
-            if (hit2[2]) g_smokeAlphaDark = g_smokeAlphaDark >= 0.95f ? 0.0f : g_smokeAlphaDark + 0.25f;
-            wchar_t uk[120], en[120];
-            wsprintfW(uk, L"Яскравість хмари %d%%, прозорість темного %d%%. Numpad 7/8 яскравість, 9 прозорість.", (int)(g_smokeBright * 100 + 0.5f),
-                      (int)(g_smokeAlphaDark * 100 + 0.5f));
-            wsprintfW(en, L"Cloud brightness %d%%, dark parts' alpha %d%%. Numpad 7/8 brightness, 9 alpha.", (int)(g_smokeBright * 100 + 0.5f),
-                      (int)(g_smokeAlphaDark * 100 + 0.5f));
-            ShowNotice(L"Дим", L"Smoke", uk, en, 4);
-            Log("smoke: cloud brightness %d%%, dark parts' alpha %d%%", (int)(g_smokeBright * 100 + 0.5f), (int)(g_smokeAlphaDark * 100 + 0.5f));
-        }
         if (hit[3]) {  // Numpad 6: the cloud slot for the smoke sheets on or off
             g_forceSmokeSlot = !g_forceSmokeSlot;
             Log("smoke: the cloud slot for the smoke sheets %s (Numpad 6)", g_forceSmokeSlot ? "on" : "off");

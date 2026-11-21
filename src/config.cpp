@@ -441,6 +441,10 @@ static const char kDefaultIni[] =
     "; replacement is looked up by (cube maps are only dumped, not replaced).\r\n"
     "; For finding textures to replace, e.g. the interface icons. Delete the folder afterwards.\r\n"
     "DumpTextures=0\r\n"
+    "; 1 = Numpad 0 writes the next frame draw by draw to UltimateFix\\capture_<time>\\ (frame.txt: every draw with its caller, shaders,\r\n"
+    "; render target, states and textures; every shader disassembled once; every texture up to 1024 as PNG once; the picture).\r\n"
+    "; A tool like RenderDoc for this Direct3D 9 game. A capture takes some seconds.\r\n"
+    "FrameCapture=0\r\n"
     "; 1 = log the player state changes, the game's camera mode changes, scripted camera requests and sudden camera (eye) jumps, each\r\n"
     "; with the cutscene flag, and the car input once a second while driving; at most 600 lines per start. Play to the place where the\r\n"
     "; camera should change, then send UltimateFix\\ufx.log. Off by default (every line is written on the game thread).\r\n"
@@ -875,6 +879,7 @@ void LoadConfig(const wchar_t* ini) {
     }
     g_cfg.traceResources = (int)GetPrivateProfileIntW(L"Debug", L"TraceResources", 0, ini);
     g_cfg.traceWater = (int)GetPrivateProfileIntW(L"Debug", L"TraceWater", 0, ini);
+    g_cfg.frameCapture = (int)GetPrivateProfileIntW(L"Debug", L"FrameCapture", 0, ini);
     g_cfg.waterTest = (int)GetPrivateProfileIntW(L"Debug", L"WaterTest", 0, ini);
     g_cfg.menu = (int)GetPrivateProfileIntW(L"Menu", L"Enabled", 1, ini);
     g_cfg.startHint = (int)GetPrivateProfileIntW(L"Menu", L"StartHint", 1, ini);
