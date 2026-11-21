@@ -456,21 +456,34 @@ void WriteDrawFile(void* dev, u32 from, const wchar_t* path) {
     Log("water: the draw from %08X explained in %S", from, path);
 }
 
-// [Debug] TraceWater=1: the draw hunt (Numpad 3..6). The frame's draws by the game are numbered in their order; the hunt leaves out
-// one half of the remaining range and the player says whether the black hole went away with it (Numpad 4) or stayed (Numpad 5), so
-// about a dozen answers single out the one draw that makes it. That draw is explained in UltimateFix\hunt_<caller>_<shader>.txt and
-// its textures saved next to it. Standing still keeps the numbering the same from frame to frame.
-struct DrawHunt {
+// [Debug] TraceWater=1: the draw scan (Numpad 3). The frame's draws by the game are numbered in their order; the scan leaves out one
+// draw per frame, from the first to the last, and measures the brightness of the middle of the picture (a 64x64 patch, read back
+// at Present before the mod's own filters). Every few frames nothing is left out, for the baseline. A draw whose absence makes the
+// middle brighter is part of the black patch there: it goes to the log, and the strongest ones are explained afterwards in
+// UltimateFix\hunt_<caller>_<shader>.txt with their textures saved as PNG. Several draws together may make the patch, so all of
+// them are listed, not only the strongest. Standing still keeps the numbering the same from frame to frame.
+struct ScanHit {
+    int index, gain;
+    u32 from, shader, count;
+    char tex[4][40];
+};
+struct DrawScan {
     bool on;
-    int lo, hi;            // the draw holding the hole is in [lo, hi)
-    int backLo[32], backHi[32];
-    int depth;
-    bool explained;
-} g_hunt;
+    int next;              // the draw to leave out in the coming frame, -1 for a baseline frame
+    int skipping;          // the draw left out in the frame being drawn now, -1 none
+    int frames;
+    int base, baseCount;   // running baseline (sum of R+G+B, 0..765)
+    int total;             // the game's draws in a frame when the scan started
+    ScanHit hits[64];
+    int hitCount;
+    int explain[3], explainCount, explainStep;
+    DWORD lastNotice;
+} g_scan;
+ScanHit g_skipInfo;        // what the left-out draw was
 int g_huntIndex = 0;       // the game's draws so far in this frame
 int g_huntLastFrame = 0;   // the game's draws in the previous frame
-
-int HuntMid() { return g_hunt.hi - g_hunt.lo <= 1 ? g_hunt.hi : (g_hunt.lo + g_hunt.hi) / 2; }
+int g_explainIndex = -1;   // explain this draw (not left out) in the coming frame
+void* g_huntDev = nullptr;
 
 void SaveStagePng(void* tex, int stage, u32 from) {
     typedef HRESULT(WINAPI * SaveFn)(const wchar_t*, DWORD, void*, const void*);
@@ -483,77 +496,174 @@ void SaveStagePng(void* tex, int stage, u32 from) {
     Log("hunt:   s%d saved as %S (%s)", stage, path, SUCCEEDED(hr) ? "ok" : "failed");
 }
 
+extern "C" IMAGE_DOS_HEADER __ImageBase;
+
 // true: leave this draw out
 bool HuntSkips(void* dev, u32 from, UINT count) {
-    if (from < 0x400000u || from >= 0x800000u) return false;  // the mod's own drawing (menu, filters) is not counted
+    static u32 selfLo = 0, selfHi = 0;
+    if (!selfLo) {
+        const u8* volatile base = (const u8*)&__ImageBase;
+        selfLo = (u32)(uintptr_t)base;
+        selfHi = selfLo + ((const IMAGE_NT_HEADERS*)(base + ((const IMAGE_DOS_HEADER*)base)->e_lfanew))->OptionalHeader.SizeOfImage;
+    }
+    if (from >= selfLo && from < selfHi) return false;  // the mod's own drawing (menu, filters) is not counted
+    g_huntDev = dev;
     const int i = g_huntIndex++;
-    if (!g_hunt.on || i < g_hunt.lo || i >= HuntMid()) return false;
-    if (g_hunt.hi - g_hunt.lo <= 1 && !g_hunt.explained) {
-        g_hunt.explained = true;
+    if (i == g_explainIndex) {
+        g_explainIndex = -1;
         char t[4][48];
         for (int st = 0; st < 4; ++st) DescribeTexture(g_stageTex[st], t[st]);
-        Log("hunt: the draw is no. %d of the frame: %u primitives from %08X, pixel shader %08X: s0 %s | s1 %s | s2 %s | s3 %s", i, count, from,
+        Log("hunt: draw no. %d: %u primitives from %08X, pixel shader %08X: s0 %s | s1 %s | s2 %s | s3 %s", i, count, from,
             (u32)(uintptr_t)g_curPs, t[0], t[1], t[2], t[3]);
         wchar_t path[MAX_PATH + 64];
         wsprintfW(path, L"%sUltimateFix\\hunt_%08X_%08X.txt", g_paths.gameDir, from, (u32)(uintptr_t)g_curPs);
         WriteDrawFile(dev, from, path);
         for (int st = 0; st < 4; ++st) SaveStagePng(g_stageTex[st], st, from);
+        return false;
+    }
+    if (!g_scan.on || i != g_scan.skipping) return false;
+    g_skipInfo.index = i;
+    g_skipInfo.from = from;
+    g_skipInfo.shader = (u32)(uintptr_t)g_curPs;
+    g_skipInfo.count = count;
+    for (int st = 0; st < 4; ++st) {
+        char t[48];
+        DescribeTexture(g_stageTex[st], t);
+        lstrcpynA(g_skipInfo.tex[st], t, 40);
     }
     return true;
 }
 
-void HuntNotice() {
-    const int left = g_hunt.hi - g_hunt.lo;
-    int steps = 0;
-    for (int n = left; n > 1; n = (n + 1) / 2) ++steps;
-    wchar_t uk[200], en[200];
-    if (left <= 1) {
-        wsprintfW(uk, L"Знайдено: малювання №%d. Його вимкнено; Numpad 3 вмикає назад. Пришли лог і файли hunt_*.", g_hunt.lo);
-        wsprintfW(en, L"Found: draw no. %d. It is left out; Numpad 3 brings it back. Send the log and the hunt_* files.", g_hunt.lo);
-        ShowNotice(L"Пошук: знайдено", L"Hunt: found", uk, en, 8);
-    } else {
-        wsprintfW(uk, L"Сховано №%d..%d. Діри НЕМАЄ: Numpad 4. Діра Є: Numpad 5. Назад: Numpad 6. Ще кроків: %d.", g_hunt.lo, HuntMid() - 1, steps);
-        wsprintfW(en, L"Hidden no. %d..%d. Hole GONE: Numpad 4. Hole STILL there: Numpad 5. Undo: Numpad 6. Steps left: %d.", g_hunt.lo, HuntMid() - 1, steps);
-        ShowNotice(L"Пошук чорної діри", L"Black hole hunt", uk, en, 30);
+// The brightness (R+G+B, 0..765) of the 64x64 middle of the back buffer, or -1
+int MiddleBrightness(void* dev) {
+    if (!dev) return -1;
+    void** vt = *(void***)dev;
+    typedef HRESULT(WINAPI * GetBbFn)(void*, UINT, UINT, DWORD, void**);
+    typedef HRESULT(WINAPI * GetRtDataFn)(void*, void*, void*);
+    typedef HRESULT(WINAPI * PlainFn)(void*, UINT, UINT, DWORD, DWORD, void**, void*);
+    typedef HRESULT(WINAPI * SurfDescFn)(void*, u32*);
+    typedef HRESULT(WINAPI * LockFn)(void*, void*, const RECT*, DWORD);
+    typedef HRESULT(WINAPI * UnlockFn)(void*);
+    typedef ULONG(WINAPI * RelFn)(void*);
+    void *bb = nullptr, *rt = nullptr, *sys = nullptr;
+    int result = -1;
+    CreateSurfaceFn mkRt = r_CreateRenderTarget ? r_CreateRenderTarget : (CreateSurfaceFn)vt[kCreateRenderTarget];
+    StretchRectFn stretch = r_StretchRect ? r_StretchRect : (StretchRectFn)vt[kStretchRect];
+    if (SUCCEEDED(((GetBbFn)vt[18])(dev, 0, 0, 0, &bb)) && bb) {
+        u32 d[8] = {};
+        ((SurfDescFn)(*(void***)bb)[12])(bb, d);  // Format, Type, Usage, Pool, MultiSampleType, Quality, Width, Height
+        const LONG w = (LONG)d[6], h = (LONG)d[7];
+        const RECT src = {w / 2 - 32, h / 2 - 32, w / 2 + 32, h / 2 + 32};
+        if (w > 64 && h > 64 && SUCCEEDED(mkRt(dev, 64, 64, 21 /*A8R8G8B8*/, 0, 0, FALSE, &rt, nullptr)) && rt &&
+            SUCCEEDED(stretch(dev, bb, &src, rt, nullptr, 0 /*D3DTEXF_NONE*/)) &&
+            SUCCEEDED(((PlainFn)vt[36])(dev, 64, 64, 21, 2 /*SYSTEMMEM*/, &sys, nullptr)) && sys &&
+            SUCCEEDED(((GetRtDataFn)vt[32])(dev, rt, sys))) {
+            struct { INT pitch; void* bits; } lr = {0, nullptr};
+            if (SUCCEEDED(((LockFn)(*(void***)sys)[13])(sys, &lr, nullptr, 0x10 /*READONLY*/)) && lr.bits) {
+                u64 sum = 0;
+                for (int y = 0; y < 64; ++y) {
+                    const u8* row = (const u8*)lr.bits + y * lr.pitch;
+                    for (int x = 0; x < 64; ++x) sum += row[x * 4] + row[x * 4 + 1] + row[x * 4 + 2];
+                }
+                result = (int)(sum / 4096);
+                ((UnlockFn)(*(void***)sys)[14])(sys);
+            }
+        }
     }
-    Log("hunt: draws %d..%d of %d left out (the hole is in %d..%d)", g_hunt.lo, HuntMid() - 1, g_huntLastFrame, g_hunt.lo, g_hunt.hi - 1);
+    if (sys) ((RelFn)(*(void***)sys)[2])(sys);
+    if (rt) ((RelFn)(*(void***)rt)[2])(rt);
+    if (bb) ((RelFn)(*(void***)bb)[2])(bb);
+    return result;
 }
 
-// Once per frame, from WaterFrame
-void HuntFrame(bool k3, bool k4, bool k5, bool k6) {
+void ScanFinish() {
+    g_scan.on = false;
+    g_scan.skipping = -1;
+    Log("hunt: scan done over %d draws in %d frames, baseline %d; %d draws make the middle brighter when left out", g_scan.total, g_scan.frames,
+        g_scan.base, g_scan.hitCount);
+    // the strongest three get explained, one per frame
+    g_scan.explainCount = 0;
+    for (int k = 0; k < 3; ++k) {
+        int best = -1;
+        for (int j = 0; j < g_scan.hitCount; ++j) {
+            bool taken = false;
+            for (int q = 0; q < g_scan.explainCount; ++q) taken |= g_scan.explain[q] == j;
+            if (!taken && (best < 0 || g_scan.hits[j].gain > g_scan.hits[best].gain)) best = j;
+        }
+        if (best < 0) break;
+        g_scan.explain[g_scan.explainCount++] = best;
+        const ScanHit& h = g_scan.hits[best];
+        Log("hunt: strongest no. %d: draw %d, +%d brighter: %u primitives from %08X, shader %08X", k + 1, h.index, h.gain, h.count, h.from, h.shader);
+    }
+    g_scan.explainStep = 0;
+    wchar_t uk[200], en[200];
+    wsprintfW(uk, L"Знайдено малювань, що темнять центр: %d. Пришли ufx.log і файли UltimateFix\\hunt_*.", g_scan.hitCount);
+    wsprintfW(en, L"Draws that darken the middle: %d. Send ufx.log and the UltimateFix\\hunt_* files.", g_scan.hitCount);
+    ShowNotice(L"Сканування завершено", L"Scan finished", uk, en, 12);
+}
+
+// Once per frame, from WaterFrame (at Present, the game's picture complete)
+void HuntFrame(bool k3, bool, bool, bool) {
     g_huntLastFrame = g_huntIndex;
     g_huntIndex = 0;
-    if (k3) {
-        g_hunt.on = !g_hunt.on;
-        if (g_hunt.on) {
-            g_hunt.lo = 0;
-            g_hunt.hi = g_huntLastFrame;
-            g_hunt.depth = 0;
-            g_hunt.explained = false;
-            Log("hunt: started over %d draws of the game in a frame", g_huntLastFrame);
-            HuntNotice();
-        } else {
-            Log("hunt: stopped, every draw back");
-            ShowNotice(L"Пошук: вимкнено", L"Hunt: off", L"Усе малюється як у грі. Numpad 3 починає знову.", L"Everything is drawn as the game does. Numpad 3 starts again.", 4);
-        }
+    if (g_scan.explainStep < g_scan.explainCount) {  // after a scan: explain the strongest draws, one per frame
+        g_explainIndex = g_scan.hits[g_scan.explain[g_scan.explainStep++]].index;
         return;
     }
-    if (!g_hunt.on) return;
-    if ((k4 || k5) && g_hunt.hi - g_hunt.lo > 1 && g_hunt.depth < 32) {
-        g_hunt.backLo[g_hunt.depth] = g_hunt.lo;
-        g_hunt.backHi[g_hunt.depth++] = g_hunt.hi;
-        const int mid = HuntMid();
-        if (k4) g_hunt.hi = mid;  // gone with the hidden half: it is there
-        else g_hunt.lo = mid;     // still there: it is in the other half
-        Log("hunt: answer %s", k4 ? "hole gone (Numpad 4)" : "hole still there (Numpad 5)");
-        HuntNotice();
-    } else if (k6 && g_hunt.depth > 0) {
-        --g_hunt.depth;
-        g_hunt.lo = g_hunt.backLo[g_hunt.depth];
-        g_hunt.hi = g_hunt.backHi[g_hunt.depth];
-        g_hunt.explained = false;
-        Log("hunt: one answer undone (Numpad 6)");
-        HuntNotice();
+    if (k3) {
+        if (g_scan.on) {
+            Log("hunt: scan stopped at draw %d of %d", g_scan.next, g_scan.total);
+            ScanFinish();
+            return;
+        }
+        __builtin_memset(&g_scan, 0, sizeof(g_scan));
+        g_scan.on = true;
+        g_scan.next = -1;
+        g_scan.skipping = -1;
+        g_scan.total = g_huntLastFrame;
+        g_scan.lastNotice = GetTickCount();
+        Log("hunt: scan started over %d draws of the game in a frame", g_scan.total);
+        ShowNotice(L"Сканування", L"Scan", L"Не рухайтеся, діра в центрі екрана. Numpad 3 зупиняє.",
+                   L"Do not move, the hole in the middle of the screen. Numpad 3 stops.", 5);
+        return;
+    }
+    if (!g_scan.on) return;
+    const int m = MiddleBrightness(g_huntDev);
+    ++g_scan.frames;
+    if (m >= 0) {
+        if (g_scan.skipping < 0) {
+            g_scan.base = g_scan.baseCount ? (g_scan.base * 3 + m) / 4 : m;
+            ++g_scan.baseCount;
+        } else if (g_scan.baseCount) {
+            const int gain = m - g_scan.base;
+            if (gain >= 12) {
+                Log("hunt: draw %d left out: middle %d (baseline %d, +%d): %u primitives from %08X, shader %08X: s0 %s | s1 %s | s2 %s | s3 %s",
+                    g_skipInfo.index, m, g_scan.base, gain, g_skipInfo.count, g_skipInfo.from, g_skipInfo.shader, g_skipInfo.tex[0],
+                    g_skipInfo.tex[1], g_skipInfo.tex[2], g_skipInfo.tex[3]);
+                if (g_scan.hitCount < 64) {
+                    g_scan.hits[g_scan.hitCount] = g_skipInfo;
+                    g_scan.hits[g_scan.hitCount++].gain = gain;
+                }
+            }
+        }
+    }
+    if (g_scan.frames == 1) Log("hunt: middle brightness %d (0..765) with every draw", m);
+    // next: a baseline frame every 8th, else the next draw
+    if (g_scan.frames % 8 == 0 || g_scan.baseCount < 4) {
+        g_scan.skipping = -1;
+    } else {
+        g_scan.skipping = ++g_scan.next;
+        if (g_scan.next >= g_scan.total) {
+            ScanFinish();
+            return;
+        }
+    }
+    if (GetTickCount() - g_scan.lastNotice > 3000) {
+        g_scan.lastNotice = GetTickCount();
+        wchar_t uk[160], en[160];
+        wsprintfW(uk, L"%d з %d малювань, знайдено %d. Не рухайтеся.", g_scan.next < 0 ? 0 : g_scan.next, g_scan.total, g_scan.hitCount);
+        wsprintfW(en, L"%d of %d draws, %d found. Do not move.", g_scan.next < 0 ? 0 : g_scan.next, g_scan.total, g_scan.hitCount);
+        ShowNotice(L"Сканування", L"Scan", uk, en, 4);
     }
 }
 

@@ -13,7 +13,7 @@ typedef uint16_t u16;
 typedef uint32_t u32;
 typedef uint64_t u64;
 
-constexpr const char* kVersion = "0.7.5";
+constexpr const char* kVersion = "0.7.6";
 
 struct Config {
     int relativeQpc;         // QueryPerformanceCounter relative to process start

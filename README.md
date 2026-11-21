@@ -26,8 +26,8 @@ _Універсальний фікс для_ **Deadly Premonition: The Director'
 One DLL in the game folder instead of DPfix, a stability fix, a map fix and a crash fix.
 No installer: press **F10** in game and everything is there. The mod also gives the game 4 GB of memory by itself (from the second start).
 
-> **Version 0.7.5.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
-> <br>New in 0.7.5: **texture replacements in mod folders work** — see [What's new](#whats-new-in-075). In 0.7.4: **York can fly** (cheats, F3), the lock-on aims at the chest instead of the hips. In 0.7.3: a mod's name, author and version in a plain `mod.txt`. In 0.7.2: **updates itself** (F9 on the start card), a much smaller archive — see [What's new](#whats-new-in-072). In 0.7.1: fixes for the **thread races** behind the crashes and hangs on entering buildings, the **QTE at high FPS**, **4 GB of memory by itself**, checked and compressed save backups, the game's own Xbox icons — see [What's new](#whats-new-in-071).
+> **Version 0.7.6.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
+> <br>New in 0.7.6: **PlayStation icons on a DualSense (Edge too)** when the game starts with the pad — see [What's new](#whats-new-in-076). In 0.7.5: texture replacements in mod folders work. In 0.7.4: **York can fly** (cheats, F3), the lock-on aims at the chest instead of the hips. In 0.7.3: a mod's name, author and version in a plain `mod.txt`. In 0.7.2: **updates itself** (F9 on the start card), a much smaller archive — see [What's new](#whats-new-in-072). In 0.7.1: fixes for the **thread races** behind the crashes and hangs on entering buildings, the **QTE at high FPS**, **4 GB of memory by itself**, checked and compressed save backups, the game's own Xbox icons — see [What's new](#whats-new-in-071).
 
 ### Features
 
@@ -100,6 +100,15 @@ port with the Xbox 360 original:
   next start, the original kept as `DP.exe.bak`).
 - 🧍 **Residents walking into nowhere** — a failed route lookup moved the
   resident to (0, 0, 0); now the resident stays where it stood.
+
+### What's new in 0.7.6
+
+- **PlayStation icons on a DualSense, the Edge included.** With `GlyphTheme=1` (automatic) the icons stayed Xbox for three reasons, all fixed:
+  - When the game starts with the pad, it loads its own pad icon atlas (`UPDATA\SOURCE\MESSAGE\BTNWIDE.XPC`) instead of the keyboard one, and the mod looked only for the keyboard atlas, so it changed nothing. The mod now recognises the game's pad atlas by its bytes.
+  - A texture pack that replaces the icon atlas hid it from the mod. The atlas is now recognised by the game's original file, before any replacement.
+  - A DualSense over Bluetooth is found a few seconds after the start, and the icon set was chosen once, before that. It is now checked on every use.
+- **Xbox icons from the mod's drawing again** (`UltimateFix\glyphs\gamepad\xbox.png`), the same look as the PlayStation set. The game's own Xbox atlas is used only when that file is missing.
+- Thanks to **EliParker** for the reports and logs with a DualSense Edge.
 
 ### What's new in 0.7.5
 
@@ -200,7 +209,7 @@ The code is our own (MIT). The ideas, facts and addresses came from earlier comm
 | **[DPRecomp](https://github.com/LittleBitUA/DPRecomp)** | «Little Bit» | Our Xbox 360 recompilation: the reference the PC port is compared with |
 | **[Kenney Input Prompts](https://kenney.nl/assets/input-prompts)** | Kenney | Gamepad button icons (CC0) |
 
-🧪 **Testers:** **Gold flin** and **Tree Fan**. Thank you for playing the unfinished builds and reporting everything that broke.
+🧪 **Testers:** **Gold flin**, **Tree Fan** and **EliParker**. Thank you for playing the unfinished builds and reporting everything that broke.
 
 ### 🤖 Who did what: Claude and Dmytro
 
@@ -274,8 +283,8 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 Одна DLL у теці гри замість DPfix, фіксу стабільності, фіксу мапи й фіксу вильотів.
 Без інсталятора: натисніть **F10** у грі, і все там. Мод також сам дає грі 4 ГБ пам'яті (з другого запуску).
 
-> **Версія 0.7.5.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
-> <br>Нове в 0.7.5: **заміни текстур у теках модів працюють** — див. [Що нового](#що-нового-в-075). У 0.7.4: **Йорк літає** (читкоди, F3), автоприціл цілиться в груди, а не в стегна. У 0.7.3: назва, автор і версія мода у звичайному `mod.txt`. У 0.7.2: **оновлюється сам** (F9 на стартовій плашці), значно менший архів — див. [Що нового](#що-нового-в-072). У 0.7.1: виправлено **гонки потоків**, через які гра падала й зависала при вході в будівлі, **QTE на високому FPS**, **4 ГБ пам'яті самі собою**, перевірені й стиснені копії збережень, оригінальні іконки Xbox — див. [Що нового](#що-нового-в-071).
+> **Версія 0.7.6.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
+> <br>Нове в 0.7.6: **іконки PlayStation на DualSense (і Edge)**, коли гра стартує з ґеймпадом — див. [Що нового](#що-нового-в-076). У 0.7.5: заміни текстур у теках модів працюють. У 0.7.4: **Йорк літає** (читкоди, F3), автоприціл цілиться в груди, а не в стегна. У 0.7.3: назва, автор і версія мода у звичайному `mod.txt`. У 0.7.2: **оновлюється сам** (F9 на стартовій плашці), значно менший архів — див. [Що нового](#що-нового-в-072). У 0.7.1: виправлено **гонки потоків**, через які гра падала й зависала при вході в будівлі, **QTE на високому FPS**, **4 ГБ пам'яті самі собою**, перевірені й стиснені копії збережень, оригінальні іконки Xbox — див. [Що нового](#що-нового-в-071).
 
 ### Можливості
 
@@ -347,6 +356,15 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
   запуску, оригінал лишається як `DP.exe.bak`).
 - 🧍 **Жителі, що йдуть «в нікуди»** — невдалий пошук маршруту переносив жителя
   в (0, 0, 0); тепер він лишається там, де стояв.
+
+### Що нового в 0.7.6
+
+- **Іконки PlayStation на DualSense, зокрема на Edge.** З `GlyphTheme=1` (автоматично) іконки лишались Xbox з трьох причин, усі виправлено:
+  - Якщо гра стартує з ґеймпадом, вона вантажить свій ґеймпадний атлас іконок (`UPDATA\SOURCE\MESSAGE\BTNWIDE.XPC`), а не клавіатурний, а мод шукав лише клавіатурний і нічого не міняв. Тепер мод впізнає атлас гри побайтово.
+  - Пак текстур, що замінює атлас іконок, ховав його від мода. Тепер атлас впізнається за оригінальним файлом гри, ще до заміни.
+  - DualSense по Bluetooth знаходиться через кілька секунд після запуску, а набір іконок вибирався один раз, раніше. Тепер він перевіряється щоразу.
+- **Іконки Xbox знову з малюнка мода** (`UltimateFix\glyphs\gamepad\xbox.png`), в одному стилі з PlayStation. Власний атлас Xbox гри береться лише тоді, коли цього файлу немає.
+- Дякуємо **EliParker** за повідомлення й журнали з DualSense Edge.
 
 ### Що нового в 0.7.5
 
@@ -434,7 +452,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 | **[DPRecomp](https://github.com/LittleBitUA/DPRecomp)** | «Little Bit» | Наша рекомпіляція версії для Xbox 360: еталон, з яким порівнюємо PC-порт |
 | **[Kenney Input Prompts](https://kenney.nl/assets/input-prompts)** | Kenney | Іконки кнопок ґеймпада (CC0) |
 
-🧪 **Тестувальники:** **Gold flin** і **Tree Fan**. Дякуємо, що грали в недороблені збірки й повідомляли про все, що ламалось.
+🧪 **Тестувальники:** **Gold flin**, **Tree Fan** і **EliParker**. Дякуємо, що грали в недороблені збірки й повідомляли про все, що ламалось.
 
 ### 🤖 Хто що робив: Claude і Dmytro
 

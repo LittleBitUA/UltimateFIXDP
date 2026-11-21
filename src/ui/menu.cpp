@@ -467,9 +467,6 @@ Item g_pageFixes[] = {
     {{L"Автоприціл у груди", L"Lock-on aims at the chest"}, &g_cfg.lockOnAim, kBool, 0, 1, 1, true, L"Fixes", L"LockOnAim", nullptr, nullptr,
      {L"Автоприціл гри цілиться в пояс ворога й опускає точку на десяту частину відстані: за кілька метрів це вже стегна чи коліна. З цим точка не опускається і стоїть трохи вище пояса (висота: LockOnHeight в UltimateFix.ini). Потрібен перезапуск.",
       L"The game's lock-on aims at the enemy's waist and lowers the point by a tenth of the distance: a few metres away that is the hips or the knees. With this the point does not drop and sits a little above the waist (height: LockOnHeight in UltimateFix.ini). Restart needed."}, NOTR},
-    {{L"Туман без чорних дір", L"Smoke without black holes"}, &g_cfg.fogFix, kBool, 0, 1, 1, true, L"Fixes", L"FogFix", nullptr, nullptr,
-     {L"PC-версія малювала об'єми диму (двері в пролозі) у карту глибини й нормалей як суцільну стіну, і освітлення робило з них чорну діру. З цим дим туди не потрапляє. Потрібен перезапуск.",
-      L"The PC port drew smoke volumes (the prologue's doorways) into the depth and normal buffer as a solid wall, and the lighting made a black hole of them. With this the smoke stays out of it. Restart needed."}, NOTR},
     {{L"QTE на високому FPS", L"QTE at high FPS"}, &g_cfg.qteFix, kBool, 0, 1, 1, true, L"Fixes", L"QteFix", nullptr, nullptr,
      {L"У QTE «розхитування» (A↔D або стік) гра множила рух на час кадру, тож вище 60 FPS кожне перемикання рахувалось менше. З цим перемикання рахується як на 60 FPS. Потрібен перезапуск.",
       L"In the waggle QTE (A/D or the stick) the game multiplied the travel by the frame time, so above 60 FPS every swap counted less. With this a swap counts as at 60 FPS. Restart needed."}, NOTR},
@@ -1823,7 +1820,7 @@ void DrawAbout() {
     for (int i = 0; i < 5; ++i) DrawFitted(credits[i], kCx, y + 20 + (float)i * line, 0xFFC4C4CE, 15, width);
     y += 20 + 5 * line + 10 * s;
     DrawText(en ? L"Testers" : L"Тестувальники", kCx, y, kAccent, 13);
-    DrawFitted(L"Gold flin, Tree Fan", kCx, y + 20, 0xFFC4C4CE, 15, width);
+    DrawFitted(L"Gold flin, Tree Fan, EliParker", kCx, y + 20, 0xFFC4C4CE, 15, width);
     DrawText(en ? L"F10 or Esc close" : L"F10 або Esc закрити", kCx, kPy + kPh - 30, kDim, 13);
 }
 
