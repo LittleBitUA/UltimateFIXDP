@@ -424,6 +424,9 @@ Item g_pageInput[] = {
      {L"Міняє місцями L2 і R2: кнопки, вісь триґерів і ефекти DualSense. Не діє на ґеймпад Sony з вимкненим пунктом «DualSense / DualShock як ґеймпад Xbox 360» і на 4-осьові ґеймпади DirectInput, де вісь Z це правий стік.", L"Swaps L2 and R2: the buttons, the trigger axis and the DualSense effects. Not on a Sony pad with 'DualSense / DualShock as an Xbox 360 pad' off, nor on 4-axis DirectInput pads, whose Z axis is the right stick."}, NOTR},
     {{L"Ґеймпад через XInput (запасний)", L"Gamepad through XInput (fallback)"}, &g_cfg.xinputFallback, kBool, 0, 1, 1, false, L"Input", L"XInputFallback", nullptr, nullptr,
      {L"Страховка для Steam Input, DS4Windows, Xbox-ґеймпада.", L"A fallback for Steam Input, DS4Windows, an Xbox pad."}, NOTR},
+    {{L"Відсутній ґеймпад питати у фоні", L"Ask about a missing gamepad in the background"}, &g_cfg.padPollThread, kBool, 0, 1, 1, false, L"Input", L"PadPollThread", nullptr, nullptr,
+     {L"Коли ґеймпада немає, Windows на деяких системах відповідає на питання про нього 18-60 мс, і гра смикалась двічі на секунду. Увімкнено: про відсутній ґеймпад двічі на секунду питає окремий фоновий потік, а гра одразу отримує його останню відповідь. Щойно ґеймпад з'явиться, гра знову сама читає його щокадру (підключений ґеймпад відповідає швидко). Вимкнено: питає сама гра, двічі на секунду. Змінюється одразу.",
+      L"With no gamepad, Windows takes 18-60 ms to answer a question about it on some systems, and the game hitched twice a second. On: a background thread asks about the missing gamepad twice a second, and the game gets its last answer at once. As soon as a gamepad appears, the game reads it itself every frame again (a connected gamepad answers fast). Off: the game asks itself, twice a second. Changes at once."}, NOTR},
     {{L"DualSense напряму через HID", L"DualSense directly over HID"}, &g_cfg.nativeDualSense, kBool, 0, 1, 1, true, L"Input", L"NativeDualSense", nullptr, nullptr,
      {L"Типово увімкнено: мод сам шукає DualSense і, якщо Windows дає відкрити пристрій, читає його напряму, а гра отримує ці дані замість ґеймпада з Windows. Так буває й з увімкненим Steam Input, і тоді його розкладка для гри не діє: щоб нею користуватися, вимкніть цей пункт. Через Bluetooth вібрація й адаптивні триґери працюють лише з цим пунктом; через USB працюють і без нього. Без DualSense нічого не змінює, гра читає ґеймпад як раніше. Потрібен перезапуск.",
       L"On by default: the mod looks for a DualSense and, when Windows lets it open the device, reads it directly, and the game gets that instead of the pad Windows shows it. That also happens with Steam Input on, and then Steam Input's mapping for the game does not apply: to use it, turn this off. Over Bluetooth, rumble and adaptive triggers work only with this on; over USB they work without it too. With no DualSense nothing changes and the game reads the pad as before. Needs a restart."}, NOTR},
@@ -2409,6 +2412,121 @@ void EnsureCursorVisible() {
 
 BOOL WINAPI H_SetCursorPos(int x, int y) { return (g_open || FreeCamBlocksInput()) ? TRUE : r_SetCursorPos(x, y); }
 
+// --- a missing pad, asked about on a worker thread ------------------------------------------------------------
+// With no pad Windows answers joyGetPosEx only after it has looked through the device list: 18-62 ms per call in the
+// logs, so even the half-second throttle (ThrottleMissingPad) left a hitch on the game thread twice a second. While a slot
+// has no pad, a low-priority worker asks Windows about it every 500 ms and the hook answers at once with the worker's last
+// result. When the worker gets an answer with a pad, the hook asks Windows itself again, on the game thread: a present
+// pad answers fast and the game needs fresh data every frame. Only the result code is handed over: a failed call gives no
+// pad data (the throttle has always answered with the code alone), and the data of the worker's successful call would be
+// up to half a second old; the hook's own call in the same poll gets fresh data instead.
+constexpr unsigned kPadSlots = 16;      // WinMM joystick ids 0..15
+constexpr DWORD kPadPollMs = 500;
+constexpr DWORD kPadForgetMs = 2000;    // a slot the game has not asked about for this long is left alone (the menu is open, ...)
+volatile LONG g_padMissing[kPadSlots];  // 1 = the hook answers this slot from the worker (written by the game thread only)
+volatile LONG g_padFlags[kPadSlots];    // the dwFlags the game asks this slot with
+volatile LONG g_padAsked[kPadSlots];    // GetTickCount of the game's last question about it
+// The worker's last answer: the take count in the high 16 bits (the game thread raises it each time it hands the slot over),
+// the MMRESULT in the low 16. The worker stores its answer only if the count is still the one it read before its call, so
+// a slow call that started before the pad came and went cannot report a stale "pad present" for the new take.
+volatile LONG g_padAnswer[kPadSlots];
+unsigned g_padTakes[kPadSlots];         // game thread only
+volatile LONG g_padIdle = 0;            // 1 = the worker waits for g_padWake without a timeout
+HANDLE g_padWake = nullptr;             // auto-reset: a slot was handed over, or the game asks again after a pause
+int g_padWorker = 0;                    // 0 = not started, 1 = running, -1 = could not be started (game thread only)
+
+DWORD WINAPI PadWorker(void*) {
+    LARGE_INTEGER qf;
+    QueryPerformanceFrequency(&qf);
+    double total = 0, worst = 0;
+    int calls = 0;
+    bool said = false;
+    for (;;) {
+        bool any = false;
+        if (*(volatile int*)&g_cfg.padPollThread) {  // switched off in the menu: the hook takes the slots back on its next poll
+            for (unsigned id = 0; id < kPadSlots; ++id) {
+                if (!g_padMissing[id] || GetTickCount() - (DWORD)g_padAsked[id] > kPadForgetMs) continue;
+                any = true;
+                const LONG before = g_padAnswer[id];
+                JOYINFOEX j;
+                DWORD* words = (DWORD*)&j;
+                for (unsigned i = 0; i < sizeof(j) / sizeof(DWORD); ++i) words[i] = 0;
+                j.dwSize = sizeof(j);
+                j.dwFlags = (DWORD)g_padFlags[id];
+                LARGE_INTEGER q0, q1;
+                QueryPerformanceCounter(&q0);
+                const MMRESULT r = r_joyGetPosEx(id, &j);
+                QueryPerformanceCounter(&q1);
+                InterlockedCompareExchange(&g_padAnswer[id], (LONG)(((ULONG)before & 0xFFFF0000u) | ((ULONG)r & 0xFFFFu)), before);
+                const double ms = (double)(q1.QuadPart - q0.QuadPart) * 1000.0 / (double)qf.QuadPart;
+                total += ms;
+                if (ms > worst) worst = ms;
+                if (!said && ++calls >= 4) {  // about two seconds in: the first call alone may include the driver's start-up
+                    said = true;
+                    const double avg = total / calls;
+                    Log("input: the missing pad is polled on a worker thread (%d.%02d ms per call, %d.%02d ms at most, %d calls)", (int)avg,
+                        (int)(avg * 100.0) % 100, (int)worst, (int)(worst * 100.0) % 100, calls);
+                }
+            }
+        }
+        if (any) {
+            WaitForSingleObject(g_padWake, kPadPollMs);
+        } else {
+            // Nothing to ask: sleep until the hook hands a slot over or asks again. Should the hook look at g_padIdle just
+            // before it is set, it sees it set on its next poll, a frame later.
+            InterlockedExchange(&g_padIdle, 1);
+            WaitForSingleObject(g_padWake, INFINITE);
+            InterlockedExchange(&g_padIdle, 0);
+        }
+    }
+}
+
+bool StartPadWorker() {
+    if (g_padWorker) return g_padWorker > 0;
+    g_padWake = CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    HANDLE t = g_padWake ? CreateThread(nullptr, 0, PadWorker, nullptr, 0, nullptr) : nullptr;
+    if (!t) {
+        g_padWorker = -1;
+        Log("input: the pad worker thread could not be started (error %u); a missing pad is asked about on the game thread", (unsigned)GetLastError());
+        return false;
+    }
+    SetThreadPriority(t, THREAD_PRIORITY_LOWEST);
+    CloseHandle(t);
+    g_padWorker = 1;
+    return true;
+}
+
+// A direct call for this slot just failed: hand the slot to the worker. False when the worker is off or cannot run.
+bool PadToWorker(UINT id, const JOYINFOEX* info, MMRESULT r) {
+    if (id >= kPadSlots || !info || info->dwSize != sizeof(JOYINFOEX) || !g_cfg.padPollThread || r == JOYERR_NOERROR) return false;
+    if (!StartPadWorker()) return false;
+    InterlockedExchange(&g_padFlags[id], (LONG)info->dwFlags);
+    InterlockedExchange(&g_padAsked[id], (LONG)GetTickCount());
+    const ULONG take = (++g_padTakes[id] & 0x7FFFu) << 16;
+    InterlockedExchange(&g_padAnswer[id], (LONG)(take | ((ULONG)r & 0xFFFFu)));  // the failure just seen, until the worker knows better
+    InterlockedExchange(&g_padMissing[id], 1);
+    SetEvent(g_padWake);
+    return true;
+}
+
+// The answer for a slot the worker holds, at once. False (and the slot back on the game thread) when the worker has seen a
+// pad or was switched off: the caller then asks Windows itself.
+bool PadFromWorker(UINT id, const JOYINFOEX* info, MMRESULT* r) {
+    // A call with no record or a record of the wrong size is a parameter error that Windows answers at once: it is passed on
+    // and leaves the slot with the worker.
+    if (id >= kPadSlots || !g_padMissing[id] || !info || info->dwSize != sizeof(JOYINFOEX)) return false;
+    const MMRESULT code = (MMRESULT)((ULONG)g_padAnswer[id] & 0xFFFFu);
+    if (code == JOYERR_NOERROR || !g_cfg.padPollThread) {
+        InterlockedExchange(&g_padMissing[id], 0);
+        return false;
+    }
+    InterlockedExchange(&g_padAsked[id], (LONG)GetTickCount());
+    if ((DWORD)g_padFlags[id] != info->dwFlags) InterlockedExchange(&g_padFlags[id], (LONG)info->dwFlags);
+    if (g_padIdle) SetEvent(g_padWake);  // the game asks again after a pause (the menu was open)
+    *r = code;
+    return true;
+}
+
 MMRESULT WINAPI H_joyGetPosEx(UINT id, LPJOYINFOEX info) {
     if (id != 0 && g_cfg.onlyFirstPad) return JOYERR_UNPLUGGED;  // the game only ever uses slot 0
     if ((!g_open && !FreeCamBlocksInput()) || id != 0 || !info) {
@@ -2417,35 +2535,52 @@ MMRESULT WINAPI H_joyGetPosEx(UINT id, LPJOYINFOEX info) {
             r = JOYERR_NOERROR;  // a DualSense read directly: no WinMM call, no conversion needed
         } else {
             // With no pad Windows answers a joyGetPosEx(0) only after it has looked through the device list (cfgmgr32, kernel calls): the
-            // sampling profiler of this mod found 80% of the frame in ntdll because of it. A failed answer for pad 0 is reused for half a
-            // second, so the (slow) question is asked twice a second, not every frame.
+            // sampling profiler of this mod found 80% of the frame in ntdll because of it. A slot without a pad is asked about by the
+            // worker above (PadPollThread); with that off, a failed answer for pad 0 is reused for half a second (ThrottleMissingPad),
+            // so the slow question is asked on the game thread twice a second, not every frame.
             // Only the WinMM answer is cached: the XInput fallback below is cheap (it scans for a new pad once a second
             // itself) and still runs every poll, so a pad seen only through XInput does not bring the slow question back.
             static DWORD s_failTick = 0;
             static MMRESULT s_failCode = JOYERR_NOERROR;
-            static double s_ms = 0;
-            static int s_calls = 0, s_logs = 0;
+            static double s_ms = 0, s_worst = 0;
+            static int s_calls = 0, s_cached = 0, s_logs = 0;
             DWORD nowTick = GetTickCount();
-            if (id == 0 && g_cfg.throttleMissingPad && s_failCode != JOYERR_NOERROR && nowTick - s_failTick < 500) {
+            LARGE_INTEGER q0, q1, qf;
+            QueryPerformanceCounter(&q0);
+            bool asked = false;  // Windows was asked on this thread (not answered from the worker or the throttle)
+            const bool fromWorker = PadFromWorker(id, info, &r);
+            if (!fromWorker && id == 0 && g_cfg.throttleMissingPad && s_failCode != JOYERR_NOERROR && nowTick - s_failTick < 500) {
                 r = s_failCode;
-            } else {
-                LARGE_INTEGER q0, q1, qf;
-                QueryPerformanceCounter(&q0);
+            } else if (!fromWorker) {
+                asked = true;
                 r = r_joyGetPosEx(id, info);
-                QueryPerformanceCounter(&q1);
-                QueryPerformanceFrequency(&qf);
+                // A slot the worker takes needs no throttle: it is answered from the worker until a pad is there, and then
+                // the next poll must ask Windows at once.
+                const bool taken = PadToWorker(id, info, r);
                 if (id == 0) {
-                    s_ms += (double)(q1.QuadPart - q0.QuadPart) * 1000.0 / (double)qf.QuadPart;
-                    if (++s_calls >= 120) {
-                        if (s_logs < 6) { ++s_logs; Log("input: reading the pad takes %d.%02d ms per call on average (%d calls)", (int)(s_ms / s_calls), (int)(s_ms / s_calls * 100.0) % 100, s_calls); }
-                        s_ms = 0;
-                        s_calls = 0;
-                    }
-                    if (r != JOYERR_NOERROR) { s_failCode = r; s_failTick = nowTick; }
+                    if (r != JOYERR_NOERROR && !taken) { s_failCode = r; s_failTick = nowTick; }
                     else s_failCode = JOYERR_NOERROR;
                 }
-                if (r == JOYERR_NOERROR && info) ConvertSonyLayout(id, info);
             }
+            QueryPerformanceCounter(&q1);
+            if (id == 0) {  // the time this poll spent on the game thread, the answers without a WinMM call included
+                QueryPerformanceFrequency(&qf);
+                const double ms = (double)(q1.QuadPart - q0.QuadPart) * 1000.0 / (double)qf.QuadPart;
+                s_ms += ms;
+                if (ms > s_worst) s_worst = ms;
+                if (!asked) ++s_cached;
+                if (++s_calls >= 120) {
+                    if (s_logs < 6) {
+                        ++s_logs;
+                        const double avg = s_ms / s_calls;
+                        Log("input: reading the pad takes %d.%02d ms per call on the game thread on average, %d.%02d ms at most (%d calls, %d answered without asking Windows)",
+                            (int)avg, (int)(avg * 100.0) % 100, (int)s_worst, (int)(s_worst * 100.0) % 100, s_calls, s_cached);
+                    }
+                    s_ms = s_worst = 0;
+                    s_calls = s_cached = 0;
+                }
+            }
+            if (asked && r == JOYERR_NOERROR && info) ConvertSonyLayout(id, info);
             if (r != JOYERR_NOERROR && id == 0 && g_cfg.xinputFallback && XInputToJoy(info)) r = JOYERR_NOERROR;
             static bool s_fallbackOff = false;
             if (r != JOYERR_NOERROR && id == 0 && !g_cfg.xinputFallback && !s_fallbackOff) {

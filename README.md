@@ -63,8 +63,8 @@ port with the Xbox 360 original:
   counter that starts with the game.
 - 🎯 **The 45 FPS mystery** — the game asks Windows about a WinMM gamepad on
   every frame, even with none connected, and on some systems that call takes
-  milliseconds. Found with the mod's own profiler; the mod now asks twice a
-  second.
+  milliseconds. Found with the mod's own profiler; a missing pad is now asked
+  about on a background thread, so the game never waits for that answer.
 - 🌗 **Day and night inside buildings** — the port reads the building list
   (`HOUSE_LIST`) with a wrong byte-order key: 64 of its 81 entries were misread, so
   interiors had the wrong lighting.
@@ -347,7 +347,8 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
   Мод дає грі лічильник, який починається разом із нею.
 - 🎯 **Загадка 45 FPS** — гра щокадру питає Windows про ґеймпад WinMM,
   навіть коли його немає, а на деяких системах цей виклик триває мілісекунди.
-  Знайдено вбудованим профайлером мода; тепер мод питає двічі на секунду.
+  Знайдено вбудованим профайлером мода; тепер про відсутній ґеймпад питає
+  фоновий потік, і гра на цю відповідь не чекає.
 - 🌗 **День і ніч у будівлях** — порт читає список будівель (`HOUSE_LIST`)
   з неправильним ключем порядку байтів: 64 з 81 записів читались хибно, тож
   у приміщеннях було не те освітлення.

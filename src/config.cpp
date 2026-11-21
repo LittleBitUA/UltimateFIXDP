@@ -349,8 +349,12 @@ static const char kDefaultIni[] =
     "; It is not the DualSense's fine haptics, which need an audio stream. Changes at once.\r\n"
     "SynthHaptics=1\r\n"
     "; 1 = when there is no pad, Windows is asked about it twice a second instead of every frame (each question costs the game thread most\r\n"
-    "; of the frame on some systems). A pad plugged in is noticed within half a second.\r\n"
+    "; of the frame on some systems). A pad plugged in is noticed within half a second. Used when PadPollThread=0.\r\n"
     "ThrottleMissingPad=1\r\n"
+    "; 1 = a missing pad is asked about on a background thread of its own, twice a second, and the game gets its last answer at\r\n"
+    "; once: the game no longer waits for Windows (18-60 ms per question on some systems, a hitch twice a second even with\r\n"
+    "; ThrottleMissingPad). As soon as that thread sees a pad, the game reads it itself every frame again. Changes at once.\r\n"
+    "PadPollThread=1\r\n"
     "; DualSense and DualShock 4 are shown to the game as an Xbox 360 controller (the camera no longer spins\r\n"
     "; on its own, buttons are in the right order).\r\n"
     "SonyLayout=1\r\n"
@@ -646,6 +650,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.performanceCoresOnly = (int)GetPrivateProfileIntW(L"General", L"PerformanceCoresOnly", 0, ini);
     g_cfg.autoProfile = (int)GetPrivateProfileIntW(L"Debug", L"AutoProfile", 1, ini);
     g_cfg.throttleMissingPad = (int)GetPrivateProfileIntW(L"Input", L"ThrottleMissingPad", 1, ini);
+    g_cfg.padPollThread = (int)GetPrivateProfileIntW(L"Input", L"PadPollThread", 1, ini);
     g_cfg.waypoint = (int)GetPrivateProfileIntW(L"Waypoint", L"Enabled", 1, ini);
     g_cfg.waypointKey = (int)GetPrivateProfileIntW(L"Waypoint", L"Key", 0x76, ini);
     g_cfg.waypointMinimap = (int)GetPrivateProfileIntW(L"Waypoint", L"Minimap", 1, ini);
