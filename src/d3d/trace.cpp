@@ -196,6 +196,20 @@ u32 g_waterKeys[40];
 int g_waterKeyCount = 0;
 u32 g_reflKeys[24];   // draws by other shaders that read a render target in s5 or s6 (a reflection)
 int g_reflKeyCount = 0;
+u32 g_smallKeys[32];  // draws that read a small square render target (64/128/256) in s0..s3: the Xbox fills such targets with an
+int g_smallKeyCount = 0;  // animated water/fog picture every frame, a pass the PC port does not have (they stay empty or black)
+
+// The side of a square render target of 64, 128 or 256, else 0.
+UINT SmallSquareTarget(void* tex) {
+    if (!tex) return 0;
+    void** vt = *(void***)tex;
+    typedef DWORD(WINAPI * TypeFn)(void*);
+    if (((TypeFn)vt[10])(tex) != 3) return 0;
+    u32 desc[8] = {0};
+    typedef HRESULT(WINAPI * DescFn)(void*, UINT, void*);
+    if (FAILED(((DescFn)vt[17])(tex, 0, desc)) || !(desc[2] & 1) || desc[6] != desc[7]) return 0;
+    return (desc[6] == 64 || desc[6] == 128 || desc[6] == 256) ? desc[6] : 0;
+}
 
 bool IsTarget(void* tex) {
     if (!tex) return false;
@@ -271,6 +285,27 @@ bool NoteWaterDraw(UINT count, u32 from) {
                     Milli(g_psC[10][1]), Milli(g_psC[10][2]), Milli(g_psC[10][3]), Milli(g_psC[13][0]), Milli(g_psC[13][1]),
                     Milli(g_psC[13][2]), Milli(g_psC[13][3]), Milli(g_psC[12][0]), Milli(g_psC[12][1]), Milli(g_psC[12][2]),
                     Milli(g_psC[12][3]), Milli(g_vsC243[0]), Milli(g_vsC243[1]), Milli(g_vsC243[2]), Milli(g_vsC243[3]));
+            }
+        }
+    }
+    if (g_smallKeyCount < 32) {
+        int stage = -1;
+        UINT side = 0;
+        for (int st = 0; st < 4 && stage < 0; ++st)
+            if ((side = SmallSquareTarget(g_stageTex[st])) != 0) stage = st;
+        if (stage >= 0) {
+            const u32 key = (u32)(uintptr_t)g_curPs * 31u + (u32)(uintptr_t)g_stageTex[stage] * 7u + (u32)stage;
+            bool seen = false;
+            for (int i = 0; i < g_smallKeyCount && !seen; ++i) seen = g_smallKeys[i] == key;
+            if (!seen) {
+                g_smallKeys[g_smallKeyCount++] = key;
+                char t0[48], t1[48], t2[48], t3[48];
+                DescribeTexture(g_stageTex[0], t0);
+                DescribeTexture(g_stageTex[1], t1);
+                DescribeTexture(g_stageTex[2], t2);
+                DescribeTexture(g_stageTex[3], t3);
+                Log("water: a %s draw (shader %08X, %u triangles from %08X) reads a %ux%u target in s%d: s0 %s | s1 %s | s2 %s | s3 %s",
+                    water ? "water" : "non-water", (u32)(uintptr_t)g_curPs, count, from, side, side, stage, t0, t1, t2, t3);
             }
         }
     }
