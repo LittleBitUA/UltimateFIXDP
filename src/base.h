@@ -40,6 +40,8 @@ struct Config {
     int removeExtraJoyPoll;  // drop the per-frame joyGetPosEx call that passes uninitialised memory
     int skipIntro;           // skip publisher logos
     int resetRefreshFix;     // windowed Reset() no longer fails after Alt+Tab
+    int zeroFrameMenus;      // a zero-length frame no longer closes the toolbox, side missions list or map mission view (restart needed)
+    int forceZeroFrame;      // [Debug] every Nth frame the game gets the time of the frame before (dt == 0), to reproduce the menu hangs; 0 = off
     int borderless;          // borderless window that fills the monitor (the picture is scaled keeping 16:9 with scaleToWindow)
     int hideCursor;          // hide the mouse cursor over the game window
     int dpiAware;            // do not let Windows scale the window (blurry on 125%/150% displays)
@@ -250,6 +252,7 @@ bool InstallJoyPoll();
 bool InstallSkipIntro();
 bool InstallLanguageSlot();
 bool InstallResetRefreshFix();
+bool InstallZeroFrameMenus();
 bool InstallDisplay();
 bool InstallGraphicsTweaks();
 bool InstallD3dTrace(bool full);

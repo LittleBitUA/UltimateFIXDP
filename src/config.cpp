@@ -104,6 +104,10 @@ static const char kDefaultIni[] =
     "\r\n"
     "; Windowed Reset() after Alt+Tab no longer fails (the game used to freeze).\r\n"
     "ResetRefreshFix=1\r\n"
+    "; A frame of zero length (a long Windows uptime, hundreds of frames per second, the mod's own pauses) made the toolbox drop back\r\n"
+    "; to the WEAPONS/ITEMS choice (\"cannot take items out\"), and the side missions list or the map's mission view hang on an empty\r\n"
+    "; screen with dead buttons: a panel that was just opening was taken for closed. 1 = it waits for the next frame. Restart needed.\r\n"
+    "ZeroFrameMenus=1\r\n"
     "; A packed game file that does not unpack (damaged, or the disk cannot read it) was read again without end: a silent hang on a\r\n"
     "; loading screen. 1 = it is read 5 times at most, then reported to the game as missing and named in the log; the game may then\r\n"
     "; go on without it or stop with a crash report, but it does not hang silently. Unpacking also stops at the end of its buffer\r\n"
@@ -474,6 +478,10 @@ static const char kDefaultIni[] =
     "; camera should change, then send UltimateFix\\ufx.log. Off by default (every line is written on the game thread).\r\n"
     "; With it on, Numpad 2 writes a \"camera mark\" line at the moment the camera goes wrong.\r\n"
     "TraceCamera=0\r\n"
+    "; Test switch for ZeroFrameMenus: N = every Nth frame the game gets the same time as the frame before (a frame of zero length).\r\n"
+    "; With ZeroFrameMenus=0 the toolbox and the side missions list then break the way they do after days of Windows uptime; with\r\n"
+    "; ZeroFrameMenus=1 they must not. 0 = off (always leave it at 0 for play). 2..600, read at the start.\r\n"
+    "ForceZeroFrame=0\r\n"
     "\r\n"
     "[Menu]\r\n"
     "; 1 = a small card in the top right corner for the first seconds of a start: the mod's settings are on F10.\r\n"
@@ -673,6 +681,11 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.removeExtraJoyPoll = (int)GetPrivateProfileIntW(L"Fixes", L"RemoveExtraJoyPoll", 1, ini);
     g_cfg.skipIntro = (int)GetPrivateProfileIntW(L"Fixes", L"SkipIntro", 1, ini);
     g_cfg.resetRefreshFix = (int)GetPrivateProfileIntW(L"Fixes", L"ResetRefreshFix", 1, ini);
+    g_cfg.zeroFrameMenus = GetPrivateProfileIntW(L"Fixes", L"ZeroFrameMenus", 1, ini) ? 1 : 0;
+    g_cfg.forceZeroFrame = (int)GetPrivateProfileIntW(L"Debug", L"ForceZeroFrame", 0, ini);
+    if (g_cfg.forceZeroFrame < 0) g_cfg.forceZeroFrame = 0;
+    if (g_cfg.forceZeroFrame == 1) g_cfg.forceZeroFrame = 2;  // every frame would stop the game's time altogether
+    if (g_cfg.forceZeroFrame > 600) g_cfg.forceZeroFrame = 600;
     g_cfg.borderless = (int)GetPrivateProfileIntW(L"Display", L"Borderless", 1, ini);
     g_cfg.hideCursor = (int)GetPrivateProfileIntW(L"Display", L"HideCursor", 1, ini);
     g_cfg.dpiAware = (int)GetPrivateProfileIntW(L"Display", L"DpiAware", 1, ini);

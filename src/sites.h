@@ -922,8 +922,42 @@ constexpr uint32_t kResourceIndexVa = 0x8D8D78;   // 18340 records of 20h bytes,
 constexpr int kResourceCount = 18340;
 constexpr uint32_t kNanTrapNumber = 0x409EA8;
 
+// Zero-length frames in the menus (docs/crashes/13). The panels of the pause menu and of the toolbox fade with
+// alpha += speed * dt (dt = [014AFFE0h]) clamped to 0..1 and take alpha == 0 as "this panel has closed". Opening a panel sets
+// alpha 0 and speed +0.1, so a first frame with dt == 0 (a long Windows uptime, hundreds of frames per second, the mod's own
+// pauses) leaves alpha at 0 and the panel counts as closed before it was ever shown.
+// V1 / V1b: during the start delay the fade helpers FUN_006474B0 (CToolBox) and FUN_0064F130 (CMenu) hold a channel while
+// speed * dt > 0 (`fmul st,st(1)` / `fcomp qword [0076F6F0h]` = 0.0). At dt == 0 the product is 0, the hold lets go, the alpha
+// stays 0 and the helper answers "faded": the toolbox drops back to the WEAPONS/ITEMS choice. Without the fmul the sign of the
+// speed alone decides, which is the same answer for every dt > 0; fcomp pops the speed just as it popped the product.
+constexpr SiteDef kSiteToolboxHold = {"toolbox fade hold: fmul st,st(1)", 0x6474F7, 2, {0xD8, 0xC9}};
+constexpr SiteDef kSiteMenuHold = {"pause menu fade hold: fmul st,st(1)", 0x64F177, 2, {0xD8, 0xC9}};
+// The bytes around both: fld dword [speed of channel edx] before, fcomp qword [0.0] after, so the two NOPs leave st0 = speed.
+constexpr SiteDef kSiteToolboxHoldAround = {"toolbox fade hold: fld speed / fmul / fcomp 0.0", 0x6474F0, 15,
+    {0xD9, 0x04, 0xD5, 0x44, 0x69, 0x47, 0x01, 0xD8, 0xC9, 0xDC, 0x1D, 0xF0, 0xF6, 0x76, 0x00}};
+constexpr SiteDef kSiteMenuHoldAround = {"pause menu fade hold: fld speed / fmul / fcomp 0.0", 0x64F170, 15,
+    {0xD9, 0x84, 0xD1, 0x0C, 0x95, 0x00, 0x00, 0xD8, 0xC9, 0xDC, 0x1D, 0xF0, 0xF6, 0x76, 0x00}};
+// V2: FUN_006584D0 (the map page of the pause menu, ecx = esi = CMenu; ebp, esi, edi pushed), substate 4 = the side missions
+// list, its "alpha == 0" branch: fstp st0 / fstp st0 / call 00405360, then (`mov ecx,eax / call 0042D010`) the list speed
+// [esi+9524h] := 0 and the substate := [esi+4Ch], which still says 4 when the list was opening: speed 0, alpha 0 for good, an
+// empty screen whose buttons do nothing. The x87 stack holds exactly two values here (1.0 and 0.0 of the clamp).
+constexpr SiteDef kSiteSideListClose = {"side missions list: closed branch", 0x658588, 9,
+    {0xDD, 0xD8, 0xDD, 0xD8, 0xE8, 0xCF, 0xCD, 0xDA, 0xFF}};
+constexpr SiteDef kSiteSideListResume = {"side missions list: after the call", 0x658591, 7, {0x8B, 0xC8, 0xE8, 0x78, 0x4A, 0xDD, 0xFF}};
+constexpr uint32_t kSideListCallFn = 0x405360;  // no arguments, returns the event manager in eax
+// V3: substate 3 = the "mission" view of the map: `jnp 00658B38` takes the "alpha == 0" branch with 0.0 in st0 (the only value
+// on the x87 stack), and 00658B38 stores it as the panel speed [esi+951Ch] and sets the substate to [esi+4Ch] (3 when opening).
+constexpr SiteDef kSiteMissionViewClose = {"map mission view: closed branch jnp", 0x65897C, 6, {0x0F, 0x8B, 0xB6, 0x01, 0x00, 0x00}};
+constexpr SiteDef kSiteMissionViewClosed = {"map mission view: speed := st0, substate := [esi+4Ch]", 0x658B38, 9,
+    {0x8B, 0x56, 0x4C, 0xD9, 0x9E, 0x1C, 0x95, 0x00, 0x00}};
+// The common exit of FUN_006584D0 for "nothing more this frame" (the fade still running): x87 stack empty, ebp/esi/edi pushed.
+constexpr SiteDef kSiteMapPageExit = {"map page update: common exit", 0x659B1B, 10, {0x8B, 0x8C, 0x24, 0xB4, 0x00, 0x00, 0x00, 0x5F, 0x5E, 0x5D}};
+constexpr uint32_t kSideListSpeedOffset = 0x9524, kMapPanelSpeedOffset = 0x951C;
+
 constexpr const SiteDef* kAllSites[] = {
     &kSiteNanTrap,
+    &kSiteToolboxHold, &kSiteMenuHold, &kSiteToolboxHoldAround, &kSiteMenuHoldAround, &kSiteSideListClose, &kSiteSideListResume,
+    &kSiteMissionViewClose, &kSiteMissionViewClosed, &kSiteMapPageExit,
     &kSiteMouseX, &kSiteMouseY, &kSiteLoaderSleep, &kSiteRouteCall1, &kSiteRouteCall2, &kSiteQteGauge, &kSitePlayerPhysicsCall, &kSiteReflectionChoice, &kSiteMaterialSlot, &kSiteLockOnDrop, &kSiteLockOnHeight, &kSiteFullQuad[0], &kSiteFullQuad[1], &kSiteFullQuad[2], &kSiteSetThreadWake, &kSiteRouteFlush1, &kSiteRouteFlush2, &kSiteRouteFlushFn,
     &kSiteGameFileBranch, &kSiteGameFileAddon, &kSiteGameFileArchive, &kSiteGameFileStore, &kSiteGameFileHave,
     &kSiteBeaconCall, &kSiteBeaconDraw, &kSiteBeaconMove, &kStorySites[0], &kStorySites[1], &kStorySites[2], &kStorySites[3], &kStorySites[4],

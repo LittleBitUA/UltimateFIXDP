@@ -100,6 +100,13 @@ port with the Xbox 360 original:
   next start, the original kept as `DP.exe.bak`).
 - 🧍 **Residents walking into nowhere** — a failed route lookup moved the
   resident to (0, 0, 0); now the resident stays where it stood.
+- 🧰 **"Cannot take items from the toolbox" and the frozen side missions
+  list** — a panel that opens starts at zero opacity, and a frame of zero
+  length (days of Windows uptime, hundreds of FPS) left it there: the game
+  took it for closed. The toolbox fell back to the WEAPONS/ITEMS choice, the
+  side missions list and the map's mission view hung on an empty screen. The
+  panel now waits for the next frame (`[Fixes] ZeroFrameMenus`; not yet checked
+  in the game, `[Debug] ForceZeroFrame` reproduces the bug).
 
 ### What's new in 0.7.8
 
@@ -407,6 +414,14 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
   запуску, оригінал лишається як `DP.exe.bak`).
 - 🧍 **Жителі, що йдуть «в нікуди»** — невдалий пошук маршруту переносив жителя
   в (0, 0, 0); тепер він лишається там, де стояв.
+- 🧰 **«Не беруться речі з ящика» і зависле меню побічних завдань** — панель,
+  що відкривається, починає з нульової непрозорості, а кадр нульової
+  тривалості (дні роботи Windows без перезавантаження, сотні FPS) лишав її
+  там: гра вважала панель закритою. Ящик повертав до вибору WEAPONS/ITEMS,
+  а список побічних завдань і перегляд «mission» на карті зависали на
+  порожньому екрані. Тепер панель чекає наступного кадру (`[Fixes]
+  ZeroFrameMenus`; у грі ще не перевірено, `[Debug] ForceZeroFrame` відтворює
+  ваду).
 
 ### Що нового в 0.7.8
 

@@ -143,6 +143,7 @@ static void Startup() {
     if (g_cfg.skipIntro && InstallSkipIntro()) ++on;
     if ((g_cfg.forceUsSlot || g_cfg.defaultPadBindings) && InstallLanguageSlot()) ++on;
     if (g_cfg.resetRefreshFix && InstallResetRefreshFix()) ++on;
+    if (g_cfg.zeroFrameMenus && InstallZeroFrameMenus()) ++on;
     // Always: the Present hook carries the whole per-frame layer, not only the borderless window.
     if (InstallDisplay()) ++on;
     if (InstallWorldDistance()) ++on;

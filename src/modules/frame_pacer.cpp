@@ -304,8 +304,26 @@ static double FrameClockOut(int arg) {
     return Sub53(raw, g_pauseCut);
 }
 
+// [Debug] ForceZeroFrame=N: every Nth frame the game gets exactly the time it got the frame before, so its frame delta is 0, as
+// after days of Windows uptime (docs/crashes/13). The real time is not lost: the next frame's delta covers both frames. Only for
+// reproducing the menu hangs that ZeroFrameMenus fixes.
+static bool ForcedZeroFrame() {
+    static int count = 0;
+    static bool said = false;
+    if (g_cfg.forceZeroFrame < 2 || !g_haveOut) return false;
+    if (!said) {
+        said = true;
+        Log("pacer: [Debug] ForceZeroFrame=%d: one frame in %d gets the time of the frame before (a frame of zero length)",
+            g_cfg.forceZeroFrame, g_cfg.forceZeroFrame);
+    }
+    if (++count < g_cfg.forceZeroFrame) return false;
+    count = 0;
+    return true;
+}
+
 double __cdecl FrameClock(int arg) {
     double out = FrameClockOut(arg);
+    if (arg == 0 && ForcedZeroFrame()) return g_lastOut;  // g_lastOut stays: the next delta is measured from it
     if (arg == 0) {
         // Mode 1 keeps the real time, but the game rounds a delta of 0.5..0.99 steps up to a whole step (pacer.h, PacerRoundUpSteps):
         // hand it the rounded value at once and measure the next delta from there, so the rounding never adds up.

@@ -708,4 +708,37 @@ inline size_t BuildQteGaugeStub(uint8_t* out, uint32_t deltaVa) {
     return (size_t)(p - out);
 }
 
+// ZeroFrameMenus (sites.h, docs/crashes/13 V2 and V3). A panel at alpha 0 whose speed is positive is opening, and only no time
+// has passed this frame: it waits for the next frame (the function's common exit, as while a fade is running) instead of
+// taking the "closed" branch. The speed is a float read as an integer: above 0 only for a positive speed, so +0.0, -0.0 and a
+// closing panel (-0.1) take the game's branch. The flags are dead on every way out (the game's branch calls, the exit runs
+// `xor ecx,esp`), and no register is touched.
+
+// Jumped to from kSiteSideListClose (9 bytes: jmp here + 4 NOPs). Two values on the x87 stack at the site, both popped here.
+//     fstp st0 / fstp st0 / cmp dword [esi+speed],0 / jg wait / call 00405360 / jmp 00658591 / wait: jmp exit
+inline size_t BuildSideListHold(uint8_t* out, uint32_t va, uint32_t speedOffset, uint32_t callFn, uint32_t resumeVa, uint32_t exitVa) {
+    uint8_t* p = out;
+    *p++ = 0xDD; *p++ = 0xD8;                                       // fstp st(0)
+    *p++ = 0xDD; *p++ = 0xD8;                                       // fstp st(0)
+    *p++ = 0x83; *p++ = 0xBE; StubPut32(p, speedOffset); *p++ = 0;  // cmp dword [esi+speed], 0
+    *p++ = 0x7F; *p++ = 0x0A;                                       // jg wait (over the call and the jmp)
+    *p++ = 0xE8; StubPut32(p, callFn - (va + (uint32_t)(p - out) + 4));  // call 00405360 (the replaced call)
+    StubJmp(p, out, va, resumeVa);                                  // back into the game's branch
+    StubJmp(p, out, va, exitVa);                                    // wait: the common exit
+    return (size_t)(p - out);
+}
+
+// Reached through the rel32 of the `jnp` at kSiteMissionViewClose (only its 4 offset bytes change). One value on the x87 stack
+// (the 0.0 the game's branch stores as the speed): kept for that branch, popped before the exit.
+//     cmp dword [esi+speed],0 / jg wait / jmp 00658B38 / wait: fstp st0 / jmp exit
+inline size_t BuildMissionViewHold(uint8_t* out, uint32_t va, uint32_t speedOffset, uint32_t closedVa, uint32_t exitVa) {
+    uint8_t* p = out;
+    *p++ = 0x83; *p++ = 0xBE; StubPut32(p, speedOffset); *p++ = 0;  // cmp dword [esi+speed], 0
+    *p++ = 0x7F; *p++ = 0x05;                                       // jg wait (over the jmp)
+    StubJmp(p, out, va, closedVa);                                  // the game's "closed" branch
+    *p++ = 0xDD; *p++ = 0xD8;                                       // wait: fstp st(0)
+    StubJmp(p, out, va, exitVa);                                    // the common exit
+    return (size_t)(p - out);
+}
+
 }  // namespace ufx
