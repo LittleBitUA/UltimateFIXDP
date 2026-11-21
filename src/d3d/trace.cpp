@@ -425,18 +425,38 @@ bool CurrentPsIsSmoke() {
 }
 // With TraceWater: each lit particle draw (the prologue's black smoke) explained once per particle texture, at most 8, in
 // UltimateFix\smoke_<caller>_<texture>.txt with its vertex shader, the vertices and its texture as PNG.
-void SaveStagePng(void* tex, int stage, u32 from);
 void ExplainSmoke(void* dev, u32 from) {
-    static u32 seen[8];
+    // the smoke particles only: blended (ALPHABLENDENABLE 1), no depth writes, a DXT3 texture; the same shader family also draws
+    // opaque characters, which filled the first list
+    typedef HRESULT(WINAPI * GetRsFn)(void*, DWORD, DWORD*);
+    GetRsFn getRs = (GetRsFn)(*(void***)dev)[58];
+    DWORD blend = 0, zwrite = 1;
+    getRs(dev, 27 /*ALPHABLENDENABLE*/, &blend);
+    getRs(dev, 14 /*ZWRITEENABLE*/, &zwrite);
+    void* t0 = g_stageTex[0];
+    if (!blend || zwrite || !t0) return;
+    void** vt = *(void***)t0;
+    typedef DWORD(WINAPI * TypeFn)(void*);
+    typedef HRESULT(WINAPI * DescFn)(void*, UINT, void*);
+    u32 desc[8] = {0};
+    if (((TypeFn)vt[10])(t0) != 3 || FAILED(((DescFn)vt[17])(t0, 0, desc)) || desc[0] != 0x33545844u /*DXT3*/) return;
+    static u32 seen[16];
     static int count = 0;
-    const u32 tex = (u32)(uintptr_t)g_stageTex[0];
+    const u32 tex = (u32)(uintptr_t)t0;
     for (int i = 0; i < count; ++i) if (seen[i] == tex) return;
-    if (count >= 8) return;
+    if (count >= 16) return;
     seen[count++] = tex;
     wchar_t path[MAX_PATH + 64];
     wsprintfW(path, L"%sUltimateFix\\smoke_%08X_%08X.txt", g_paths.gameDir, from, tex);
     WriteDrawFile(dev, from, path);
-    SaveStagePng(g_stageTex[0], 0, from);
+    Log("smoke: a particle draw explained (%ux%u DXT3 texture %08X)", desc[6], desc[7], tex);
+    typedef HRESULT(WINAPI * SaveFn)(const wchar_t*, DWORD, void*, const void*);
+    HMODULE d3dx = GetModuleHandleW(L"d3dx9_43.dll");
+    SaveFn save = d3dx ? (SaveFn)(void*)GetProcAddress(d3dx, "D3DXSaveTextureToFileW") : nullptr;
+    if (save) {
+        wsprintfW(path, L"%sUltimateFix\\smoke_%08X_%08X.png", g_paths.gameDir, from, tex);
+        save(path, 3 /*PNG*/, t0, nullptr);
+    }
 }
 void DumpDraw(void* dev, u32 from) {
     static u32 done[8];
