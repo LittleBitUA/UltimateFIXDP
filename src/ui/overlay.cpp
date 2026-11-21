@@ -5,6 +5,7 @@
 // saved with a state block and restored afterwards; the game never notices.
 #include "ui.h"
 #include "d3d9.h"
+#include "theme.h"
 
 namespace ufx {
 namespace ui {
@@ -22,6 +23,7 @@ struct TextEntry {
     void* texture;
     int width, height;
     int pixelHeight;
+    int weight;  // kRegular or kSemibold: part of the key, the same string is cached once per weight
     int length;
     u32 hash;
     u32 lastUsed;  // the use clock at the last lookup: the least recently used entry is replaced when the cache is full
@@ -51,13 +53,14 @@ void SetRS(u32 state, u32 value) { Method<DwordDwordFn>(g_dev, kSetRenderState)(
 void SetTSS(u32 type, u32 value) { Method<Dword3Fn>(g_dev, kSetTextureStageState)(g_dev, 0, type, value); }
 void SetSampler(u32 type, u32 value) { Method<Dword3Fn>(g_dev, kSetSamplerState)(g_dev, 0, type, value); }
 
-// One memory DC and one font per pixel size, kept for the whole session (a new font for every string was slow).
+// One memory DC and one font per pixel size and weight, kept for the whole session (a new font for every string was slow).
 HDC g_textDc = nullptr;
 struct FontEntry {
     int px;
+    int weight;
     HFONT font;
 };
-constexpr int kMaxFonts = 16;
+constexpr int kMaxFonts = 24;  // the menu uses about a dozen sizes, a few of them in both weights
 FontEntry g_fonts[kMaxFonts];
 int g_fontCount = 0;
 
@@ -66,16 +69,51 @@ HDC TextDc() {
     return g_textDc;
 }
 
+HFONT MakeFont(int px, int weight, const wchar_t* face) {
+    return CreateFontW(-px, 0, 0, 0, weight, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                       ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, face);
+}
+
+float ScaleY();
+
+// The semibold weight. GDI keeps the old four-style families, so Segoe UI itself has only Regular and Bold, and weight 600
+// on it comes out Bold; the real semibold cut (seguisb.ttf, on every Windows since 7) is the family "Segoe UI Semibold".
+// Where that face is missing (Wine and Proton ship no Segoe UI) GDI would quietly put another font in its place, so the
+// face the DC really got is checked, and without it the heading is Segoe UI (or what stands in for it) at weight 600.
+HFONT MakeSemibold(HDC dc, int px) {
+    static bool logged = false;
+    HFONT font = MakeFont(px, FW_SEMIBOLD, L"Segoe UI Semibold");
+    bool real = false;
+    if (font) {
+        HGDIOBJ old = SelectObject(dc, font);
+        wchar_t face[LF_FACESIZE];
+        real = GetTextFaceW(dc, LF_FACESIZE, face) > 0 && lstrcmpiW(face, L"Segoe UI Semibold") == 0;
+        SelectObject(dc, old);
+        if (!real) {
+            DeleteObject(font);
+            font = MakeFont(px, FW_SEMIBOLD, L"Segoe UI");
+        }
+    }
+    if (font && !logged) {  // the first heading font: the whole feature is on from here
+        logged = true;
+        const int scale = (int)(ScaleY() * 100.f + 0.5f);
+        Log("overlay: text snapped to whole pixels, scale %d.%02d, headings in %s", scale / 100, scale % 100,
+            real ? "Segoe UI Semibold" : "Segoe UI at weight 600 (no Segoe UI Semibold face)");
+    }
+    return font;
+}
+
 // The font is never left selected in the DC, so an old one can be deleted when the table is full.
-HFONT FontFor(int px) {
+HFONT FontFor(int px, int weight) {
     for (int i = 0; i < g_fontCount; ++i)
-        if (g_fonts[i].px == px) return g_fonts[i].font;
-    HFONT font = CreateFontW(-px, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-                             CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        if (g_fonts[i].px == px && g_fonts[i].weight == weight) return g_fonts[i].font;
+    HDC dc = TextDc();
+    HFONT font = weight == kSemibold && dc ? MakeSemibold(dc, px) : MakeFont(px, FW_NORMAL, L"Segoe UI");
     if (!font) return nullptr;
     int slot = g_fontCount < kMaxFonts ? g_fontCount++ : kMaxFonts - 1;
     if (slot == kMaxFonts - 1 && g_fonts[slot].font) DeleteObject(g_fonts[slot].font);
     g_fonts[slot].px = px;
+    g_fonts[slot].weight = weight;
     g_fonts[slot].font = font;
     return font;
 }
@@ -89,7 +127,7 @@ u32 HashText(const wchar_t* text, int* length) {
 }
 
 // Renders `text` with GDI and uploads it as an A8R8G8B8 texture (white, alpha = coverage).
-TextEntry* MakeText(const wchar_t* text, int len, u32 hash, int px) {
+TextEntry* MakeText(const wchar_t* text, int len, u32 hash, int px, int weight) {
     if (len <= 0 || len >= 256) return nullptr;
     TextEntry* slot = nullptr;
     if (g_textCount < kMaxTexts) {
@@ -105,7 +143,7 @@ TextEntry* MakeText(const wchar_t* text, int len, u32 hash, int px) {
     }
 
     HDC dc = TextDc();
-    HFONT font = dc ? FontFor(px) : nullptr;
+    HFONT font = dc ? FontFor(px, weight) : nullptr;
     if (!font) return nullptr;
     HGDIOBJ oldFont = SelectObject(dc, font);
     SIZE size;
@@ -155,6 +193,7 @@ TextEntry* MakeText(const wchar_t* text, int len, u32 hash, int px) {
                 e.width = w;
                 e.height = h;
                 e.pixelHeight = px;
+                e.weight = weight;
                 e.length = len;
                 e.hash = hash;
                 e.lastUsed = ++g_useClock;
@@ -171,12 +210,12 @@ TextEntry* MakeText(const wchar_t* text, int len, u32 hash, int px) {
     return result;
 }
 
-TextEntry* GetText(const wchar_t* text, int px) {
+TextEntry* GetText(const wchar_t* text, int px, int weight) {
     int len;
     u32 hash = HashText(text, &len);
     for (int i = 0; i < g_textCount; ++i) {
         TextEntry& e = g_texts[i];
-        if (e.hash != hash || e.length != len || e.pixelHeight != px || !e.texture) continue;
+        if (e.hash != hash || e.length != len || e.pixelHeight != px || e.weight != weight || !e.texture) continue;
         int k = 0;
         while (k < len && e.text[k] == text[k]) ++k;
         if (k == len) {
@@ -184,7 +223,7 @@ TextEntry* GetText(const wchar_t* text, int px) {
             return &e;
         }
     }
-    return MakeText(text, len, hash, px);
+    return MakeText(text, len, hash, px, weight);
 }
 
 // Scale of the overlay relative to the 1280x720 layout: the back buffer may be bigger. The output is always 16:9, so both
@@ -192,6 +231,22 @@ TextEntry* GetText(const wchar_t* text, int px) {
 float ScaleX() { return g_outputW ? (float)g_outputW / 1280.f : 1.f; }
 float ScaleY() { return g_outputW && g_outputH ? (float)g_outputH / 720.f : ScaleX(); }
 int FontPx(int px) { return (int)((float)px * ScaleY() + 0.5f); }  // the font is rendered at the real size
+
+// The fade of the menu's opening (SetOverlayFade): every overlay primitive multiplies its alpha by g_fadeAlpha and moves
+// down by g_fadeOffset layout units. Applied where the shapes reach back buffer pixels (FillRect, DrawText, RoundPixels),
+// so a shape drawn through another (a square fallback, a framed shape) is faded and moved once, and never in Quad: the
+// final-image passes draw with it too.
+float g_fadeAlpha = 1.f;
+float g_fadeOffset = 0.f;
+
+u32 Faded(u32 argb) {
+    if (g_fadeAlpha >= 1.f) return argb;
+    const int a = (int)((float)(argb >> 24) * g_fadeAlpha + 0.5f);
+    return (argb & 0x00FFFFFFu) | ((u32)(a < 0 ? 0 : a > 255 ? 255 : a) << 24);
+}
+
+// The offset in whole back buffer pixels: the text stays on whole pixels while it rises (see DrawText).
+float FadeOffsetPixels() { return g_fadeOffset != 0.f ? SnapWhole(g_fadeOffset * ScaleY()) : 0.f; }
 
 // Draws a quad in back buffer pixels.
 void Quad(float x0, float y0, float x1, float y1, u32 color, float u0, float v0, float u1, float v1) {
@@ -315,27 +370,248 @@ void OverlayEnd() {
     }
 }
 
+// One axis of a rectangle in back buffer pixels, on whole pixels. A thin one (a hairline, a bar of a graph) keeps its rounded
+// thickness, at least one pixel, wherever it starts: at scale 1.5 a 1-unit line otherwise came out 1 or 2 pixels thick by
+// its position. A bigger one has both edges rounded, so two rectangles that meet in layout units meet on the screen too.
+void SnapSpan(float from, float size, float scale, float* a, float* b) {
+    if (size < 0.f) {  // a negative size spans back from `from`, as the unsnapped quad did
+        from += size;
+        size = -size;
+    }
+    const float start = SnapWhole(from * scale), length = size * scale;
+    *a = start;
+    if (length < 3.f) *b = start + (length < 1.f ? 1.f : SnapWhole(length));
+    else *b = SnapWhole((from + size) * scale);
+}
+
 void FillRect(float x, float y, float w, float h, u32 argb) {
+    if (w == 0.f || h == 0.f) return;  // an empty rectangle covered no pixel before either
     typedef HRESULT(WINAPI * SetTexFn)(void*, DWORD, void*);
     Method<SetTexFn>(g_dev, kSetTexture)(g_dev, 0, nullptr);
     SetTSS(TSS_COLOROP, TOP_SELECTARG1);
     SetTSS(TSS_COLORARG1, TA_DIFFUSE);
     SetTSS(TSS_ALPHAOP, TOP_SELECTARG1);
     SetTSS(TSS_ALPHAARG1, TA_DIFFUSE);
-    float kx = ScaleX(), ky = ScaleY();
-    Quad(x * kx, y * ky, (x + w) * kx, (y + h) * ky, argb, 0.f, 0.f, 1.f, 1.f);
+    float x0, x1, y0, y1;
+    SnapSpan(x, w, ScaleX(), &x0, &x1);
+    SnapSpan(y, h, ScaleY(), &y0, &y1);
+    const float o = FadeOffsetPixels();
+    Quad(x0, y0 + o, x1, y1 + o, Faded(argb), 0.f, 0.f, 1.f, 1.f);
 }
 
-float TextWidth(const wchar_t* text, int px) {
-    TextEntry* e = GetText(text, FontPx(px));
+void SetOverlayFade(float alpha, float offsetY) {
+    g_fadeAlpha = alpha < 0.f ? 0.f : alpha > 1.f ? 1.f : alpha;
+    g_fadeOffset = offsetY;
+}
+
+// ---- Rounded shapes ---------------------------------------------------------------------------------------------
+// One white disk whose alpha is its coverage. A rounded rectangle is nine quads cut from it: the four corners take the four
+// quarters of the disk, the edges and the middle its solid centre, so one texture serves every radius and the straight edges
+// stay on whole pixels. The disk carries its own smaller levels, each drawn at its own size: a corner of 9 pixels samples a
+// quarter of 32 texels, and with the big level alone the bilinear sampler would skip texels and the curve would step.
+// MANAGED like the text textures, so a Reset does not lose it; it is still let go before one with the other overlay
+// resources and made again at the next use.
+namespace {
+constexpr int kDiskSize = 64, kDiskLevels = 7;  // 64, 32, 16, 8, 4, 2, 1
+void* g_disk = nullptr;
+bool g_diskFailed = false;  // CreateTexture or LockRect failed: the shapes stay square for the session
+
+float Sqrt(float x) { float r; __asm__("fsqrt" : "=t"(r) : "0"(x)); return r; }
+
+bool MakeDisk() {
+    typedef HRESULT(WINAPI * CreateTextureFn)(void*, UINT, UINT, UINT, DWORD, DWORD, DWORD, void**, void*);
+    typedef HRESULT(WINAPI * LockFn)(void*, UINT, LockedRect*, const RECT*, DWORD);
+    typedef HRESULT(WINAPI * UnlockFn)(void*, UINT);
+    void* tex = nullptr;
+    HRESULT hr = Method<CreateTextureFn>(g_dev, kCreateTexture)(g_dev, kDiskSize, kDiskSize, kDiskLevels, 0, 21 /*A8R8G8B8*/,
+                                                                 1 /*MANAGED*/, &tex, nullptr);
+    if (FAILED(hr) || !tex) {
+        Log("overlay: rounded shapes unavailable (CreateTexture %08X), square fallback", (u32)hr);
+        return false;
+    }
+    for (int level = 0; level < kDiskLevels; ++level) {
+        const int size = kDiskSize >> level;
+        const float radius = (float)size * 0.5f;
+        LockedRect lr;
+        if (FAILED(Method<LockFn>(tex, kTexLockRect)(tex, (UINT)level, &lr, nullptr, 0))) {
+            Method<ReleaseFn>(tex, kRelease)(tex);
+            Log("overlay: rounded shapes unavailable (LockRect of level %d), square fallback", level);
+            return false;
+        }
+        for (int y = 0; y < size; ++y) {
+            u32* row = (u32*)((u8*)lr.bits + (size_t)y * lr.pitch);
+            for (int x = 0; x < size; ++x) {
+                const float dx = (float)x + 0.5f - radius, dy = (float)y + 0.5f - radius;
+                float a = radius + 0.5f - Sqrt(dx * dx + dy * dy);  // the share of the texel inside the circle, to a good guess
+                if (a < 0.f) a = 0.f;
+                if (a > 1.f) a = 1.f;
+                row[x] = ((u32)(a * 255.f + 0.5f) << 24) | 0x00FFFFFF;
+            }
+        }
+        Method<UnlockFn>(tex, kTexUnlockRect)(tex, (UINT)level);
+    }
+    g_disk = tex;
+    static bool logged = false;
+    if (!logged) {
+        logged = true;
+        Log("overlay: rounded shapes ready (%dx%d disk, %d levels)", kDiskSize, kDiskSize, kDiskLevels);
+    }
+    return true;
+}
+
+void ReleaseDisk() {
+    if (g_disk) Method<ReleaseFn>(g_disk, kRelease)(g_disk);
+    g_disk = nullptr;
+}
+
+// Binds the disk with the colour from the vertex and alpha = coverage x vertex alpha (as DrawText), and trilinear filtering
+// so the small corners take the small levels. False = no disk, draw square.
+bool BeginRound() {
+    if (!g_disk) {
+        if (g_diskFailed) return false;
+        if (!MakeDisk()) {
+            g_diskFailed = true;
+            return false;
+        }
+    }
+    typedef HRESULT(WINAPI * SetTexFn)(void*, DWORD, void*);
+    Method<SetTexFn>(g_dev, kSetTexture)(g_dev, 0, g_disk);
+    SetTSS(TSS_COLOROP, TOP_SELECTARG2);
+    SetTSS(TSS_COLORARG2, TA_DIFFUSE);
+    SetTSS(TSS_ALPHAOP, TOP_MODULATE);
+    SetTSS(TSS_ALPHAARG1, TA_TEXTURE);
+    SetTSS(TSS_ALPHAARG2, TA_DIFFUSE);
+    SetSampler(SAMP_MIPFILTER, 2);     // LINEAR between the levels
+    SetSampler(SAMP_MIPMAPLODBIAS, 0);  // the game's own bias or level limit must not blur or sharpen the corners
+    SetSampler(SAMP_MAXMIPLEVEL, 0);
+    return true;
+}
+
+// The overlay's sampler as BeginOverlay set it (the text textures have one level; the state block restores the rest).
+void EndRound() { SetSampler(SAMP_MIPFILTER, 0); }
+
+// A rounded rectangle in back buffer pixels, x0..x1 and y0..y1 on whole pixels, corner radius r in pixels (any fraction).
+void RoundPixels(float x0, float y0, float x1, float y1, float r, u32 argb) {
+    if (x1 <= x0 || y1 <= y0) return;
+    const float o = FadeOffsetPixels();  // the menu's fade-in (SetOverlayFade), once per shape
+    y0 += o;
+    y1 += o;
+    argb = Faded(argb);
+    const float half = (x1 - x0 < y1 - y0 ? x1 - x0 : y1 - y0) * 0.5f;
+    if (r > half) r = half;
+    if (r < 0.f) r = 0.f;
+    // The columns and rows of the nine parts. A pill has no straight middle: its two inner lines are the same line, and the
+    // empty parts are left out (two triangles sharing an edge never leave a gap or cover a pixel twice).
+    float xs[4] = {x0, x0 + r, x1 - r, x1}, ys[4] = {y0, y0 + r, y1 - r, y1};
+    if (xs[2] < xs[1]) xs[1] = xs[2] = (x0 + x1) * 0.5f;
+    if (ys[2] < ys[1]) ys[1] = ys[2] = (y0 + y1) * 0.5f;
+    const float uv[4] = {0.f, 0.5f, 0.5f, 1.f};  // the middle parts sample the solid centre of the disk
+    Vertex v[54];
+    UINT count = 0;
+    for (int j = 0; j < 3; ++j)
+        for (int i = 0; i < 3; ++i) {
+            if (xs[i + 1] <= xs[i] || ys[j + 1] <= ys[j]) continue;
+            const float a = xs[i] - 0.5f, b = xs[i + 1] - 0.5f, c = ys[j] - 0.5f, d = ys[j + 1] - 0.5f;  // as in Quad
+            const float u0 = uv[i], u1 = uv[i + 1], v0 = uv[j], v1 = uv[j + 1];
+            Vertex* q = &v[count];
+            q[0] = {a, c, 0.f, 1.f, argb, u0, v0};
+            q[1] = {b, c, 0.f, 1.f, argb, u1, v0};
+            q[2] = {a, d, 0.f, 1.f, argb, u0, v1};
+            q[3] = {b, c, 0.f, 1.f, argb, u1, v0};
+            q[4] = {b, d, 0.f, 1.f, argb, u1, v1};
+            q[5] = {a, d, 0.f, 1.f, argb, u0, v1};
+            count += 6;
+        }
+    if (!count) return;
+    typedef HRESULT(WINAPI * DrawUpFn)(void*, DWORD, UINT, const void*, UINT);
+    Method<DrawUpFn>(g_dev, kDrawPrimitiveUP)(g_dev, 4 /*TRIANGLELIST*/, count / 3, v, sizeof(Vertex));
+}
+
+// A border of `units` layout units in whole pixels, at least one.
+float BorderPixels(float units) {
+    const float p = SnapWhole(units * ScaleY());
+    return p < 1.f ? 1.f : p;
+}
+}  // namespace
+
+void FillRound(float x, float y, float w, float h, float r, u32 argb) {
+    if (w == 0.f || h == 0.f) return;
+    if (r <= 0.f || !BeginRound()) {
+        FillRect(x, y, w, h, argb);
+        return;
+    }
+    float x0, x1, y0, y1;
+    SnapSpan(x, w, ScaleX(), &x0, &x1);
+    SnapSpan(y, h, ScaleY(), &y0, &y1);
+    RoundPixels(x0, y0, x1, y1, r * ScaleY(), argb);
+    EndRound();
+}
+
+void FillRoundFramed(float x, float y, float w, float h, float r, u32 fill, u32 frame, float frameWidth) {
+    if (w == 0.f || h == 0.f) return;
+    if (r <= 0.f || !BeginRound()) {  // square: the frame as a rectangle under the inside
+        FillRect(x, y, w, h, frame);
+        const float b = BorderPixels(frameWidth) / ScaleX();
+        FillRect(x + b, y + b, w - 2 * b, h - 2 * b, fill);
+        return;
+    }
+    float x0, x1, y0, y1;
+    SnapSpan(x, w, ScaleX(), &x0, &x1);
+    SnapSpan(y, h, ScaleY(), &y0, &y1);
+    const float rp = r * ScaleY(), b = BorderPixels(frameWidth);
+    RoundPixels(x0, y0, x1, y1, rp, frame);
+    RoundPixels(x0 + b, y0 + b, x1 - b, y1 - b, rp > b ? rp - b : 0.f, fill);
+    EndRound();
+}
+
+namespace {
+// a + (b - a) * t for every channel of two colours, t 0..1
+u32 MixColor(u32 a, u32 b, float t) {
+    if (t <= 0.f) return a;
+    if (t >= 1.f) return b;
+    u32 out = 0;
+    for (int shift = 0; shift < 32; shift += 8) {
+        const float ca = (float)((a >> shift) & 0xFF), cb = (float)((b >> shift) & 0xFF);
+        out |= (u32)(int)(ca + (cb - ca) * t + 0.5f) << shift;
+    }
+    return out;
+}
+}  // namespace
+
+void Switch(float x, float y, bool on, float travel) {
+    float x0, x1, y0, y1;
+    SnapSpan(x, kSwitchW, ScaleX(), &x0, &x1);
+    SnapSpan(y, kSwitchH, ScaleY(), &y0, &y1);
+    // the knob is inset 3 units (18 of 24 at 1x, as the site's switch), in whole pixels on every side
+    const float inset = SnapWhole(3.f * ScaleY()), knob = (y1 - y0) - 2.f * inset;
+    // Where the knob is between its two rests (0 = off, 1 = on): `travel` is how far it has come from the other side since
+    // the flip. The knob stays on whole pixels and the track colour follows it from grey to red.
+    if (travel < 0.f) travel = 0.f;
+    if (travel > 1.f) travel = 1.f;
+    const float at = on ? travel : 1.f - travel;
+    const float offX = x0 + inset, onX = x1 - inset - knob;
+    const float kx = SnapWhole(offX + (onX - offX) * at);
+    const u32 track = MixColor(theme::kLine2, theme::kAccent, at);
+    if (!BeginRound()) {  // square, as the switch was before
+        FillRect(x, y, kSwitchW, kSwitchH, track);
+        FillRect(kx / ScaleX(), (y0 + inset) / ScaleY(), knob / ScaleX(), knob / ScaleY(), theme::kWhite);
+        return;
+    }
+    RoundPixels(x0, y0, x1, y1, (y1 - y0) * 0.5f, track);
+    RoundPixels(kx, y0 + inset, kx + knob, y0 + inset + knob, knob * 0.5f, theme::kWhite);
+    EndRound();
+}
+
+float TextWidth(const wchar_t* text, int px, int weight) {
+    TextEntry* e = GetText(text, FontPx(px), weight);
     return e ? (float)(e->width - 4) / ScaleX() : 0.f;
 }
 
 // Measured with GDI only (no texture is made), so a long text can be tried at many break points cheaply.
-int TextFit(const wchar_t* text, int length, float maxWidth, int px) {
+int TextFit(const wchar_t* text, int length, float maxWidth, int px, int weight) {
     if (length <= 0) return 0;
     HDC dc = TextDc();
-    HFONT font = dc ? FontFor(FontPx(px)) : nullptr;
+    HFONT font = dc ? FontFor(FontPx(px), weight) : nullptr;
     if (!font) return length;
     HGDIOBJ old = SelectObject(dc, font);
     int fit = 0;
@@ -346,8 +622,8 @@ int TextFit(const wchar_t* text, int length, float maxWidth, int px) {
     return fit;
 }
 
-float DrawText(const wchar_t* text, float x, float y, u32 argb, int px) {
-    TextEntry* e = GetText(text, FontPx(px));  // render the font at the real size
+float DrawText(const wchar_t* text, float x, float y, u32 argb, int px, int weight) {
+    TextEntry* e = GetText(text, FontPx(px), weight);  // render the font at the real size
     if (!e) return 0.f;
     typedef HRESULT(WINAPI * SetTexFn)(void*, DWORD, void*);
     Method<SetTexFn>(g_dev, kSetTexture)(g_dev, 0, e->texture);
@@ -356,8 +632,10 @@ float DrawText(const wchar_t* text, float x, float y, u32 argb, int px) {
     SetTSS(TSS_ALPHAOP, TOP_MODULATE);  // coverage from the texture times the vertex alpha
     SetTSS(TSS_ALPHAARG1, TA_TEXTURE);
     SetTSS(TSS_ALPHAARG2, TA_DIFFUSE);
-    float px0 = x * ScaleX() - 2.f, py0 = y * ScaleY() - 2.f;
-    Quad(px0, py0, px0 + (float)e->width, py0 + (float)e->height, argb, 0.f, 0.f, 1.f, 1.f);
+    // On whole pixels: each texel of the GDI bitmap lands on exactly one pixel. A fractional start (every odd layout unit at
+    // scale 1.5, any centred label, a panel dragged by the mouse) made the bilinear sampler smear the glyphs over two pixels.
+    float px0 = SnapWhole(x * ScaleX()) - 2.f, py0 = SnapWhole(y * ScaleY()) - 2.f + FadeOffsetPixels();
+    Quad(px0, py0, px0 + (float)e->width, py0 + (float)e->height, Faded(argb), 0.f, 0.f, 1.f, 1.f);
     return (float)(e->width - 4) / ScaleX();
 }
 
@@ -574,8 +852,8 @@ void PerfOverlayFrame(void* dev, double fps, double frameMs, double presentMs, d
     }
     if (!OverlayBegin(dev)) return;
     FillRect(8, 8, 520, 44, 0xB0000000);
-    DrawText(line1, 14, 10, 0xFFFFFFFF, 16);
-    DrawText(line2, 14, 30, 0xFFC4C4CE, 13);
+    DrawText(line1, 14, 10, theme::kWhite, 16);
+    DrawText(line2, 14, 30, theme::kMuted, 13);
     OverlayEnd();
 }
 
@@ -629,15 +907,15 @@ void FrameStatsPanel(void* dev, double totalMs, double gameMs, double physicsMs,
     static const wchar_t* const namesEn[7] = {L"Total:", L"Game (CPU):", L"  of it physics:", L"Present:", L"Worst:", L"Mod passes:", L"Game thread busy:"};
     const wchar_t* const* names = g_cfg.language == 1 ? namesEn : namesUk;
     for (int i = 0; i < 7; ++i) {
-        DrawText(names[i], x + 8.f, y + 6.f + 17.f * (float)i, i == 2 ? 0xFFA8A8B4 : 0xFFE8E8F0, 13);
+        DrawText(names[i], x + 8.f, y + 6.f + 17.f * (float)i, i == 2 ? theme::kFaint : theme::kText, 13);
         float tw = TextWidth(t[i], 13);
-        DrawText(t[i], x + w - 8.f - tw, y + 6.f + 17.f * (float)i, i == 0 ? 0xFFFFFFFF : 0xFFC4C4CE, 13);
+        DrawText(t[i], x + w - 8.f - tw, y + 6.f + 17.f * (float)i, i == 0 ? theme::kWhite : theme::kMuted, 13);
     }
     wchar_t foot[64];
     const bool en = g_cfg.language == 1;
     const wchar_t* api = g_usingDxvk ? L"DXVK" : g_d3dWrapper ? (en ? L"D3D9 (wrapper)" : L"D3D9 (обгортка)") : L"D3D9";
     wsprintfW(foot, en ? L"%d FPS   %d Hz   %s" : L"%d FPS   %d Гц   %s", totalMs > 0.0 ? (int)(1000.0 / totalMs + 0.5) : 0, hz, api);
-    DrawText(foot, x + 8.f, y + 6.f + 17.f * 7.f, 0xFFA8A8B4, 12);
+    DrawText(foot, x + 8.f, y + 6.f + 17.f * 7.f, theme::kFaint, 12);
     // graph of the last 120 frames: the scale is 2 x 16.7 ms (60 frames/s) or the worst frame; a thin line marks 16.7 ms
     double scale = 33.4;
     for (int i = 0; i < 120; ++i)
@@ -649,14 +927,15 @@ void FrameStatsPanel(void* dev, double totalMs, double gameMs, double physicsMs,
         float h = (float)(v / scale) * gh;
         if (h > gh) h = gh;
         if (h < 1.f) h = 1.f;
-        FillRect(gx + (float)i * bw, gy - h, bw > 1.f ? bw - 0.4f : bw, h, v > totalMs * 1.6 + 2.0 ? 0xFFE05050 : 0xFFB8B8C4);
+        FillRect(gx + (float)i * bw, gy - h, bw > 1.f ? bw - 0.4f : bw, h, v > totalMs * 1.6 + 2.0 ? theme::kAccentHi : theme::kMuted);
     }
     FillRect(gx, gy - (float)(16.7 / scale) * gh, w - 16.f, 1.f, 0x90FFFFFF);
     OverlayEnd();
 }
 
 // Before a Reset: the copy is a default-pool texture, and the reused state block holds references to the game's
-// textures, so both must go (they are made again on the next frame).
+// textures, so both must go (they are made again on the next frame). The disk of the rounded shapes goes too, though a
+// managed texture would survive: it is made again at the next rounded shape.
 namespace {
 void ReleaseAoTargets();  // the horizon-based occlusion's two targets (below)
 }  // namespace
@@ -666,6 +945,7 @@ void ReleasePostResources() {
     ReleaseAoTargets();
     ReleaseSmaaTargets();
     ReleaseStateBlockCache();
+    ReleaseDisk();
 }
 
 namespace {

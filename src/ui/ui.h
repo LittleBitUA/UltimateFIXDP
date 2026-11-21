@@ -10,13 +10,58 @@ namespace ui {
 bool OverlayBegin(void* device);
 void OverlayEnd();
 
+// Font weights for DrawText: body text stays Regular; titles and section headings use Segoe UI Semibold, so they read as
+// headings by their weight and not only by their size and colour.
+constexpr int kRegular = 400;   // FW_NORMAL
+constexpr int kSemibold = 600;  // FW_SEMIBOLD
+
+// The nearest whole number (halves go up, negative values too). Without the C runtime there is no roundf; the overlay uses
+// it to put text and edges on whole back buffer pixels, and the menu to keep a dragged panel on whole layout units.
+inline float SnapWhole(float v) {
+    int i = (int)v;              // truncates towards zero
+    if ((float)i > v) --i;       // floor for negative values
+    return (float)(v - (float)i >= 0.5f ? i + 1 : i);
+}
+
 void FillRect(float x, float y, float w, float h, u32 argb);
+// A rectangle with rounded corners of radius r (layout units; at most half the shorter side, so r = h / 2 is a pill). The
+// straight edges lie on whole pixels like FillRect's, the corners are anti-aliased. Without the disk texture it is drawn
+// square by FillRect.
+void FillRound(float x, float y, float w, float h, float r, u32 argb);
+// The same with a border of `frameWidth` layout units (whole pixels, at least one) in `frame` and the inside in `fill`.
+void FillRoundFramed(float x, float y, float w, float h, float r, u32 fill, u32 frame, float frameWidth = 1.f);
+// The on/off switch of the menu and the mods page: a pill (red when on, grey when off) with a round white knob, its top-left
+// corner at x,y. The knob is centred in back buffer pixels, so it sits evenly in the track at every scale. `travel` is how
+// far the knob has come since the switch flipped (0 = still at the old side, 1 = at rest on its side); the track colour
+// follows it.
+constexpr float kSwitchW = 40, kSwitchH = 24;
+constexpr float kSwitchSeconds = 0.12f;  // how long the knob takes to slide across ([Menu] Animations)
+void Switch(float x, float y, bool on, float travel = 1.f);
+// The menu's fade-in: every primitive here multiplies its alpha by `alpha` (0..1) and is drawn `offsetY` layout units lower
+// (in whole pixels, so text stays crisp while it rises). Only the menu sets it, around its own Draw, and puts 1, 0 back right
+// after: the notice and the performance panels drawn later in the same frame must not inherit it.
+void SetOverlayFade(float alpha, float offsetY);
 // Draws text with its top-left corner at x,y. Returns the width in layout units. One string is at most 255 characters
 // (longer ones are not drawn): long texts are wrapped by the caller.
-float DrawText(const wchar_t* text, float x, float y, u32 argb, int pixelHeight);
-float TextWidth(const wchar_t* text, int pixelHeight);
+float DrawText(const wchar_t* text, float x, float y, u32 argb, int pixelHeight, int weight = kRegular);
+float TextWidth(const wchar_t* text, int pixelHeight, int weight = kRegular);
 // How many of the first `length` characters fit in `maxWidth` layout units (measured only, nothing is drawn or cached).
-int TextFit(const wchar_t* text, int length, float maxWidth, int pixelHeight);
+int TextFit(const wchar_t* text, int length, float maxWidth, int pixelHeight, int weight = kRegular);
+
+// Quiet motion of the menu ([Menu] Animations; the clock lives in menu.cpp and advances once per drawn menu frame).
+bool MotionOn();                                // the setting is on
+long long MotionStamp();                        // the QueryPerformanceCounter tick now, for when a switch flipped
+float MotionProgress(long long from, float seconds);  // eased 0..1 since `from` over `seconds`; 1 when motion is off
+// A selection highlight that glides to its row. `target` is the row's position relative to something that moves with the
+// panel (the top of the list), so a dragged panel never leaves the highlight behind. It jumps without gliding when it was
+// not drawn in the previous menu frame (a page shown again, the menu just opened), when `context` changed (another page, the
+// list scrolled) or when `index` moved by more than 6 rows. Returns where to draw it this frame.
+struct Glide {
+    float pos;
+    int index, context;
+    unsigned frame;  // the menu frame it was last drawn in
+};
+float GlideTo(Glide& glide, float target, int index, int context);
 
 // Final-image passes, run on the finished back buffer right before the menu is drawn.
 void SharpenFrame(void* device, int percent);   // unsharp mask, 0 = off

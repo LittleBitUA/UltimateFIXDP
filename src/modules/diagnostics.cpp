@@ -13,6 +13,7 @@
 #include "../base.h"
 #include "../sites.h"
 #include "../ui/ui.h"
+#include "../ui/theme.h"
 
 namespace ufx {
 
@@ -20,28 +21,44 @@ extern bool g_dpfixPresent;  // main.cpp: DPfix.ini lies next to the game
 
 namespace {
 
-// ---- The notice box: one message at a time, a title and up to three lines, gone after a few seconds ---------------
-constexpr int kNoticeLines = 3, kNoticeLineChars = 128;
+// ---- The notice box: a title and up to three lines, gone after a few seconds; up to three wait their turn ----------
+// With the menu closed it floats at the top of the screen. While the menu is open the menu draws it (DrawNoticeInBox,
+// DrawNoticeBelow) so it does not land on the panel's title: the answer to a button pressed in F10 appears in the
+// description box right under that button's row.
+constexpr int kNoticeLines = 3, kNoticeLineChars = 128, kNoticeSlots = 3;
 constexpr float kNoticeWidth = 760.f, kNoticeTop = 58.f;
+constexpr DWORD kNoticeInMs = 150;    // the fade-in ([Menu] Animations), sliding kNoticeSlide units down into place
+constexpr float kNoticeSlide = 6.f;
+constexpr DWORD kNoticeKeepMs = 1500;  // in the description box: shown this long, it gives way to another selected row
 struct NoticeText {
     wchar_t title[96];
     wchar_t text[320];
 };
-NoticeText g_notice[2];  // Ukrainian and English: the language of the menu can change while the box is up
-bool g_noticeActive = false;
-bool g_noticeDrawn = false;  // its time runs from the first frame it is drawn in (g_noticeStart)
-DWORD g_noticeStart = 0, g_noticeMs = 0;
+struct Notice {
+    NoticeText lang[2];  // Ukrainian and English: the language of the menu can change while the box is up
+    DWORD ms;
+    int kind;            // kNoticeInfo, kNoticeWarning, kNoticeError (base.h)
+};
+Notice g_notices[kNoticeSlots];  // [0] is the one shown (or about to be), the others wait in the order they came
+int g_noticeCount = 0;
+bool g_noticeDrawn = false;    // the time of [0] runs from the first frame it is drawn in (g_noticeStart)
+DWORD g_noticeStart = 0;
+bool g_noticeClaimed = false;  // the menu drew [0] in this frame: the floating box stays away
+bool g_noticeInBox = false;    // [0] is in the menu's description box: since g_noticeBoxStart, with that row selected
+DWORD g_noticeBoxStart = 0;
+int g_noticeBoxContext = 0;
 wchar_t g_noticeLine[kNoticeLines][kNoticeLineChars];
 int g_noticeLineCount = 0;
-int g_noticeLaidOut = -1;  // the language the lines above were broken for (-1 = not yet)
+int g_noticeLaidOut = -1;      // the language the lines above were broken for (-1 = not yet)
+float g_noticeLaidOutW = 0;    // and the width (the floating box, the description box and a narrow panel differ)
 
-// Breaks the text into lines no wider than kNoticeWidth, at spaces. What does not fit into kNoticeLines lines is left out.
-void LayOutNotice(const wchar_t* text) {
+// Breaks the text into lines no wider than maxW, at spaces. What does not fit into kNoticeLines lines is left out.
+void LayOutNotice(const wchar_t* text, float maxW) {
     g_noticeLineCount = 0;
     const wchar_t* p = text;
     while (*p && g_noticeLineCount < kNoticeLines) {
         const int rest = lstrlenW(p);
-        int n = ui::TextFit(p, rest < kNoticeLineChars ? rest : kNoticeLineChars - 1, kNoticeWidth, 14);
+        int n = ui::TextFit(p, rest < kNoticeLineChars ? rest : kNoticeLineChars - 1, maxW, 14);
         if (n < 1) n = 1;
         if (n < rest) {  // break at the last space that fits
             int b = n;
@@ -56,42 +73,125 @@ void LayOutNotice(const wchar_t* text) {
     }
 }
 
+// The shown notice in the current language, its lines broken for maxW.
+const NoticeText& NoticeLines(const Notice& n, float maxW) {
+    const int lang = g_cfg.language == 1 ? 1 : 0;
+    if (g_noticeLaidOut != lang || g_noticeLaidOutW != maxW) {
+        g_noticeLaidOut = lang;
+        g_noticeLaidOutW = maxW;
+        LayOutNotice(n.lang[lang].text, maxW);
+    }
+    return n.lang[lang];
+}
+
+// [0] is new (it came, was replaced or the one before it ended): its time, fade-in, lines and place start again.
+void NoticeRestart() {
+    g_noticeDrawn = false;
+    g_noticeLaidOut = -1;
+    g_noticeInBox = false;
+}
+
+// The shown notice ends; the next one waiting (if any) is shown next.
+void DropShownNotice() {
+    for (int i = 1; i < g_noticeCount; ++i) g_notices[i - 1] = g_notices[i];
+    if (g_noticeCount > 0) --g_noticeCount;
+    NoticeRestart();
+}
+
+// The notice to draw in this frame, or null. Its time starts at the first call that draws it; one whose time is up ends
+// here and the next follows in the same frame. *alpha: 0..255 with the fade-in (ease-out over kNoticeInMs, none when
+// [Menu] Animations is off) and the fade-out over the last second; *in: 0..1, how far the fade-in has come.
+const Notice* CurrentNotice(u32* alpha, float* in) {
+    const DWORD now = GetTickCount();
+    while (g_noticeCount > 0) {
+        if (!g_noticeDrawn) {
+            g_noticeDrawn = true;
+            g_noticeStart = now;
+        }
+        const Notice& n = g_notices[0];
+        const DWORD age = now - g_noticeStart;
+        if (age < n.ms) {
+            float t = 1.f;
+            if (ui::MotionOn() && age < kNoticeInMs) {
+                const float u = 1.f - (float)age / (float)kNoticeInMs;
+                t = 1.f - u * u * u;
+            }
+            const u32 out = n.ms - age < 1000 ? (n.ms - age) * 255 / 1000 : 255;  // fades out over the last second
+            *alpha = (u32)((float)out * t + 0.5f);
+            *in = t;
+            return &n;
+        }
+        DropShownNotice();
+    }
+    return nullptr;
+}
+
 u32 WithAlpha(u32 argb, u32 alpha) { return (argb & 0x00FFFFFF) | (((argb >> 24) * alpha / 255) << 24); }
 
-void DrawNotice(void* device) {
-    if (!g_noticeActive) return;
-    const DWORD now = GetTickCount();
-    if (!g_noticeDrawn) {
-        g_noticeDrawn = true;
-        g_noticeStart = now;
-    }
-    const DWORD age = now - g_noticeStart;
-    if (age >= g_noticeMs) {
-        g_noticeActive = false;
-        return;
-    }
-    if (!ui::OverlayBegin(device)) return;
-    const int lang = g_cfg.language == 1 ? 1 : 0;
-    const NoticeText& t = g_notice[lang];
-    if (g_noticeLaidOut != lang) {
-        g_noticeLaidOut = lang;
-        LayOutNotice(t.text);
-    }
-    float w = ui::TextWidth(t.title, 16);
+// The mark at the left says what kind of news it is: grey for information and a finished job ("Report written" is no
+// warning), amber for a warning, coral for a failure (theme.h keeps those two for exactly that).
+u32 NoticeMark(int kind) {
+    namespace theme = ui::theme;
+    return kind == kNoticeError ? theme::kError : kind == kNoticeWarning ? theme::kWarn : theme::kMuted;
+}
+
+// The floating box: centred on centreX, its top at `top` once it has slid into place, the text at most maxW wide.
+void DrawNoticeCard(const Notice& n, float centreX, float top, float maxW, u32 alpha, float in) {
+    const NoticeText& t = NoticeLines(n, maxW);
+    float w = ui::TextWidth(t.title, 16, ui::kSemibold);
     for (int i = 0; i < g_noticeLineCount; ++i) {
         const float lw = ui::TextWidth(g_noticeLine[i], 14);
         if (lw > w) w = lw;
     }
     w += 32.f;
-    const float x = (1280.f - w) / 2, h = 38.f + 18.f * (float)g_noticeLineCount;
-    const u32 alpha = g_noticeMs - age < 1000 ? (g_noticeMs - age) * 255 / 1000 : 255;  // fades out over the last second
-    ui::FillRect(x, kNoticeTop, w, h, WithAlpha(0xD0101014, alpha));
-    ui::FillRect(x, kNoticeTop, 3.f, h, WithAlpha(0xFFE5A83A, alpha));
-    ui::DrawText(t.title, x + 16.f, kNoticeTop + 8.f, WithAlpha(0xFFF2F2F5, alpha), 16);
+    const float x = ui::SnapWhole(centreX - w / 2), h = 38.f + 18.f * (float)g_noticeLineCount;
+    const float y = top - ui::SnapWhole(kNoticeSlide * (1.f - in));  // whole units: the box and its text move together
+    // The start card's look (theme.h): a raised box with a hairline border and rounded corners. Opaque: the inside is drawn
+    // over the border's shape, so a see-through one would not let the game show anyway, only the border's grey.
+    namespace theme = ui::theme;
+    ui::FillRoundFramed(x, y, w, h, 10, WithAlpha(theme::kRaised, alpha), WithAlpha(theme::kLine2, alpha));
+    ui::FillRound(x + 7.f, y + 10.f, 3.f, h - 20.f, 1.5f, WithAlpha(NoticeMark(n.kind), alpha));
+    ui::DrawText(t.title, x + 16.f, y + 8.f, WithAlpha(theme::kWhite, alpha), 16, ui::kSemibold);
     for (int i = 0; i < g_noticeLineCount; ++i)
-        ui::DrawText(g_noticeLine[i], x + 16.f, kNoticeTop + 31.f + 18.f * (float)i, WithAlpha(0xFFC4C4CE, alpha), 14);
+        ui::DrawText(g_noticeLine[i], x + 16.f, y + 31.f + 18.f * (float)i, WithAlpha(theme::kMuted, alpha), 14);
+}
+
+// Once per frame after the menu: the floating box at the top of the screen, unless the menu has drawn the notice.
+void DrawNotice(void* device) {
+    if (g_noticeClaimed) {
+        g_noticeClaimed = false;
+        return;
+    }
+    if (!g_noticeCount) return;
+    g_noticeInBox = false;  // the menu is closed: opened again, the box starts its 1.5 s afresh
+    u32 alpha;
+    float in;
+    const Notice* n = CurrentNotice(&alpha, &in);
+    if (!n || !ui::OverlayBegin(device)) return;
+    DrawNoticeCard(*n, 640.f, kNoticeTop, kNoticeWidth, alpha, in);
     ui::OverlayEnd();
 }
+
+// One family of notices: the same text before a colon (or the whole title without one), or one of them the first words of
+// the other. A notice of the same family as one shown or waiting takes its place, so a key pressed twice does not queue
+// two answers (Fly: on / Fly: off, the water test, Scan / Scan finished).
+int TitleFamilyLength(const wchar_t* t) {
+    int n = 0;
+    while (t[n] && t[n] != L':') ++n;
+    while (n > 0 && t[n - 1] == L' ') --n;
+    return n;
+}
+
+bool SameNoticeFamily(const wchar_t* a, const wchar_t* b) {
+    const int la = TitleFamilyLength(a), lb = TitleFamilyLength(b);
+    const int n = la < lb ? la : lb;
+    if (n == 0) return false;
+    for (int i = 0; i < n; ++i)
+        if (a[i] != b[i]) return false;
+    return la == lb || (la > lb ? a[n] : b[n]) == L' ';
+}
+
+const char* NoticeKindName(int kind) { return kind == kNoticeError ? "error" : kind == kNoticeWarning ? "warning" : "info"; }
 
 // ---- The session: how long it runs, the sound load requests in use ------------------------------------------------
 constexpr int kPoolWarnAt = 48;  // 32 streams hold at most 32 requests: more than that is not given back
@@ -131,7 +231,7 @@ void PollSession(DWORD now) {
         wchar_t uk[320], en[320];
         wsprintfW(uk, L"Ресурс %S не розпакувався після кількох спроб, тож гра вважатиме його відсутнім. Перевірте цілісність файлів гри у Steam. Подробиці в UltimateFix\\ufx.log.", failed);
         wsprintfW(en, L"The resource %S did not unpack after several attempts, so the game will treat it as missing. Verify the game files in Steam. Details are in UltimateFix\\ufx.log.", failed);
-        ShowNotice(L"Файл гри не читається", L"A game file cannot be read", uk, en, 20);
+        ShowNotice(L"Файл гри не читається", L"A game file cannot be read", uk, en, 20, kNoticeError);
     }
     const int inUse = SoundRequestsInUse();
     if (inUse > g_poolHighest) g_poolHighest = inUse;
@@ -145,7 +245,7 @@ void PollSession(DWORD now) {
         Log("session: %u h; sound load requests in use: %s, highest seen: %s", hours, now64, top);
     }
     static bool hinted = false;
-    if (hinted || g_cfg.sessionReminderHours <= 0 || g_noticeActive) return;
+    if (hinted || g_cfg.sessionReminderHours <= 0 || g_noticeCount) return;
     const bool poolLow = inUse >= kPoolWarnAt;
     const bool memLow = MemoryIsLow();
     if (hours < (u32)g_cfg.sessionReminderHours && !poolLow && !memLow) return;
@@ -169,7 +269,7 @@ void PollSession(DWORD now) {
         lstrcpyW(uk, L"Довгі сесії цієї гри бувають нестабільними. Збережіться, а коли буде зручно, перезапустіть гру. Нагадування вимикається в F10, розділ «Виправлення».");
         lstrcpyW(en, L"Long sessions of this game can become unstable. Save, and restart the game when convenient. The reminder is switched off in F10, section \"Fixes\".");
     }
-    ShowNotice(titleUk, titleEn, uk, en, 15);
+    ShowNotice(titleUk, titleEn, uk, en, 15, kNoticeWarning);
     char pool[64];
     PoolText(pool, inUse);
     Log("session: the one-time hint to save and restart is shown after %u h (%s; sound load requests in use: %s)", hours,
@@ -327,15 +427,78 @@ void ReportSettings(HANDLE f) {
 
 }  // namespace
 
-void ShowNotice(const wchar_t* titleUk, const wchar_t* titleEn, const wchar_t* textUk, const wchar_t* textEn, int seconds) {
-    lstrcpynW(g_notice[0].title, titleUk, 96);
-    lstrcpynW(g_notice[1].title, titleEn, 96);
-    lstrcpynW(g_notice[0].text, textUk, 320);
-    lstrcpynW(g_notice[1].text, textEn, 320);
-    g_noticeMs = (DWORD)seconds * 1000;
-    g_noticeDrawn = false;
-    g_noticeLaidOut = -1;
-    g_noticeActive = true;
+void ShowNotice(const wchar_t* titleUk, const wchar_t* titleEn, const wchar_t* textUk, const wchar_t* textEn, int seconds,
+                int kind) {
+    Notice n;
+    lstrcpynW(n.lang[0].title, titleUk, 96);
+    lstrcpynW(n.lang[1].title, titleEn, 96);
+    lstrcpynW(n.lang[0].text, textUk, 320);
+    lstrcpynW(n.lang[1].text, textEn, 320);
+    n.ms = seconds > 0 ? (DWORD)seconds * 1000 : 0;
+    n.kind = kind;
+    int slot = -1;
+    for (int i = 0; i < g_noticeCount && slot < 0; ++i)
+        if (SameNoticeFamily(g_notices[i].lang[1].title, n.lang[1].title)) slot = i;
+    const char* how;
+    if (slot == 0) {  // the shown one changes in place: no second fade-in, its full time from now
+        const bool drawn = g_noticeDrawn;
+        g_notices[0] = n;
+        NoticeRestart();
+        if (drawn) {
+            g_noticeDrawn = true;
+            g_noticeStart = GetTickCount() - kNoticeInMs;
+        }
+        how = "shown in place of the one before";
+    } else if (slot > 0) {
+        g_notices[slot] = n;
+        how = "waits in place of the one before";
+    } else {
+        if (g_noticeCount == kNoticeSlots) DropShownNotice();  // all three slots taken: the oldest gives way
+        g_notices[g_noticeCount++] = n;
+        how = g_noticeCount == 1 ? "shown" : "waits";
+    }
+    Log("notice: \"%S\" %s (%s, queue %d)", n.lang[1].title, how, NoticeKindName(kind), g_noticeCount - 1);
+}
+
+bool DrawNoticeInBox(float x, float y, float w, float h, int context) {
+    u32 alpha;
+    float in;
+    const Notice* n;
+    for (;;) {
+        n = CurrentNotice(&alpha, &in);
+        if (!n) return false;
+        const DWORD now = GetTickCount();
+        if (!g_noticeInBox) {
+            g_noticeInBox = true;
+            g_noticeBoxStart = now;
+            g_noticeBoxContext = context;
+            break;
+        }
+        // read for 1.5 s and another row selected: the player wants that row's description back
+        if (context == g_noticeBoxContext || now - g_noticeBoxStart < kNoticeKeepMs) break;
+        DropShownNotice();
+    }
+    g_noticeClaimed = true;
+    // Only a fade inside the box, no slide: the box itself stays where it is, and the text would cross its top edge.
+    namespace theme = ui::theme;
+    const float textW = w - 32.f;
+    const NoticeText& t = NoticeLines(*n, textW);
+    ui::FillRound(x + 7.f, y + 12.f, 3.f, h - 24.f, 1.5f, WithAlpha(NoticeMark(n->kind), alpha));
+    ui::DrawText(t.title, x + 16.f, y + 6.f, WithAlpha(theme::kWhite, alpha), 16, ui::kSemibold);
+    for (int i = 0; i < g_noticeLineCount; ++i)
+        ui::DrawText(g_noticeLine[i], x + 16.f, y + 29.f + 18.f * (float)i, WithAlpha(theme::kMuted, alpha), 14);
+    return true;
+}
+
+bool DrawNoticeBelow(float centreX, float top, float maxW) {
+    u32 alpha;
+    float in;
+    const Notice* n = CurrentNotice(&alpha, &in);
+    if (!n) return false;
+    g_noticeClaimed = true;
+    g_noticeInBox = false;
+    DrawNoticeCard(*n, centreX, top, maxW < kNoticeWidth ? maxW : kNoticeWidth, alpha, in);
+    return true;
 }
 
 void SessionFrame(void* device) {
@@ -378,7 +541,7 @@ void OpenLogFolder() {
     Log("diagnostics: the UltimateFix folder %s", ok ? "was opened in Explorer" : "could not be opened (Explorer did not start)");
     if (!ok)
         ShowNotice(L"Теку не вдалося відкрити", L"The folder could not be opened", L"Журнали лежать у теці UltimateFix поруч із DP.exe.",
-                   L"The logs are in the UltimateFix folder next to DP.exe.", 8);
+                   L"The logs are in the UltimateFix folder next to DP.exe.", 8, kNoticeError);
 }
 
 // One text file for a bug report: the version, the environment, which places of the exe are patched, the settings. It
@@ -391,7 +554,7 @@ void WriteDiagnosticReport() {
     if (f == INVALID_HANDLE_VALUE) {
         Log("diagnostics: the report file could not be created (error %u)", (u32)GetLastError());
         ShowNotice(L"Звіт не записано", L"The report was not written", L"Не вдалося створити файл у теці UltimateFix.",
-                   L"The file could not be created in the UltimateFix folder.", 8);
+                   L"The file could not be created in the UltimateFix folder.", 8, kNoticeError);
         return;
     }
     SYSTEMTIME t;

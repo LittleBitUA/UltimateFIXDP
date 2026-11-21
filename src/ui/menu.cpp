@@ -3,11 +3,13 @@
 // Layout (1280x720 coordinates): a sidebar with the sections on the left, the settings of the chosen section on the right
 // (grouped, with switches and sliders, scrollable), a description of the selected setting at the bottom.
 // Keys: F10 opens/closes, Up/Down selects, Left/Right changes (on a row of action buttons it only moves the highlight),
-// Enter/Space toggles or presses the highlighted button, Tab / PgUp / PgDn switches the section, Esc closes. The mouse
+// Enter/Space toggles or presses the highlighted button, Backspace puts the selected setting back to its default (a changed
+// one has a grey dot after its label), Tab / PgUp / PgDn switches the section, Esc closes. The mouse
 // works too: click a section, a switch, a slider, a button or the value; the wheel scrolls.
 // A change of a setting that has an ini key is written to UltimateFix.ini at once (a slider when the drag ends). Rows
 // without a key (most of the photo mode and the cheats) last for the session only.
 #include "ui.h"
+#include "theme.h"
 #include "../sites.h"
 #include "../story.h"
 #include <mmsystem.h>
@@ -25,6 +27,9 @@ struct Tr {
     const wchar_t* en;
 };
 const wchar_t* Tx(const Tr& t) { return (g_cfg.language == 1 && t.en) ? t.en : t.uk; }
+
+// "Not in the default ini": GetPrivateProfileIntW gives it back for a missing key (no <climits> here for INT_MIN).
+constexpr int kNoDefault = -999999;
 
 struct Item {
     Tr label;
@@ -44,6 +49,7 @@ struct Item {
     void (*format)(int value, wchar_t* out) = nullptr;  // text for the value
     bool resolution = false;                      // typed numbers below 1280 are heights (1080 -> 1920x1080)
     void (*running)(wchar_t* out) = nullptr;      // what actually runs now, when a setting waits for a restart (empty = same)
+    int def = kNoDefault;  // the value of the default ini, read once at the first opening (LoadDefaults); kNoDefault = none
 };
 
 const Tr kGlyphTr[4] = {{L"Вимк.", L"Off"}, {L"Авто", L"Auto"}, {L"Xbox", L"Xbox"}, {L"PlayStation", L"PlayStation"}};
@@ -193,6 +199,9 @@ Item g_pageDisplay[] = {
     {{L"Прозорість панелі меню, %", L"Menu panel opacity, %"}, &g_cfg.menuOpacity, kInt, 20, 100, 5, false, L"Menu", L"Opacity", nullptr, nullptr,
      {L"Чим менше, тим більше крізь меню видно гру. Текст лишається чітким. Змінюється одразу.", L"The lower, the more of the game shows through the menu. The text stays sharp. Changes at once."},
      {L"Вигляд меню", L"Look of the menu"}},
+    {{L"Анімація меню", L"Menu animation"}, &g_cfg.menuAnimations, kBool, 0, 1, 1, false, L"Menu", L"Animations", nullptr, nullptr,
+     {L"Панель з'являється плавно, виділення ковзає до вибраного рядка й розділу, повзунок перемикача пересувається. Вимкнено: усе змінюється миттєво. Закривається меню завжди одразу.",
+      L"The panel fades in, the selection glides to the chosen row and section, the knob of a switch slides across. Off: everything changes at once. The menu always closes at once."}, NOTR},
     {{L"Перевіряти оновлення", L"Check for updates"}, &g_cfg.checkUpdates, kBool, 0, 1, 1, true, L"Menu", L"CheckUpdates", nullptr, nullptr,
      {L"На старті один анонімний запит до GitHub: чи вийшла нова версія. Якщо так, плашка на старті й сторінка «Про мод» пропонують F9: мод сам завантажить її, замінить X3DAudio1_7.dll та іконки й перезапустить гру. Налаштування, моди й копії збережень лишаються.",
       L"One anonymous request to GitHub at the start: is a new version out. If so, the start card and the About page offer F9: the mod downloads it, replaces X3DAudio1_7.dll and the icons and restarts the game. Settings, mods and save backups stay."}, NOTR},
@@ -993,6 +1002,8 @@ constexpr float kRowH = 40, kHeadH = 34;
 float kNavH = 44;  // sidebar rows: 44, or less when a small panel would put the last one over the language buttons
 float kNavTop = 150;
 float kSliderX = 818, kLangY = 612;
+constexpr float kConfirmW = 520, kConfirmH = 170;  // the "restore defaults?" box
+float kConfirmX = 380, kConfirmY = 275;            // centred on the panel, wherever it was moved
 
 void UpdateLayout() {
     if (kPw < kPanelWMin) kPw = kPanelWMin;
@@ -1012,9 +1023,11 @@ void UpdateLayout() {
     kLangY = kPy + kPh - 56;
     kNavH = (kLangY - 10 - kNavTop) / (float)kPageCount;
     if (kNavH > 44) kNavH = 44;
+    kConfirmX = SnapWhole(kPx + (kPw - kConfirmW) / 2);  // the panel is at least 820 x 520, so the box is always inside it
+    kConfirmY = SnapWhole(kPy + (kPh - kConfirmH) / 2);
 }
-constexpr u32 kAccent = 0xFFD0343C, kPanelBg = 0xF4101014, kSideBg = 0xFF0B0B0F, kRowSel = 0xFF1D1D26, kLine = 0xFF2A2A34,
-              kText = 0xFFF2F2F5, kDim = 0xFF9696A4, kOn = 0xFF35C27A, kOff = 0xFF3C3C48, kAmber = 0xFFE5A83A;
+using namespace theme;  // the colours: theme.h, the website's tokens
+constexpr u32 kPanelBg = Alpha(kPanel, 0xF4);  // the panel's own alpha, which the Opacity setting then scales
 
 struct Row {
     int item;               // >= 0: index of the item; -1: a group heading
@@ -1100,6 +1113,72 @@ void RememberKeys() {
     }
 }
 
+// ---- Quiet motion ([Menu] Animations) -----------------------------------------------------------------------------
+// One clock for the whole menu: MotionFrame reads QueryPerformanceCounter once per drawn frame, so every animation runs in
+// seconds and looks the same at 30 fps pacing, at 60 fps or with the physics above 120. Nothing here changes the layout or
+// the hit tests: the fade moves and fades what is drawn (SetOverlayFade), the glides only say where a highlight is drawn.
+long long g_motionFreq = 0;   // ticks per second
+long long g_motionNow = 0;    // the tick of this drawn frame
+float g_motionDt = 0.f;       // seconds since the drawn frame before, at most 0.1
+unsigned g_motionFrame = 16;  // counts drawn frames; jumps by two at every opening, so nothing glides from where it was at the closing
+long long g_openedAt = 0;     // the tick the menu opened at: the fade-in runs from it (closing stays instant)
+float g_openAlpha = 1.f, g_openRise = 0.f;  // this frame's fade-in: the alpha and how far below its place the panel is
+Item* g_flipItem = nullptr;   // the switch flipped last and when: its knob slides over
+long long g_flipAt = 0;
+constexpr float kFadeSeconds = 0.14f, kRiseUnits = 6.f;  // the switch's time is ui.h's kSwitchSeconds
+constexpr float kGlideLag = 0.03f;  // the glide's time constant: within a few units of the row after about 90 ms
+
+void MotionFrame() {
+    LARGE_INTEGER q;
+    if (!g_motionFreq) {
+        QueryPerformanceFrequency(&q);
+        g_motionFreq = q.QuadPart > 0 ? q.QuadPart : 1;
+    }
+    QueryPerformanceCounter(&q);
+    const long long prev = g_motionNow;
+    g_motionNow = q.QuadPart;
+    const float dt = prev ? (float)((double)(g_motionNow - prev) / (double)g_motionFreq) : 0.f;
+    g_motionDt = dt < 0.f ? 0.f : dt > 0.1f ? 0.1f : dt;
+    ++g_motionFrame;
+}
+}  // namespace
+
+bool MotionOn() { return g_cfg.menuAnimations != 0; }
+
+long long MotionStamp() {
+    LARGE_INTEGER q;
+    QueryPerformanceCounter(&q);
+    return q.QuadPart;
+}
+
+float MotionProgress(long long from, float seconds) {
+    if (!MotionOn() || !g_motionFreq || seconds <= 0.f) return 1.f;
+    const float t = (float)((double)(g_motionNow - from) / (double)g_motionFreq) / seconds;
+    if (t <= 0.f) return 0.f;
+    if (t >= 1.f) return 1.f;
+    const float u = 1.f - t;
+    return 1.f - u * u * u;  // ease-out cubic: quick at first, settling softly
+}
+
+float GlideTo(Glide& g, float target, int index, int context) {
+    const int moved = index > g.index ? index - g.index : g.index - index;
+    if (!MotionOn() || g.frame + 1 != g_motionFrame || context != g.context || moved > 6) {
+        g.pos = target;
+    } else {
+        // dt / (dt + lag) of the way that is left: it closes in as an exponential would (no exp() without the C runtime),
+        // the same in seconds at any frame rate
+        g.pos += (target - g.pos) * (g_motionDt / (g_motionDt + kGlideLag));
+        const float left = target - g.pos;
+        if (left < 0.25f && left > -0.25f) g.pos = target;
+    }
+    g.index = index;
+    g.context = context;
+    g.frame = g_motionFrame;
+    return g.pos;
+}
+
+namespace {
+
 void Save(const Item& it) {
     if (!it.key) return;  // not stored (a test)
     wchar_t value[16];
@@ -1122,6 +1201,10 @@ void SetValue(Item& it, int v) {
     if (v > it.hi) v = it.hi;
     if (v == *it.value) return;
     *it.value = v;
+    if (it.kind == kBool) {  // its knob slides over (DrawItemRow)
+        g_flipItem = &it;
+        g_flipAt = MotionStamp();
+    }
     if (g_unsaved && g_unsaved != &it) FlushUnsaved();
     if (g_dragging && it.key) {
         g_unsaved = &it;  // every step of a drag rewrote the whole ini file on the game thread
@@ -1147,25 +1230,32 @@ int RestorePage(Page& pg, const wchar_t* tmp) {
     for (int i = 0; i < pg.count; ++i) {
         Item& it = pg.items[i];
         if (!it.key || !it.section || !it.value) continue;
-        int v = (int)GetPrivateProfileIntW(it.section, it.key, -999999, tmp);
-        if (v == -999999) continue;  // not in the default ini
+        int v = (int)GetPrivateProfileIntW(it.section, it.key, kNoDefault, tmp);
+        if (v == kNoDefault) continue;  // not in the default ini
         SetValue(it, v);
         ++restored;
     }
     return restored;
 }
 
-void PerformReset(int scope) {
-    wchar_t tmp[MAX_PATH];
+// Writes the default ini (as the DLL writes a new one, OutputWidth set to the monitor) to UltimateFix\defaults.tmp, so the
+// defaults can be read with the same GetPrivateProfileIntW as the real ini. The caller deletes the file. False: not written.
+bool WriteDefaultsFile(wchar_t* tmp) {
     lstrcpyW(tmp, g_paths.dataDir);
     lstrcatW(tmp, L"defaults.tmp");
     HANDLE h = CreateFileW(tmp, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return;
+    if (h == INVALID_HANDLE_VALUE) return false;
     unsigned long length = 0;
     const char* text = DefaultIniText(&length);
     DWORD written;
     WriteFile(h, text, length, &written, nullptr);
     CloseHandle(h);
+    return true;
+}
+
+void PerformReset(int scope) {
+    wchar_t tmp[MAX_PATH];
+    if (!WriteDefaultsFile(tmp)) return;
     int restored = 0;
     if (scope == 2) {
         for (Page& pg : g_pages) restored += RestorePage(pg, tmp);
@@ -1174,6 +1264,74 @@ void PerformReset(int scope) {
     }
     DeleteFileW(tmp);
     Log("menu: defaults restored (%s, %d settings)", scope == 2 ? "everything" : "this page", restored);
+}
+
+// ---- What was changed: every setting with an ini key learns its default once, from the same defaults.tmp as Restore
+// defaults (so the marks, the Backspace reset and the full reset always agree, migrated keys included). A row whose value
+// differs gets a grey dot after its label, a slider a tick at the default, a preset row a line under the default button,
+// and Backspace on the selected row puts that one setting back.
+bool Changed(const Item& it) { return it.def != kNoDefault && it.value && *it.value != it.def; }
+
+// How many settings of a page differ from their defaults (the number in the sidebar).
+int ChangedCount(const Page& pg) {
+    if (pg.about || !pg.items) return 0;
+    int n = 0;
+    for (int i = 0; i < pg.count; ++i)
+        if (Changed(pg.items[i])) ++n;
+    return n;
+}
+
+void LoadDefaults() {
+    static bool loaded = false;
+    if (loaded) return;
+    loaded = true;
+    wchar_t tmp[MAX_PATH];
+    if (!WriteDefaultsFile(tmp)) {
+        Log("menu: defaults.tmp could not be written: no default marks, Backspace does nothing");
+        return;
+    }
+    int known = 0, changed = 0;
+    for (Page& pg : g_pages) {
+        if (pg.about || !pg.items) continue;
+        for (int i = 0; i < pg.count; ++i) {
+            Item& it = pg.items[i];
+            if (!it.key || !it.section || !it.value) continue;  // not stored: a test, a button that does something once
+            int v = (int)GetPrivateProfileIntW(it.section, it.key, kNoDefault, tmp);
+            if (v == kNoDefault) continue;  // not in the default ini
+            // SetValue keeps a value inside the row's range, so a default outside it could never be reached by Backspace
+            if (v < it.lo) v = it.lo;
+            if (v > it.hi) v = it.hi;
+            it.def = v;
+            ++known;
+            if (Changed(it)) ++changed;
+        }
+    }
+    DeleteFileW(tmp);
+    Log("menu: defaults known for %d settings, %d changed (grey dot; Backspace restores one)", known, changed);
+}
+
+// The default of a row as the row shows its values: "Off", the name, the formatted value or the number.
+void FormatDefault(const Item& it, wchar_t* out) {
+    const bool en = g_cfg.language == 1;
+    const int v = it.def;
+    if (it.kind == kBool) {
+        lstrcpyW(out, v ? (en ? L"On" : L"Увімк.") : (en ? L"Off" : L"Вимк."));
+        return;
+    }
+    if (it.names && v >= it.lo && v <= it.hi) {
+        lstrcpyW(out, Tx(it.names[v - it.lo]));
+        return;
+    }
+    if (it.format) {
+        it.format(v, out);
+        return;
+    }
+    for (int i = 0; i < it.presetCount; ++i)
+        if (it.presets[i] == v) {
+            lstrcpyW(out, Tx(it.presetNames[i]));
+            return;
+        }
+    wsprintfW(out, L"%d", v);
 }
 
 // Stores the place and size of the panel (the ini and g_cfg).
@@ -1226,9 +1384,7 @@ bool MousePosition(float* x, float* y) {
 }
 
 // Geometry of the controls on a row.
-constexpr float kConfirmX = 380, kConfirmY = 250;  // the "restore defaults?" box (520 x 170)
-constexpr float kSwitchW = 46, kSwitchH = 22;
-constexpr float kChipH = 26, kChipGap = 6;
+constexpr float kChipH = 26, kChipGap = 6;  // the switch is ui.h's kSwitchW x kSwitchH
 
 float SliderW(const Item& it) { return it.format ? 150.f : 200.f; }
 
@@ -1425,6 +1581,9 @@ void HandleInput(bool foreground) {
             }
             if (Pressed(VK_SPACE)) Change(it, +1);
         }
+        // Backspace: this one setting back to its default, no question (one value, and it is shown in the description). The
+        // typing box returned above, so its Backspace never gets here; not during a slider drag, which would take it back.
+        if (Pressed(VK_BACK) && Changed(it) && !g_dragging) SetValue(it, it.def);
     }
     if (Pressed(VK_TAB)) SelectPage(g_page + ((GetAsyncKeyState(VK_SHIFT) & 0x8000) ? -1 : 1));
     if (Pressed(VK_NEXT)) SelectPage(g_page + 1);
@@ -1474,15 +1633,17 @@ void HandleInput(bool foreground) {
             grabY = my - kPy;
             return;
         }
+        // The dragged place and size are kept on whole layout units: a fractional one stayed for the whole session (only the
+        // ini got whole numbers) and put every edge of the menu between two units.
         if (movingPanel && held) {
-            kPx = mx - grabX;
-            kPy = my - grabY;
+            kPx = SnapWhole(mx - grabX);
+            kPy = SnapWhole(my - grabY);
             UpdateLayout();
             return;
         }
         if (resizingPanel && held) {
-            kPw = mx - kPx + 10;
-            kPh = my - kPy + 10;
+            kPw = SnapWhole(mx - kPx + 10);
+            kPh = SnapWhole(my - kPy + 10);
             // the size stops at the screen edge; otherwise UpdateLayout moved the panel instead and it crept away frame by frame
             if (kPx + kPw > 1280) kPw = 1280 - kPx;
             if (kPy + kPh > 720) kPh = 720 - kPy;
@@ -1637,19 +1798,15 @@ int DrawLines(const wchar_t* text, float x, float y, u32 color, int px, float li
 // The box a number is typed into, right-aligned on a row.
 void DrawEditBox(float y) {
     float w = 150;
-    FillRect(kCr - w, y + 6, w, 28, kAccent);
-    FillRect(kCr - w + 2, y + 8, w - 4, 24, kSideBg);
+    FillRoundFramed(kCr - w, y + 6, w, 28, 6, kBg, kAccent, 2);
     wchar_t text[16];
     wsprintfW(text, L"%s|", g_editText);
     float tw = TextWidth(text, 18);
     DrawText(text, kCr - 10 - tw, y + 10, kText, 18);
 }
 
+// `sel` only picks the colours: the highlight under the selected row is drawn by Draw, which lets it glide between rows.
 void DrawItemRow(Item& it, float y, bool sel) {
-    if (sel) {
-        FillRect(kCx - 12, y + 1, kCr - kCx + 24, kRowH - 2, kRowSel);
-        FillRect(kCx - 12, y + 1, 3, kRowH - 2, kAccent);
-    }
     // where the control of the row begins (the switch, the value, the first button or the slider): the label stops before it
     float limit = kSliderX - 22;
     if (it.kind == kBool) {
@@ -1668,14 +1825,18 @@ void DrawItemRow(Item& it, float y, bool sel) {
     }
     const wchar_t* tag = g_cfg.language == 1 ? L"restart" : L"перезапуск";
     float tagRoom = it.restart ? TextWidth(tag, 12) + 10 : 0.f;
-    float lw = DrawFitted(Tx(it.label), kCx, y + 10, sel ? kText : 0xFFD8D8E0, 18, limit - kCx - tagRoom);
+    // changed from the default: a small grey dot right after the label (grey, not red: it only says "yours", nothing is wrong)
+    const bool changed = Changed(it);
+    const float markRoom = changed ? 12.f : 0.f;
+    float lw = DrawFitted(Tx(it.label), kCx, y + 10, sel ? kWhite : kText, 18, limit - kCx - tagRoom - markRoom);
+    if (changed) FillRound(kCx + lw + 7, y + 22, 5, 5, 2.5f, kMuted);  // on the middle of the lower-case letters
     if (it.restart) {
-        float tw = DrawText(tag, kCx + lw + 10, y + 14, kAmber, 12);
+        float tw = DrawText(tag, kCx + lw + markRoom + 10, y + 14, kWarn, 12);
         if (it.running) {
             wchar_t t[64];
             it.running(t);
             if (t[0]) {  // what is really running now; a shorter wording when the long one would run into the control
-                float x0 = kCx + lw + 10 + tw + 10, room = limit - x0;
+                float x0 = kCx + lw + markRoom + 10 + tw + 10, room = limit - x0;
                 const wchar_t* shown = t;
                 wchar_t shorter[40];
                 if (TextWidth(shown, 12) > room) {
@@ -1688,18 +1849,15 @@ void DrawItemRow(Item& it, float y, bool sel) {
                     }
                     if (TextWidth(shown, 12) > room) shown = L"";  // not even that fits: leave it out
                 }
-                DrawText(shown, x0, y + 14, 0xFFFF7A5A, 12);
+                DrawText(shown, x0, y + 14, kWarn, 12);  // it waits for the restart, like the tag
             }
         }
     }
 
     float cy = y + kRowH / 2;
     if (it.kind == kBool) {
-        bool on = *it.value != 0;
-        float x = kCr - kSwitchW;
-        FillRect(x, cy - kSwitchH / 2, kSwitchW, kSwitchH, on ? kOn : kOff);
-        float kx = on ? x + kSwitchW - kSwitchH + 3 : x + 3;
-        FillRect(kx, cy - kSwitchH / 2 + 3, kSwitchH - 6, kSwitchH - 6, 0xFFFFFFFF);
+        const float travel = &it == g_flipItem ? MotionProgress(g_flipAt, kSwitchSeconds) : 1.f;
+        Switch(kCr - kSwitchW, cy - kSwitchH / 2, *it.value != 0, travel);
         return;
     }
     if (sel && g_editing) {
@@ -1710,7 +1868,7 @@ void DrawItemRow(Item& it, float y, bool sel) {
     if (it.names) {
         wsprintfW(value, L"‹  %s  ›", Tx(it.names[*it.value - it.lo]));
         float w = TextWidth(value, 18);
-        DrawText(value, kCr - w, y + 10, sel ? kAccent : kText, 18);
+        DrawText(value, kCr - w, y + 10, sel ? kAccentHi : kText, 18);
         return;
     }
     if (it.presets) {  // buttons: the presets and one for a value of one's own
@@ -1719,33 +1877,55 @@ void DrawItemRow(Item& it, float y, bool sel) {
         ChipLayout(it, cx, cw, &n);
         int cur = PresetIndex(it);
         bool actionRow = IsActionRow(it);
+        // the button of the default: a preset, or the last one while it shows a default that is none of the presets
+        int defChip = -1;
+        if (it.def != kNoDefault) {
+            for (int i = 0; i < it.presetCount; ++i)
+                if (it.presets[i] == it.def) defChip = i;
+            if (defChip < 0 && cur < 0 && *it.value == it.def) defChip = it.presetCount;
+        }
         for (int i = 0; i < n; ++i) {
-            bool active = i == cur || (i == it.presetCount && cur < 0);
-            bool action = it.presetCount == 1 && !it.key && i == 0;  // a button that does something (Apply, Take a picture ...)
-            if (sel && actionRow && g_chipRow == g_sel && i == g_chipSel) {  // the button Enter would press
-                FillRect(cx[i] - 2, cy - kChipH / 2 - 2, cw[i] + 4, kChipH + 4, kText);
-                active = true;
-            }
-            // the mouse is over this button (hover selects its row, so the hovered row is the selected one): a light frame,
-            // and a lighter fill when it is not the chosen one
+            const bool active = i == cur || (i == it.presetCount && cur < 0);  // the preset the value is
+            const bool action = it.presetCount == 1 && !it.key && i == 0;  // a button that does something (Apply, Take a picture ...)
+            const bool focus = sel && actionRow && g_chipRow == g_sel && i == g_chipSel;  // the button Enter would press
+            // the mouse is over this button (hover selects its row, so the hovered row is the selected one)
             const bool hover = sel && g_hoverRow == g_sel && i == g_hoverChip;
-            if (hover) FillRect(cx[i] - 2, cy - kChipH / 2 - 2, cw[i] + 4, kChipH + 4, kText);
-            FillRect(cx[i], cy - kChipH / 2, cw[i], kChipH, action ? kOn : (active ? kAccent : (hover ? 0xFF3A3A48 : 0xFF23232C)));
-            if (action || hover) active = true;  // white text
+            // Quiet raised buttons with a hairline border; red is the chosen preset, and an action button only while Enter
+            // would press it.
+            u32 fill = kRaised, frame = kLine2, text = action ? kText : kMuted;
+            if (active) {
+                fill = frame = kAccent;
+                text = kWhite;
+            }
+            if (hover) {  // a lighter fill and frame; the chosen one stays red
+                fill = active ? kAccentHi : kHover;
+                frame = active ? kAccentHi : kFaint;
+                text = kWhite;
+            }
+            if (focus) {
+                fill = frame = kAccentHi;
+                text = kWhite;
+            }
+            FillRoundFramed(cx[i], cy - kChipH / 2, cw[i], kChipH, 6, fill, frame);
             wchar_t label[32];
             if (i < it.presetCount) lstrcpyW(label, Tx(it.presetNames[i]));
             else it.format(*it.value, label);
             float tw = TextWidth(label, 15);
-            DrawText(label, cx[i] + (cw[i] - tw) / 2, cy - 9, active ? 0xFFFFFFFF : kDim, 15);
+            DrawText(label, cx[i] + (cw[i] - tw) / 2, cy - 9, text, 15);
+            if (i == defChip) FillRect(cx[i] + 8, cy + kChipH / 2 + 3, cw[i] - 16, 1, kFaint);  // a hairline under the default
         }
         return;
     }
     // slider + the value (a click on it types a number)
     float sw = SliderW(it);
     float t = (float)(*it.value - it.lo) / (float)(it.hi - it.lo);
-    FillRect(kSliderX, cy - 3, sw, 6, kOff);
-    FillRect(kSliderX, cy - 3, sw * t, 6, sel ? kAccent : 0xFF8A2A30);
-    FillRect(kSliderX + sw * t - 5, cy - 9, 10, 18, 0xFFFFFFFF);
+    FillRound(kSliderX, cy - 3, sw, 6, 3, kLine2);
+    FillRound(kSliderX, cy - 3, sw * t, 6, 3, sel ? kAccent : kFaint);  // red only on the selected row
+    if (it.def != kNoDefault && it.hi > it.lo) {  // a thin tick at the default, under the knob (hidden by it while at the default)
+        const float td = (float)(it.def - it.lo) / (float)(it.hi - it.lo);
+        FillRect(kSliderX + sw * td - 0.5f, cy - 6, 1, 12, kMuted);  // FillRect puts a hairline on a whole pixel
+    }
+    FillRound(kSliderX + sw * t - 8, cy - 8, 16, 16, 8, kWhite);
     if (it.format) it.format(*it.value, value);
     else wsprintfW(value, L"%d", *it.value);
     float w = TextWidth(value, 18);
@@ -1765,9 +1945,10 @@ void DrawLanguageChips() {
     for (int i = 0; i < 2; ++i) {
         float x = kPx + 24 + i * 92;
         bool on = g_cfg.language == i;
-        FillRect(x, kLangY, 84, 30, on ? kAccent : 0xFF23232C);
-        float tw = TextWidth(names[i], 15);
-        DrawText(names[i], x + (84 - tw) / 2, kLangY + 6, on ? 0xFFFFFFFF : kDim, 15);
+        FillRoundFramed(x, kLangY, 84, 30, 6, on ? kHover : kRaised, on ? kLine2 : kLine);  // grey, as on the site
+        const int weight = on ? kSemibold : kRegular;
+        float tw = TextWidth(names[i], 15, weight);
+        DrawText(names[i], x + (84 - tw) / 2, kLangY + 6, on ? kWhite : kMuted, 15, weight);
     }
 }
 
@@ -1778,12 +1959,12 @@ void DrawUpdateLine(float x, float y, float width, bool en) {
     const int st = UpdateState();
     if (st == 0) return;
     wchar_t t[200];
-    u32 c = 0xFFF2F2F5;
+    u32 c = kText;
     if (st == 1) wsprintfW(t, en ? L"Version %S is out: F9 updates (the game restarts, save first)" : L"Вийшла версія %S: F9 оновлює (гра перезапуститься, спершу збережіться)", UpdateVersion());
     else if (st == 2) wsprintfW(t, en ? L"Downloading version %S..." : L"Завантажується версія %S...", UpdateVersion());
     else if (st == 3) wsprintfW(t, en ? L"Version %S is installed, restarting" : L"Версію %S встановлено, перезапуск", UpdateVersion());
-    else { wsprintfW(t, en ? L"The update failed: F9 tries again" : L"Оновлення не вдалося: F9 пробує ще раз"); c = 0xFFFF8A80; }
-    FillRect(x, y + 3, 4, 14, 0xFFD0343C);
+    else { wsprintfW(t, en ? L"The update failed: F9 tries again" : L"Оновлення не вдалося: F9 пробує ще раз"); c = kError; }
+    FillRound(x, y + 3, 4, 14, 2, kAccent);
     DrawFitted(t, x + 12, y, c, 15, width - 12);
 }
 
@@ -1798,21 +1979,21 @@ void DrawAbout() {
     if (s > 1.f) s = 1.f;
     const float line = 24 * s < 18 ? 18 : 24 * s;
     float y = top;
-    DrawText(L"UltimateFIXDP", kCx, y, kText, 30);
+    DrawText(L"UltimateFIXDP", kCx, y, kText, 30, kSemibold);
     wchar_t ver[48];
     wsprintfW(ver, en ? L"version %S" : L"версія %S", kVersion);
-    const float vw = DrawText(ver, kCx, y + 40 * s, kDim, 15);
+    const float vw = DrawText(ver, kCx, y + 40 * s, kFaint, 15);
     DrawUpdateLine(kCx + vw + 24, y + 40 * s, width - vw - 24, en);
     y += 84 * s;
-    DrawText(en ? L"Author" : L"Автор", kCx, y, kAccent, 13);
+    DrawText(en ? L"Author" : L"Автор", kCx, y, kAccentHi, 13, kSemibold);
     DrawFitted(en ? L"Dmytro Bydlov, the \"Little Bit\" team" : L"Дмитро Бидлов, команда «Little Bit»", kCx, y + 20, kText, 20, width);
     y += 64 * s;
-    DrawText(en ? L"Licence" : L"Ліцензія", kCx, y, kAccent, 13);
+    DrawText(en ? L"Licence" : L"Ліцензія", kCx, y, kAccentHi, 13, kSemibold);
     DrawFitted(en ? L"MIT: use and change it freely. All code is our own; other projects gave ideas, facts and addresses."
                   : L"MIT: користуйтесь і змінюйте вільно. Увесь код наш власний; інші проєкти дали ідеї, факти й адреси.",
                kCx, y + 20, kText, 15, width);
     y += 62 * s;
-    DrawText(en ? L"Thanks" : L"Подяки", kCx, y, kAccent, 13);
+    DrawText(en ? L"Thanks" : L"Подяки", kCx, y, kAccentHi, 13, kSemibold);
     const wchar_t* credits[5] = {
         en ? L"ZachFix (h714je): research of the port and many ideas" : L"ZachFix (h714je): дослідження порту й багато ідей",
         en ? L"DPStabilityFix (Cesario67): saves, timing, DualSense layout" : L"DPStabilityFix (Cesario67): збереження, час, розкладка DualSense",
@@ -1820,11 +2001,11 @@ void DrawAbout() {
         en ? L"DPfix (Durante): resolution, shadows, texture replacement" : L"DPfix (Durante): роздільність, тіні, підміна текстур",
         en ? L"Kenney Input Prompts (CC0): button icons" : L"Kenney Input Prompts (CC0): іконки кнопок",
     };
-    for (int i = 0; i < 5; ++i) DrawFitted(credits[i], kCx, y + 20 + (float)i * line, 0xFFC4C4CE, 15, width);
+    for (int i = 0; i < 5; ++i) DrawFitted(credits[i], kCx, y + 20 + (float)i * line, kMuted, 15, width);
     y += 20 + 5 * line + 10 * s;
-    DrawText(en ? L"Testers" : L"Тестувальники", kCx, y, kAccent, 13);
-    DrawFitted(L"Gold flin, Tree Fan, EliParker", kCx, y + 20, 0xFFC4C4CE, 15, width);
-    DrawText(en ? L"F10 or Esc close" : L"F10 або Esc закрити", kCx, kPy + kPh - 30, kDim, 13);
+    DrawText(en ? L"Testers" : L"Тестувальники", kCx, y, kAccentHi, 13, kSemibold);
+    DrawFitted(L"Gold flin, Tree Fan, EliParker", kCx, y + 20, kMuted, 15, width);
+    DrawText(en ? L"F10 or Esc close" : L"F10 або Esc закрити", kCx, kPy + kPh - 30, kFaint, 13);
 }
 
 // True when `size` bytes at `p` can be read: committed pages that allow reading, over the whole range. The Story page reads
@@ -1919,7 +2100,7 @@ void DrawStory() {
     float y = kListTop - 4;
     DrawText(en ? L"Read-only: the mod changes nothing of the game here.     F10 or Esc close"
                 : L"Лише перегляд: мод тут нічого не змінює в грі.     F10 або Esc закрити",
-             kCx, kPy + kPh - 36, kDim, 13);
+             kCx, kPy + kPh - 36, kFaint, 13);
     StoryState st = {};
     const int result = ReadStory(&st);
     if (result) {
@@ -1932,17 +2113,17 @@ void DrawStory() {
     }
     wchar_t line[400];
 
-    DrawText(en ? L"Progress" : L"Прогрес", kCx, y, kAccent, 13);
+    DrawText(en ? L"Progress" : L"Прогрес", kCx, y, kAccentHi, 13, kSemibold);
     if (st.episode > 0) wsprintfW(line, en ? L"Episode %d  ·  chapter %d  ·  step %d" : L"Епізод %d  ·  розділ %d  ·  крок %d", st.episode, st.chapter, st.step);
     else wsprintfW(line, en ? L"Before the first episode (chapter %d, step %d)" : L"Ще до першого епізоду (розділ %d, крок %d)", st.chapter, st.step);
     DrawText(line, kCx, y + 20, kText, 20);
     DrawText(st.finished ? (en ? L"The game has been finished." : L"Гру вже пройдено.") : (en ? L"The game has not been finished yet." : L"Гру ще не пройдено."),
-             kCx, y + 48, st.finished ? kOn : kDim, 15);
+             kCx, y + 48, st.finished ? kText : kFaint, 15);
     y += 80;
 
-    DrawText(en ? L"Side quests" : L"Побічні завдання", kCx, y, kAccent, 13);
+    DrawText(en ? L"Side quests" : L"Побічні завдання", kCx, y, kAccentHi, 13, kSemibold);
     if (!st.sideKnown) {
-        DrawText(en ? L"No data: the game's flag table has no such group." : L"Немає даних: у таблиці прапорів гри немає такої групи.", kCx, y + 20, kDim, 15);
+        DrawText(en ? L"No data: the game's flag table has no such group." : L"Немає даних: у таблиці прапорів гри немає такої групи.", kCx, y + 20, kFaint, 15);
         y += 52;
     } else {
         wsprintfW(line, en ? L"Taken %d of %d, done %d" : L"Узято %d з %d, виконано %d", st.sideTaken, kStorySideQuests, st.sideDone);
@@ -1951,12 +2132,12 @@ void DrawStory() {
         if (st.sideOpenCount) {
             int n = wsprintfW(line, en ? L"Taken and not done yet (the game's own numbers, counted from 0): " : L"Узяті й ще не виконані (номери, як їх рахує гра, від 0): ");
             for (int i = 0; i < st.sideOpenCount; ++i) n += wsprintfW(line + n, i ? L", %d" : L"%d", st.sideOpen[i]);
-            y += 19.f * (float)DrawLines(line, kCx, y, 0xFFC4C4CE, 15, 19, w, 2, true);
+            y += 19.f * (float)DrawLines(line, kCx, y, kMuted, 15, 19, w, 2, true);
         }
         y += 12;
     }
 
-    DrawText(en ? L"Current destination" : L"Поточна ціль", kCx, y, kAccent, 13);
+    DrawText(en ? L"Current destination" : L"Поточна ціль", kCx, y, kAccentHi, 13, kSemibold);
     if (!st.destKnown) {
         lstrcpyW(line, en ? L"No data: the game's flag table has no such group." : L"Немає даних: у таблиці прапорів гри немає такої групи.");
     } else if (st.destIndex < 0) {
@@ -1977,10 +2158,10 @@ void DrawStory() {
                                   : L"Точок цілі на мапі гри: %d, до першої %d ярдів. Мітку на неї ставить кнопка «Мітка на поточну ціль гри» в розділі «Гра і світ» (типово ще й Ctrl+F7).", points, yards);
     else lstrcpyW(line, en ? L"The game's map has no objective point right now." : L"На мапі гри зараз немає точок цілі.");
     y += 46;
-    if (points >= 0) y += 19.f * (float)DrawLines(line, kCx, y, 0xFFC4C4CE, 15, 19, w, 3, true);  // not with the waypoint switched off
+    if (points >= 0) y += 19.f * (float)DrawLines(line, kCx, y, kMuted, 15, 19, w, 3, true);  // not with the waypoint switched off
     y += 12;
 
-    DrawText(en ? L"Story flags" : L"Сюжетні прапори", kCx, y, kAccent, 13);
+    DrawText(en ? L"Story flags" : L"Сюжетні прапори", kCx, y, kAccentHi, 13, kSemibold);
     wsprintfW(line, en ? L"Raised %d of %d" : L"Піднято %d з %d", st.flagsRaised, st.flagsTotal);
     DrawText(line, kCx, y + 20, kText, 17);
 }
@@ -1993,31 +2174,43 @@ u32 Fade(u32 c) {
 
 void Draw() {
     if (g_rowCount == 0) BuildRows();  // never an empty page
+    SetOverlayFade(g_openAlpha, 0.f);  // the dimming fades in with the panel but does not rise: it covers the whole picture
     FillRect(0, 0, 1280, 720, Fade(0x50000000));  // the same light dimming on every page, so the picture does not change when you switch pages
+    SetOverlayFade(g_openAlpha, g_openRise);
     FillRect(kPx, kPy, kPw, kPh, Fade(kPanelBg));
     FillRect(kPx, kPy, kPw, 3, kAccent);
-    FillRect(kPx + kPw - 15, kPy + kPh - 5, 11, 2, kDim);  // the grip in the corner: drag to resize
-    FillRect(kPx + kPw - 5, kPy + kPh - 15, 2, 11, kDim);
-    FillRect(kPx, kPy, kSideW, kPh, Fade(kSideBg));
+    FillRect(kPx + kPw - 15, kPy + kPh - 5, 11, 2, kFaint);  // the grip in the corner: drag to resize
+    FillRect(kPx + kPw - 5, kPy + kPh - 15, 2, 11, kFaint);
+    FillRect(kPx, kPy, kSideW, kPh, Fade(kBg));
 
-    DrawText(L"UltimateFIXDP", kPx + 24, kPy + 22, kText, 22);
+    DrawText(L"UltimateFIXDP", kPx + 24, kPy + 22, kText, 22, kSemibold);
     wchar_t ver[32];
     wsprintfW(ver, g_cfg.language == 1 ? L"version %S" : L"версія %S", kVersion);
-    DrawText(ver, kPx + 24, kPy + 52, kDim, 13);
+    DrawText(ver, kPx + 24, kPy + 52, kFaint, 13);
     FillRect(kPx + 20, kPy + 84, kSideW - 40, 1, kLine);
+    // the section highlight, under the names: it glides from the section before (kept relative to the top of the sidebar)
+    static Glide navGlide;
+    const float navY = kNavTop + GlideTo(navGlide, (float)g_page * kNavH, g_page, 0);
+    FillRect(kPx, navY, kSideW, kNavH, kSelected);
+    FillRect(kPx, navY, 4, kNavH, kAccent);
     for (int p = 0; p < kPageCount; ++p) {
         float y = kNavTop + p * kNavH;
         bool cur = p == g_page;
-        if (cur) {
-            FillRect(kPx, y, kSideW, kNavH, kRowSel);
-            FillRect(kPx, y, 4, kNavH, kAccent);
+        const float nameW = DrawText(Tx(g_pages[p].title), kPx + 26, y + 12, cur ? kWhite : kMuted, 17);
+        // how many settings of the section differ from the default, faint at the right; a dot when the number would touch the name
+        const int changed = ChangedCount(g_pages[p]);
+        if (changed) {
+            wchar_t num[8];
+            wsprintfW(num, L"%d", changed);
+            const float right = kPx + kSideW - 16, nw = TextWidth(num, 12);
+            if (kPx + 26 + nameW + 8 <= right - nw) DrawText(num, right - nw, y + 17, kFaint, 12);  // on the name's baseline
+            else if (kPx + 26 + nameW + 6 <= right - 5) FillRound(right - 5, y + 23, 5, 5, 2.5f, kFaint);
         }
-        DrawText(Tx(g_pages[p].title), kPx + 26, y + 12, cur ? kText : kDim, 17);
     }
 
     Page& pg = g_pages[g_page];
-    DrawText(Tx(pg.title), kCx, kPy + 24, kText, 26);
-    DrawText(Tx(pg.subtitle), kCx, kPy + 62, kDim, 15);
+    DrawText(Tx(pg.title), kCx, kPy + 24, kText, 26, kSemibold);
+    DrawText(Tx(pg.subtitle), kCx, kPy + 62, kMuted, 15);
     FillRect(kCx, kPy + 100, kCr - kCx, 1, kLine);
 
     DrawLanguageChips();
@@ -2026,16 +2219,34 @@ void Draw() {
         else if (pg.residents) ResidentsPage(kCx, kListTop, kCr, kPy + kPh - 44);
         else if (pg.mods) ModsPage(kCx, kListTop, kCr, kPy + kPh - 44);
         else DrawAbout();
+        // These pages have no description box: a notice floats over the top of the content, under the page's title (the
+        // floating box of the closed menu would land right on it). It is drawn last, over the page.
+        DrawNoticeBelow((kCx + kCr) / 2, kPy + 108, kCr - kCx - 32);
         return;
     }
+    // The row highlight first, under the rows: it glides from the row before (relative to the top of the list) and jumps
+    // on another page, when the list scrolled or across more than 6 rows. Not drawn while the selected row is out of sight.
+    static Glide rowGlide;
     float y = kListTop;
+    for (int r = g_scroll; r < g_rowCount; ++r) {
+        float h = RowHeight(g_rows[r]);
+        if (y + h > kListBottom) break;
+        if (g_rows[r].item >= 0 && g_rows[r].item == g_sel) {
+            const float hy = kListTop + GlideTo(rowGlide, y - kListTop, r, g_page * 100000 + g_scroll);
+            FillRect(kCx - 12, hy + 1, kCr - kCx + 24, kRowH - 2, kSelected);
+            FillRect(kCx - 12, hy + 1, 3, kRowH - 2, kAccent);
+            break;
+        }
+        y += h;
+    }
+    y = kListTop;
     int shown = 0;
     for (int r = g_scroll; r < g_rowCount; ++r) {
         float h = RowHeight(g_rows[r]);
         if (y + h > kListBottom) break;
         if (g_rows[r].item < 0) {
-            DrawText(Tx(g_rows[r].heading), kCx, y + 11, kAccent, 13);
-            float w = TextWidth(Tx(g_rows[r].heading), 13);
+            DrawText(Tx(g_rows[r].heading), kCx, y + 11, kAccentHi, 13, kSemibold);
+            float w = TextWidth(Tx(g_rows[r].heading), 13, kSemibold);  // the same weight, or the hairline runs into the text
             FillRect(kCx + w + 12, y + 19, kCr - kCx - w - 12, 1, kLine);
         } else {
             DrawItemRow(pg.items[g_rows[r].item], y, g_rows[r].item == g_sel);
@@ -2045,19 +2256,23 @@ void Draw() {
     }
     if (Scrollable()) {
         float th = kListBottom - kListTop;
-        FillRect(kCr + 14, kListTop, 4, th, kLine);
+        FillRound(kCr + 14, kListTop, 4, th, 2, kLine);
         float frac = (float)shown / (float)g_rowCount;
         int ms = MaxScroll();
         float pos = ms > 0 ? (float)g_scroll / (float)ms : 0.f;
-        FillRect(kCr + 12, kListTop + (th - th * frac) * pos, 8, th * frac, g_dragScroll ? kAccent : kDim);
+        FillRound(kCr + 12, kListTop + (th - th * frac) * pos, 8, th * frac, 4, g_dragScroll ? kAccent : kFaint);
     }
 
     // the description box: word-wrapped to its width, in a smaller font when the text needs more lines than fit
     const float hintTop = kListBottom + 24, hintBottom = kListBottom + 116, hintW = kCr - kCx - 8;
-    FillRect(kCx - 12, kListBottom + 18, kCr - kCx + 24, hintBottom - kListBottom - 16, Fade(kSideBg));
+    FillRound(kCx - 12, kListBottom + 18, kCr - kCx + 24, hintBottom - kListBottom - 16, 10, Fade(kRaised));  // as the site's hint
     Item& cur = pg.items[g_sel];
     const bool en = g_cfg.language == 1;
-    if (g_editing) {
+    // A notice (the answer to a button of this page, a failure, a warning) takes the box for its few seconds, so it appears
+    // right under the row that caused it and never over the page's title. Selecting another row after 1.5 s ends it early.
+    if (DrawNoticeInBox(kCx - 12, kListBottom + 18, kCr - kCx + 24, hintBottom - kListBottom - 16, g_page * 100000 + g_sel)) {
+        // the selected row's description comes back when the notice is over
+    } else if (g_editing) {
         wchar_t line[256];
         wsprintfW(line, en ? L"Type a value for \"%s\" (from %d to %d) and press Enter. Esc cancels." : L"Введіть значення для «%s» (від %d до %d) і натисніть Enter. Esc скасовує.",
                   Tx(cur.label), cur.lo, cur.hi);
@@ -2065,43 +2280,52 @@ void Draw() {
         if (cur.resolution)
             DrawLines(en ? L"A width (1920, 2560, 3840) or a height (1080, 1440, 2160): a number below 1280 is taken as a height."
                          : L"Ширина (1920, 2560, 3840) або висота (1080, 1440, 2160): число менше 1280 вважається висотою.",
-                      kCx + 4, hintTop + 19.f * (float)used, kDim, 15, 19, hintW, 4 - used, true);
+                      kCx + 4, hintTop + 19.f * (float)used, kFaint, 15, 19, hintW, 4 - used, true);
     } else {
         const wchar_t* hint = Tx(cur.hint);
         const wchar_t* note = en ? L"Takes effect after the game is restarted." : L"Набуде чинності після перезапуску гри.";
+        // a changed row ends with its default and the key that brings it back: one more line kept free under the text
+        const bool changed = Changed(cur);
+        const int reserved = (cur.restart ? 1 : 0) + (changed ? 1 : 0);
         int px = 15;
         float lh = 18;
-        int room = (int)((hintBottom - hintTop) / lh) - (cur.restart ? 1 : 0);
+        int room = (int)((hintBottom - hintTop) / lh) - reserved;
         if (hint && DrawLines(hint, 0, 0, 0, px, lh, hintW, 99, false) > room) {
             px = 13;
             lh = 15;
-            room = (int)((hintBottom - hintTop) / lh) - (cur.restart ? 1 : 0);
+            room = (int)((hintBottom - hintTop) / lh) - reserved;
         }
-        int used = hint ? DrawLines(hint, kCx + 4, hintTop, 0xFFC4C4CE, px, lh, hintW, room, true) : 0;
-        if (cur.restart) DrawFitted(note, kCx + 4, hintTop + lh * (float)used + 2, kAmber, 13, hintW);
+        int used = hint ? DrawLines(hint, kCx + 4, hintTop, kMuted, px, lh, hintW, room, true) : 0;
+        if (cur.restart) DrawFitted(note, kCx + 4, hintTop + lh * (float)used++ + 2, kWarn, 13, hintW);
+        if (changed) {
+            wchar_t value[64], line[128];
+            FormatDefault(cur, value);
+            wsprintfW(line, en ? L"Default: %s  ·  Backspace restores" : L"Типово: %s  ·  Backspace повертає", value);
+            DrawFitted(line, kCx + 4, hintTop + lh * (float)used + 2, kFaint, 13, hintW);
+        }
     }
 
     if (g_confirm) {
         FillRect(0, 0, 1280, 720, 0x90000000);
-        FillRect(kConfirmX, kConfirmY, 520, 170, kAccent);
-        FillRect(kConfirmX + 2, kConfirmY + 2, 516, 166, kPanelBg);
+        FillRoundFramed(kConfirmX, kConfirmY, kConfirmW, kConfirmH, 12, kRaised, kLine2);  // calm: red is only on the yes button
         DrawText(g_confirm == 2 ? (en ? L"Restore the defaults of ALL settings?" : L"Відновити типові значення ВСІХ налаштувань?")
                                 : (en ? L"Restore the defaults of this page?" : L"Відновити типові значення цієї сторінки?"),
                  kConfirmX + 24, kConfirmY + 24, kText, 20);
         DrawText(en ? L"Your current values will be replaced. This cannot be undone." : L"Ваші поточні значення буде замінено. Скасувати це не вийде.",
-                 kConfirmX + 24, kConfirmY + 60, 0xFFC4C4CE, 15);
-        DrawText(en ? L"Enter or Y: yes      Esc or N: no" : L"Enter або Y: так      Esc або N: ні", kConfirmX + 24, kConfirmY + 88, kDim, 14);
-        FillRect(kConfirmX + 40, kConfirmY + 120, 200, 34, kAccent);
-        DrawText(en ? L"Yes, restore" : L"Так, відновити", kConfirmX + 40 + 100 - TextWidth(en ? L"Yes, restore" : L"Так, відновити", 16) / 2, kConfirmY + 127, kText, 16);
-        FillRect(kConfirmX + 280, kConfirmY + 120, 200, 34, kRowSel);
+                 kConfirmX + 24, kConfirmY + 60, kMuted, 15);
+        DrawText(en ? L"Enter or Y: yes      Esc or N: no" : L"Enter або Y: так      Esc або N: ні", kConfirmX + 24, kConfirmY + 88, kFaint, 14);
+        FillRound(kConfirmX + 40, kConfirmY + 120, 200, 34, 8, kAccent);
+        DrawText(en ? L"Yes, restore" : L"Так, відновити", kConfirmX + 40 + 100 - TextWidth(en ? L"Yes, restore" : L"Так, відновити", 16) / 2, kConfirmY + 127, kWhite, 16);
+        FillRoundFramed(kConfirmX + 280, kConfirmY + 120, 200, 34, 8, kSelected, kLine2);
         DrawText(en ? L"No, keep" : L"Ні, лишити", kConfirmX + 280 + 100 - TextWidth(en ? L"No, keep" : L"Ні, лишити", 16) / 2, kConfirmY + 127, kText, 16);
         return;
     }
     DrawFitted(en ? L"↑ ↓ select     ← → change / pick a button     Enter type a number / press     Tab section     wheel / click     F10 or Esc close"
                   : L"↑ ↓ вибір     ← → змінити / вибрати кнопку     Enter ввести число / натиснути     Tab розділ     колесо / клік     F10 або Esc закрити",
-               kCx, kPy + kPh - 36, kDim, 13, kCr + 24 - kCx);
-    DrawFitted(en ? L"drag the header: move     drag the corner: resize     double-click the corner: reset" : L"заголовок: перенести     куточок: розмір     подвійний клік по куточку: скинути",
-               kCx, kPy + kPh - 20, kDim, 12, kCr + 24 - kCx);
+               kCx, kPy + kPh - 36, kFaint, 13, kCr + 24 - kCx);
+    DrawFitted(en ? L"Backspace default     drag the header: move     drag the corner: resize     double-click the corner: reset"
+                  : L"Backspace типове     заголовок: перенести     куточок: розмір     подвійний клік по куточку: скинути",
+               kCx, kPy + kPh - 20, kFaint, 12, kCr + 24 - kCx);
 }
 
 // --- hooks that keep the game from seeing input while the menu is open --------------------------------------
@@ -2280,7 +2504,16 @@ void OpenChanged(bool foreground) {
     FlushUnsaved();
     Log("menu: %s", g_open ? "opened" : "closed");
     if (g_open) {
+        LoadDefaults();  // once, at the first opening: the ini and the pages are ready by now
         g_swallowEsc = false;
+        g_openedAt = MotionStamp();  // the fade-in starts now; the highlights start on their rows (GlideTo)
+        g_motionFrame += 2;
+        g_flipItem = nullptr;
+        static bool motionLogged = false;
+        if (MotionOn() && !motionLogged) {
+            motionLogged = true;
+            Log("menu: animations on (fade-in 140 ms, glide about 90 ms, switch 120 ms)");
+        }
         return;
     }
     if (g_cfg.hideCursor) SetCursor(nullptr);
@@ -2329,14 +2562,14 @@ void StartHint(void* device) {
     wchar_t line[128], sub[96];
     const wchar_t* key = L"F10";
     const wchar_t* press = en ? L"press" : L"натисніть";
-    u32 lineColor = 0xFFC4C4CE;
+    u32 lineColor = kMuted;
     sub[0] = 0;
     if (st == 1) {
         wsprintfW(line, en ? L"Version %S is out: press F9 to update" : L"Вийшла версія %S: натисніть F9, щоб оновити", UpdateVersion());
         lstrcpyW(sub, en ? L"the game restarts by itself  ·  F10 settings" : L"гра перезапуститься сама  ·  F10 налаштування");
         key = L"F9";
         press = en ? L"update" : L"оновити";
-        lineColor = 0xFFF2F2F5;
+        lineColor = kText;
     } else if (st == 2) {
         wsprintfW(line, en ? L"Downloading version %S..." : L"Завантажується версія %S...", UpdateVersion());
         lstrcpyW(sub, en ? L"a few seconds" : L"кілька секунд");
@@ -2349,31 +2582,31 @@ void StartHint(void* device) {
         lstrcpyW(sub, en ? L"details in UltimateFix\\ufx.log  ·  F10 settings" : L"подробиці в UltimateFix\\ufx.log  ·  F10 налаштування");
         key = L"F9";
         press = en ? L"retry" : L"ще раз";
-        lineColor = 0xFFFF8A80;
+        lineColor = kError;
     } else {
         lstrcpyW(line, en ? L"Settings, photo mode and mods" : L"Налаштування, фоторежим і моди");
     }
     const float w = 520, h = sub[0] ? 104 : 84, x = 1280 - w - 28, y = 28;
-    FillRect(x + 3, y + 4, w, h, alpha(0x60000000));  // shadow
-    FillRect(x, y, w, h, alpha(0xEE15151B));
-    FillRect(x, y, 4, h, alpha(0xFFD0343C));
-    FillRect(x + 4, y, w - 4, 1, alpha(0xFF2A2A34));
+    // A raised card with a hairline border and rounded corners, as the cards of the site; the red mark sits inside it
+    FillRound(x + 3, y + 4, w, h, 10, alpha(0x60000000));  // shadow
+    FillRoundFramed(x, y, w, h, 10, alpha(kRaised), alpha(kLine2));
+    FillRound(x + 10, y + 16, 3, h - 32, 1.5f, alpha(kAccent));
     wchar_t ver[64];
     wsprintfW(ver, L"%S", kVersion);
-    const float tw = DrawText(title, x + 22, y + 14, alpha(0xFFF2F2F5), 20);
-    DrawText(ver, x + 22 + tw + 10, y + 19, alpha(0xFF9696A4), 14);
+    const float tw = DrawText(title, x + 22, y + 14, alpha(kWhite), 20, kSemibold);
+    DrawText(ver, x + 22 + tw + 10, y + 19, alpha(kFaint), 14);
     const float textW = w - 22 - (key ? 64 + 18 + 16 : 18);
     DrawFitted(line, x + 22, y + 48, alpha(lineColor), 15, textW);
-    if (sub[0]) DrawFitted(sub, x + 22, y + 74, alpha(0xFF9696A4), 13, textW);
+    if (sub[0]) DrawFitted(sub, x + 22, y + 74, alpha(kFaint), 13, textW);
     if (key) {  // the key cap on the right, its label above it
         const float kw = 64, kh = 40, kx = x + w - kw - 18, ky = y + (h - kh) / 2 + 8;
         const float pw = TextWidth(press, 12);
-        DrawText(press, kx + (kw - pw) / 2, ky - 20, alpha(0xFF9696A4), 12);
-        FillRect(kx, ky + 3, kw, kh, alpha(0xFF0B0B0F));
-        FillRect(kx, ky, kw, kh, alpha(0xFF2E2E3A));
-        FillRect(kx, ky, kw, 1, alpha(0xFF4A4A58));
+        DrawText(press, kx + (kw - pw) / 2, ky - 20, alpha(kFaint), 12);
+        // a key cap like the site's <kbd>: a hairline border and a lip two units deep under it
+        FillRound(kx, ky + 2, kw, kh, 7, alpha(kLine2));
+        FillRoundFramed(kx, ky, kw, kh, 7, alpha(kHover), alpha(kLine2));
         const float fw = TextWidth(key, 20);
-        DrawText(key, kx + (kw - fw) / 2, ky + 9, alpha(0xFFF2F2F5), 20);
+        DrawText(key, kx + (kw - fw) / 2, ky + 9, alpha(kWhite), 20);
     }
     OverlayEnd();
 }
@@ -2424,7 +2657,12 @@ void OnFrame(void* device) {
         OpenChanged(foreground);
         return;
     }
+    MotionFrame();
+    g_openAlpha = MotionProgress(g_openedAt, kFadeSeconds);
+    g_openRise = (1.f - g_openAlpha) * kRiseUnits;
+    SetOverlayFade(g_openAlpha, g_openRise);
     Draw();
+    SetOverlayFade(1.f, 0.f);  // the notice and the performance panels are drawn after the menu in the same frame
     OverlayEnd();
 }
 

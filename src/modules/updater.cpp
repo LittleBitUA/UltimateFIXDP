@@ -365,7 +365,7 @@ void UpdateFrame() {
         g_noticeShown = true;
         ShowNotice(L"Оновлення не вдалося", L"The update failed",
                    L"Гра й мод лишились як були. Подробиці в UltimateFix\\ufx.log; нову версію можна взяти з GitHub вручну.",
-                   L"The game and the mod are as they were. Details in UltimateFix\\ufx.log; the new version can be taken from GitHub by hand.", 12);
+                   L"The game and the mod are as they were. Details in UltimateFix\\ufx.log; the new version can be taken from GitHub by hand.", 12, kNoticeError);
     }
 }
 

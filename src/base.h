@@ -46,6 +46,7 @@ struct Config {
     int scaleToWindow;       // scale the back buffer to the borderless window ourselves (bilinear, keeps 16:9); 0 = the game's Present fills the window
     int displayDebug;        // log the first frames and changes of the presenting path, and the window around Esc presses
     int menuOpacity;         // how opaque the F10 panel is, percent 20..100
+    int menuAnimations;      // [Menu] Animations: the panel fades in, the selection glides, a switch knob slides
     int language;            // language of the menu: 0 Ukrainian, 1 English
     int menu;                // F10 settings menu inside the game
     int frameCapture;        // [Debug] FrameCapture: Numpad 0 writes one frame, draw by draw, into a capture folder under UltimateFix
@@ -397,7 +398,20 @@ bool InstallResourceGuard();
 bool ResourceGuardTakeFailure(char* name, int cap);  // main thread: the name of a resource the loading thread gave up on, once
 void ResourceGuardCounts(u32* retries, u32* givenUp, u32* overflows);
 void SessionFrame(void* device);  // once per frame from the Present hook: the long-session hint and the notice box
-void ShowNotice(const wchar_t* titleUk, const wchar_t* titleEn, const wchar_t* textUk, const wchar_t* textEn, int seconds);  // main thread
+// The notice box (diagnostics.cpp, main thread). `kind` is what the mark at its left says: grey for information and a
+// finished job, amber for a warning, coral for a failure. Up to three wait their turn; one whose English title belongs to
+// the same family as a shown or waiting one (the same text before a colon, or one title the first words of the other:
+// "Fly: on" and "Fly: off", "Scan" and "Scan finished") takes its place instead of queueing.
+constexpr int kNoticeInfo = 0, kNoticeWarning = 1, kNoticeError = 2;
+void ShowNotice(const wchar_t* titleUk, const wchar_t* titleEn, const wchar_t* textUk, const wchar_t* textEn, int seconds,
+                int kind = kNoticeInfo);
+// While the F10 menu is open it draws the notice itself (between OverlayBegin and OverlayEnd, inside its own fade), so the
+// box never covers the panel's title; the floating box stays away in that frame. InBox: the text and the mark inside a box
+// the menu has drawn (the description box), x,y,w,h being that box; `context` names the selected row, and a notice that has
+// been in the box for 1.5 s gives way when another row is selected. Below: a floating box centred on centreX, its top at
+// `top`, its text at most maxW wide, for the pages without a description box. Both return false when there is no notice.
+bool DrawNoticeInBox(float x, float y, float w, float h, int context);
+bool DrawNoticeBelow(float centreX, float top, float maxW);
 void OpenLogFolder();          // the F10 menu: Explorer on the UltimateFix folder
 void WriteDiagnosticReport();  // the F10 menu: UltimateFix\ufx_report.txt
 

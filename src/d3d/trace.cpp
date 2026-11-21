@@ -2254,10 +2254,10 @@ void WaterFrame() {
         g_cfg.waterTest = (g_cfg.waterTest + 1) % 3;
         Log("water: WaterTest %d (Numpad 1): c10.z %s", g_cfg.waterTest, g_cfg.waterTest == 1 ? "-0.75" : g_cfg.waterTest == 2 ? "0" : "as the game sets it");
         if (g_cfg.waterTest == 1)
-            ShowNotice(L"Тест води 1 з 2: відбиття", L"Water test 1 of 2: reflection", L"c10.z = -0.75: більше відбиття. Numpad 1 далі.",
+            ShowNotice(L"Тест води: 1 з 2, відбиття", L"Water test: 1 of 2, reflection", L"c10.z = -0.75: більше відбиття. Numpad 1 далі.",
                        L"c10.z = -0.75: mostly reflection. Numpad 1 for the next.", 3);
         else if (g_cfg.waterTest == 2)
-            ShowNotice(L"Тест води 2 з 2: за прозорістю", L"Water test 2 of 2: by alpha", L"c10.z = 0: текстура за власною прозорістю. Numpad 1 вимикає.",
+            ShowNotice(L"Тест води: 2 з 2, за прозорістю", L"Water test: 2 of 2, by alpha", L"c10.z = 0: текстура за власною прозорістю. Numpad 1 вимикає.",
                        L"c10.z = 0: the texture by its own alpha. Numpad 1 turns it off.", 3);
         else
             ShowNotice(L"Тест води: вимкнено", L"Water test: off", L"Вода як у грі. Numpad 1 вмикає.", L"Water as the game draws it. Numpad 1 turns the test on.", 3);
