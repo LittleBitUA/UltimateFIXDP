@@ -852,6 +852,13 @@ constexpr uint32_t kReflectionChoiceBack = 0x6D44E6;
 // once on landing, with FUN_004E3110 (the game's own sync after a teleport: the shape swept down onto the ground).
 constexpr SiteDef kSitePlayerPhysicsCall = {"player physics call", 0x52F55D, 5, {0xE8, 0x1E, 0x3D, 0xFB, 0xFF}};
 constexpr uint32_t kPlayerPhysicsFn = 0x4E3280, kPlayerShapesToFn = 0x4E31F0, kPlayerLandFn = 0x4E3110;
+// River reflections: FUN_00474F70 (the water callback, kind 10h) gives the rivers (object kinds 28h/29h) a reflection weight from
+// the hour (x100), and outside cutscenes sets it to 0 unless CWeather+4 has bit 200h (`jne` at 004750A7 skips the zero); a weight
+// that stays is at least 1 (0.01, `mov edx,1` at 004750B7). With weight 0 no reflection pass runs for the river and its c10.z is
+// 1.0 (the flat texture); in cutscenes it gets 1.0 and the river mirrors the sky and the trees. RiverReflections: the jne becomes
+// a jmp and the floor 100 (1.0), so the river looks in play as it does in the scenes.
+constexpr SiteDef kSiteRiverWeightGate = {"river reflection weight gate", 0x4750A7, 2, {0x75, 0x0E}};
+constexpr SiteDef kSiteRiverWeightFloor = {"river reflection weight floor", 0x4750B7, 5, {0xBA, 0x01, 0x00, 0x00, 0x00}};
 constexpr SiteDef kSiteQteGauge = {"waggle QTE gauge x frame delta", 0x4EB60E, 6, {0xD8, 0x0D, 0xE0, 0xFF, 0x4A, 0x01}};
 // Lock-on (FUN_0053A5C0, the branch with a target in player+0x808): the camera pitch goes from York's head (NT_FHEAD) to the
 // target's waist bone (FUN_0053A580: PM_WAIST from +0x5FE, N_BODY2 for kinds 4/5), and the height of that point is lowered by
@@ -913,7 +920,7 @@ constexpr uint32_t kNanTrapNumber = 0x409EA8;
 
 constexpr const SiteDef* kAllSites[] = {
     &kSiteNanTrap,
-    &kSiteMouseX, &kSiteMouseY, &kSiteLoaderSleep, &kSiteRouteCall1, &kSiteRouteCall2, &kSiteQteGauge, &kSitePlayerPhysicsCall, &kSiteReflectionChoice, &kSiteLockOnDrop, &kSiteLockOnHeight, &kSiteFullQuad[0], &kSiteFullQuad[1], &kSiteFullQuad[2], &kSiteSetThreadWake, &kSiteRouteFlush1, &kSiteRouteFlush2, &kSiteRouteFlushFn,
+    &kSiteMouseX, &kSiteMouseY, &kSiteLoaderSleep, &kSiteRouteCall1, &kSiteRouteCall2, &kSiteQteGauge, &kSiteRiverWeightGate, &kSiteRiverWeightFloor, &kSitePlayerPhysicsCall, &kSiteReflectionChoice, &kSiteLockOnDrop, &kSiteLockOnHeight, &kSiteFullQuad[0], &kSiteFullQuad[1], &kSiteFullQuad[2], &kSiteSetThreadWake, &kSiteRouteFlush1, &kSiteRouteFlush2, &kSiteRouteFlushFn,
     &kSiteGameFileBranch, &kSiteGameFileAddon, &kSiteGameFileArchive, &kSiteGameFileStore, &kSiteGameFileHave,
     &kSiteBeaconCall, &kSiteBeaconDraw, &kSiteBeaconMove, &kStorySites[0], &kStorySites[1], &kStorySites[2], &kStorySites[3], &kStorySites[4],
     &kStorySites[5], &kStorySites[6], &kStorySites[7], &kStorySites[8], &kStorySites[9], &kStorySites[10],

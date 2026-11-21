@@ -278,6 +278,9 @@ static const char kDefaultIni[] =
     "Difficulty=1\r\n"
     "; Reflection gate of wet surfaces (idea of ZachFix; checked in the game, on by default). Changes at once.\r\n"
     "WetReflections=1\r\n"
+    "; 1 = rivers reflect the sky and the trees in play too, as in the cutscenes (the game gives them a reflection only there\r\n"
+    "; or with one weather flag, else a flat blue texture). Restart needed.\r\n"
+    "RiverReflections=1\r\n"
     "; Camera angle limits compare with a tolerance. Only needed when the FPU runs in a precision other than\r\n"
     "; the 24 bits Direct3D sets (some wrappers); off by default. Needs a game restart.\r\n"
     "AimTolerance=0\r\n"
@@ -797,6 +800,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.difficultyDialog = 1;  // always: the game's own difficulty screen before a new game
     g_cfg.keepSavedDifficulty = 1;  // always: a loaded slot keeps its difficulty
     g_cfg.wetReflections = (int)GetPrivateProfileIntW(L"Gameplay", L"WetReflections", 1, ini);
+    g_cfg.riverReflections = (int)GetPrivateProfileIntW(L"Gameplay", L"RiverReflections", 1, ini) ? 1 : 0;
     g_cfg.aimTolerance = (int)GetPrivateProfileIntW(L"Gameplay", L"AimTolerance", 0, ini);
     g_cfg.activationScale = (int)GetPrivateProfileIntW(L"World", L"ActivationScale", 1, ini);
     if (g_cfg.activationScale < 1) g_cfg.activationScale = 1;
