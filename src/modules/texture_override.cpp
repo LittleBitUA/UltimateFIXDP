@@ -136,8 +136,9 @@ void DumpTexture(u32 hash, const void* data, UINT size) {
 // every pad icon is read from the keyboard atlas at the wrong place. We keep the pad theme in a texture of our own
 // and hand it to the game in place of the keyboard atlas whenever the pad mode is on.
 void* g_keyboardAtlas = nullptr;
-void* g_padTheme = nullptr;
-bool g_themeTried = false;
+void* g_padTheme[2] = {nullptr, nullptr};  // 0 Xbox, 1 PlayStation, each loaded the first time it is wanted
+bool g_themeTried[2] = {false, false};
+int g_themeShown = -1;
 
 void NoteAtlas(void* tex) {
     typedef HRESULT(WINAPI * GetDescFn)(void*, UINT, u32*);
@@ -246,21 +247,29 @@ void* LoadGamePadAtlas(void* dev) {
 
 void* GlyphAtlasForImpl(void* dev, void* tex) {
     if (!g_keyboardAtlas || tex != g_keyboardAtlas || !*(volatile u8*)(uintptr_t)0x014810F0) return tex;
-    if (!g_themeTried) {
-        g_themeTried = true;
-        const wchar_t* name = g_cfg.glyphTheme == 2 ? L"xbox" : g_cfg.glyphTheme == 3 ? L"playstation" : (SonyPadActive() ? L"playstation" : L"xbox");
+    // Asked again on every use: a DualSense over Bluetooth is found up to a few seconds after the start (the reader looks every
+    // 2 s), so a choice made once at the first draw kept the Xbox icons for good. Both sets are loaded once and kept.
+    const int ps = g_cfg.glyphTheme == 2 ? 0 : g_cfg.glyphTheme == 3 ? 1 : (SonyPadActive() ? 1 : 0);
+    if (!g_themeTried[ps]) {
+        g_themeTried[ps] = true;
+        const wchar_t* name = ps ? L"playstation" : L"xbox";
         // Xbox icons: the game's own atlas first (the ones the console shows); our drawing only when it is not there
-        if (name[0] == L'x') g_padTheme = LoadGamePadAtlas(dev);
-        if (g_padTheme) return g_padTheme;
-        wchar_t path[MAX_PATH + 40];
-        wsprintfW(path, L"%sUltimateFix\\glyphs\\gamepad\\%s.png", g_paths.gameDir, name);
-        if (g_fromFile && SUCCEEDED(g_fromFile(dev, path, 1024, 1024, 1, 0, 21 /*A8R8G8B8*/, 1 /*MANAGED*/, 1 /*POINT? no: default*/, 1, 0, nullptr,
-                                                 nullptr, &g_padTheme)) && g_padTheme)
-            Log("textures: pad icons loaded: %S", path);
-        else
-            Log("textures: pad icons %S could not be loaded, the keyboard atlas stays", path);
+        if (!ps) g_padTheme[0] = LoadGamePadAtlas(dev);
+        if (!g_padTheme[ps]) {
+            wchar_t path[MAX_PATH + 40];
+            wsprintfW(path, L"%sUltimateFix\\glyphs\\gamepad\\%s.png", g_paths.gameDir, name);
+            if (g_fromFile && SUCCEEDED(g_fromFile(dev, path, 1024, 1024, 1, 0, 21 /*A8R8G8B8*/, 1 /*MANAGED*/, 1, 1, 0, nullptr, nullptr,
+                                                     &g_padTheme[ps])) && g_padTheme[ps])
+                Log("textures: pad icons loaded: %S", path);
+            else
+                Log("textures: pad icons %S could not be loaded, the keyboard atlas stays", path);
+        }
     }
-    return g_padTheme ? g_padTheme : tex;
+    if (g_padTheme[ps] && g_themeShown != ps) {
+        g_themeShown = ps;
+        Log("textures: pad icons now %s%s", ps ? "PlayStation" : "Xbox", g_cfg.glyphTheme == 1 ? " (automatic)" : "");
+    }
+    return g_padTheme[ps] ? g_padTheme[ps] : tex;
 }
 
 }  // namespace
