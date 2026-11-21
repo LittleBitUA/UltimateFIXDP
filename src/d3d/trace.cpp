@@ -995,9 +995,11 @@ int SmokeModelOf(void* dev) {
 // Draws a smoke sheet the Xbox way when this is one; false when the game draws it as it is
 template <typename Draw> bool SmokeDraw(void* dev, Draw draw, HRESULT* hr) {
     if (!g_cfg.smokeFix || !g_stageTex[0]) return false;
+    // The lit particle family (g_vDensity + g_tShadow): the game picks a variant by the lights near the smoke (ABD8D0 is one with
+    // two point lights), so a fixed bytecode missed the smoke at some camera places and the game's black blob came back.
     const DWORD* code = CurrentPsCode();
-    const bool deferred = code == (const DWORD*)(uintptr_t)kSmokeDeferredPs;
-    if (!deferred && code != (const DWORD*)(uintptr_t)kSmokePlainPs) return false;
+    const bool plain = code == (const DWORD*)(uintptr_t)kSmokePlainPs;
+    if (!plain && code != (const DWORD*)(uintptr_t)kSmokeDeferredPs && !CurrentPsIsSmoke()) return false;
     typedef HRESULT(WINAPI * GetRsFn)(void*, DWORD, DWORD*);
     typedef ULONG(WINAPI * RelFn)(void*);
     void** dvt = *(void***)dev;
@@ -1010,6 +1012,18 @@ template <typename Draw> bool SmokeDraw(void* dev, Draw draw, HRESULT* hr) {
     TextureSize(g_stageTex[0], &w, &h);
     const bool sheet = w == 256 && h == 128, maskSheet = w == 128 && h == 64;
     if ((!sheet && !maskSheet) || !IsBlackDxt3(g_stageTex[0])) return false;
+    const bool deferred = code == (const DWORD*)(uintptr_t)kSmokeDeferredPs || (code && NamesConstant(code, "g_tDeffered"));
+    {
+        static const DWORD* seen[16];
+        static int seenCount = 0;
+        bool known = false;
+        for (int i = 0; i < seenCount; ++i) known |= seen[i] == code;
+        if (!known && seenCount < 16) {
+            seen[seenCount++] = code;
+            Log("smoke: a %ux%u smoke sheet drawn by the game with particle shader %08X (%s)", w, h, (u32)(uintptr_t)code,
+                deferred ? "deferred, light buffer" : plain ? "forward, the known one" : "forward, another light set");
+        }
+    }
     BuildSmokeShaders(dev);
     LoadSmokeCloud(dev);
     if (!g_smokeVs || !g_smokePs || !g_smokePsDef || !r_SetPs || !r_SetTexture || !r_SetVsConstF) return false;
@@ -1069,6 +1083,16 @@ template <typename Draw> bool SmokeDraw(void* dev, Draw draw, HRESULT* hr) {
     // the light buffer: the one the deferred draws bind in s8 (still bound at the forward draws), or seen in the last frames
     void* light = deferred || (bound8 && bound8 == g_smokeLight) ? bound8
                   : (g_smokeFrame - g_smokeLightFrame <= 2 ? g_smokeLight : nullptr);
+    // the forward copy reads the light constants of ABD8D0 only; another forward variant without a light buffer stays the game's
+    if (!light && !plain) {
+        static bool told = false;
+        if (!told) {
+            told = true;
+            Log("smoke: a sheet drawn with another forward particle shader (%08X) and no light buffer in the frame: left to the game",
+                (u32)(uintptr_t)code);
+        }
+        return false;
+    }
     void* diffuse = modelB && g_smokeCloud ? g_smokeCloud : g_stageTex[0];
     typedef HRESULT(WINAPI * GetVsFn)(void*, void**);
     typedef HRESULT(WINAPI * SetVsFn)(void*, void*);
