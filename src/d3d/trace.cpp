@@ -580,6 +580,52 @@ void TextureSize(void* tex, u32* w, u32* h) {
     *h = d[7];
 }
 
+typedef HRESULT(WINAPI* SetDeclFn)(void*, void*);
+// The Xbox keeps the second UV at offset 16 of the second vertex stream (stride 20); the PC declaration names offset 8 of that
+// stream (FLOAT16_2) "tangent", which on the Xbox is the start of the tangent. When the stream is long enough, a copy of the game's
+// declaration with that element moved to offset 16 lets the game's vertex shader read the real second UV. Cached per declaration.
+struct DeclFix {
+    void* own;
+    void* fixed;  // nullptr: left as it is
+};
+DeclFix g_declFix[16];
+int g_declFixCount = 0;
+void* SmokeUv2Decl(void* dev, void** ownOut) {
+    typedef HRESULT(WINAPI * GetDeclFn)(void*, void**);
+    typedef HRESULT(WINAPI * DeclElemsFn)(void*, void*, UINT*);
+    typedef HRESULT(WINAPI * MakeDeclFn)(void*, const void*, void**);
+    typedef HRESULT(WINAPI * GetStreamFn)(void*, UINT, void**, UINT*, UINT*);
+    typedef ULONG(WINAPI * RelFn)(void*);
+    void** dvt = *(void***)dev;
+    void* own = nullptr;
+    if (FAILED(((GetDeclFn)dvt[88])(dev, &own)) || !own) return nullptr;
+    *ownOut = own;
+    for (int i = 0; i < g_declFixCount; ++i) if (g_declFix[i].own == own) return g_declFix[i].fixed;
+    void* vb = nullptr;
+    UINT off = 0, stride = 0;
+    ((GetStreamFn)dvt[101])(dev, 1, &vb, &off, &stride);
+    if (vb) ((RelFn)(*(void***)vb)[2])(vb);
+    u8 el[32 * 8];
+    UINT count = 32;
+    void* fixed = nullptr;
+    if (SUCCEEDED(((DeclElemsFn)(*(void***)own)[4])(own, el, &count))) {
+        int moved = -1;
+        for (UINT i = 0; i < count && i < 32; ++i) {
+            const u16 stream = *(const u16*)(el + i * 8), offset = *(const u16*)(el + i * 8 + 2);
+            if (stream == 0xFF) break;
+            if (stream == 1 && offset == 8 && el[i * 8 + 4] == 15 /*FLOAT16_2*/ && el[i * 8 + 6] == 6 /*TANGENT*/) moved = (int)i;
+        }
+        if (moved >= 0 && stride >= 20) {
+            *(u16*)(el + moved * 8 + 2) = 16;
+            ((MakeDeclFn)dvt[86])(dev, el, &fixed);  // CreateVertexDeclaration
+        }
+        Log("smoke: second vertex stream stride %u, the declared FLOAT16_2 at offset 8 %s; second UV read from offset %s", stride,
+            moved >= 0 ? "found" : "not found", fixed ? "16 (as on the Xbox)" : "8 (unchanged)");
+    }
+    if (g_declFixCount < 16) g_declFix[g_declFixCount++] = {own, fixed};
+    return fixed;
+}
+
 // Draws a smoke sheet the Xbox way when this is one; false when the game draws it as it is
 template <typename Draw> bool SmokeDraw(void* dev, Draw draw, HRESULT* hr) {
     if (!g_cfg.smokeFix || !g_stageTex[0] || CurrentPsCode() != (const DWORD*)(uintptr_t)kSmokePlainPs) return false;
@@ -629,6 +675,9 @@ template <typename Draw> bool SmokeDraw(void* dev, Draw draw, HRESULT* hr) {
             getSs(dev, st, kStates[i], &saved[st][i]);
             setSs(dev, st, kStates[i], kValues[i]);
         }
+    void* ownDecl = nullptr;
+    void* uv2Decl = SmokeUv2Decl(dev, &ownDecl);
+    if (uv2Decl) ((SetDeclFn)dvt[87])(dev, uv2Decl);
     ((SetVsFn)dvt[92])(dev, g_smokeVs);
     r_SetPs(dev, g_smokePs);
     r_SetTexture(dev, 0, diffuse);
@@ -641,6 +690,8 @@ template <typename Draw> bool SmokeDraw(void* dev, Draw draw, HRESULT* hr) {
     r_SetPs(dev, ownPs);
     ((SetVsFn)dvt[92])(dev, ownVs);
     if (ownVs) ((RelFn)(*(void***)ownVs)[2])(ownVs);
+    if (uv2Decl) ((SetDeclFn)dvt[87])(dev, ownDecl);
+    if (ownDecl) ((RelFn)(*(void***)ownDecl)[2])(ownDecl);
     for (int st = 0; st < 2; ++st)
         for (int i = 0; i < 5; ++i) setSs(dev, st, kStates[i], saved[st][i]);
     static bool toldA = false, toldB = false;
