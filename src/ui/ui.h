@@ -105,6 +105,10 @@ void FrameStatsPanel(void* device, double totalMs, double gameMs, double physics
 bool PhotoPageOpen();                           // the menu is open on that page
 void ResidentsPage(float left, float top, float right, float bottom);  // the schedule viewer, drawn into the menu's content area (residents.cpp)
 void ResidentsScroll(int rows);                 // its list: positive = down
+// The open menu's last input came from the gamepad: a page's hint line then names the pad's buttons, drawn by DrawPadLine,
+// whose text has the buttons as tokens drawn as small key caps in the pad's family: {A} {B} {Y} {LB} {RB} {LT} {RT} {OPEN}.
+bool PadHintsShown();
+void DrawPadLine(const wchar_t* text, float x, float y, u32 argb, int px, float maxW);
 void ModsPage(float left, float top, float right, float bottom);  // the mod manager page (mods_page.cpp)
 void ModsPageInput(bool up, bool down, bool toggle, bool raise, bool lower, bool click, float mx, float my);
 void ScreenshotFrame(void* device);              // saves a PNG when the screenshot key is pressed

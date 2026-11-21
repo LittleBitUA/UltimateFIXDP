@@ -496,6 +496,11 @@ static const char kDefaultIni[] =
     "Y=52\r\n"
     "Width=1080\r\n"
     "Height=616\r\n"
+    "; 1 = the F10 menu also works on a gamepad: View + Menu held together (Create + Options on a DualSense) opens and closes it,\r\n"
+    "; the D-pad or the left stick moves, A / Cross picks, B / Circle goes back, LB / RB (L1 / R1) the section, LT / RT a screen of\r\n"
+    "; rows, Y / Triangle the default. The game does not see the pad while the menu is open. View or Menu pressed alone reaches the\r\n"
+    "; game 0.12 s later, so that the pair does not also pause the game. A change counts from the next opening.\r\n"
+    "PadControl=1\r\n"
     "; Language of the menu: 0 = Ukrainian, 1 = English (the buttons at the bottom of the menu change it).\r\n"
     "Language=-1\r\n"
     "; Settings menu inside the game, opened with F10.\r\n"
@@ -932,6 +937,7 @@ void LoadConfig(const wchar_t* ini) {
     if (g_cfg.menuOpacity < 20) g_cfg.menuOpacity = 20;
     if (g_cfg.menuOpacity > 100) g_cfg.menuOpacity = 100;
     g_cfg.menuAnimations = GetPrivateProfileIntW(L"Menu", L"Animations", 1, ini) ? 1 : 0;
+    g_cfg.menuPadControl = GetPrivateProfileIntW(L"Menu", L"PadControl", 1, ini) ? 1 : 0;
     g_cfg.language = (int)GetPrivateProfileIntW(L"Menu", L"Language", -1, ini);
     if (g_cfg.language < 0) {  // not chosen yet: Ukrainian or Russian Windows -> Ukrainian, anything else -> English
         WORD lang = PRIMARYLANGID(GetUserDefaultUILanguage());
