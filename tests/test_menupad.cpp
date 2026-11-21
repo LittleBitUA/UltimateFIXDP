@@ -172,6 +172,14 @@ int main() {
         CHECK(f.pressed == kPadAction, "X (%x)", f.pressed);
         f = MenuPadUpdate(p, r, 4000);
         CHECK(f.pressed == 0, "X does not repeat (%x)", f.pressed);
+        r.buttons = kXbRS;
+        f = MenuPadUpdate(p, r, 4016);
+        CHECK(f.pressed == kPadDetails, "R3 (%x)", f.pressed);
+        f = MenuPadUpdate(p, r, 6000);
+        CHECK(f.pressed == 0, "R3 does not repeat (%x)", f.pressed);
+        r.buttons = 1u << 8;  // L3 is not the menu's
+        f = MenuPadUpdate(p, r, 6016);
+        CHECK(f.pressed == 0 && f.down == 0, "L3 does nothing (%x)", f.down);
     }
     // The menu opened with the pair: it is still held on the first frame of the open menu and must not close it again.
     {

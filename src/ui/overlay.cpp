@@ -1056,8 +1056,10 @@ float DrawFitted(const wchar_t* text, float x, float y, u32 color, int px, float
     return DrawText(cut, x, y, color, px, weight);
 }
 
-int DrawLines(const wchar_t* text, float x, float y, u32 color, int px, float lineH, float maxW, int maxLines, bool draw, int weight) {
-    int lines = 0;
+int DrawLinesEx(const wchar_t* text, float x, float y, u32 color, int px, float lineH, float maxW, int skip, int maxLines, bool draw,
+                const wchar_t* tail, u32 tailColor, int weight) {
+    int lines = 0;  // laid out so far, the skipped ones included: the wrap of a scrolled text must not depend on the scroll
+    const int last = skip + maxLines;
     const wchar_t* p = text;
     for (;;) {
         const wchar_t* end = p;
@@ -1074,9 +1076,11 @@ int DrawLines(const wchar_t* text, float x, float y, u32 color, int px, float li
             const wchar_t* next = p + n;
             while (next < end && *next == L' ') ++next;
             bool more = next < end || *end != 0;
-            if (lines == maxLines - 1 && more) {  // the last line there is room for, and text is left: end it with "…"
+            const float ly = y + lineH * (float)(lines - skip);
+            if (lines == last - 1 && lines >= skip && more) {  // the last line there is room for, and text is left: end it with "…" (and the tail)
                 if (draw) {
-                    int m = TextFit(p, len > 250 ? 250 : len, maxW - TextWidth(L"…", px, weight), px, weight);
+                    const float tailW = tail ? TextWidth(tail, px, weight) : 0.f;
+                    int m = TextFit(p, len > 250 ? 250 : len, maxW - TextWidth(L"…", px, weight) - tailW, px, weight);
                     if (m < len) {  // cut inside the paragraph: end at a word break
                         int b = m;
                         while (b > 0 && p[b] != L' ') --b;
@@ -1087,15 +1091,16 @@ int DrawLines(const wchar_t* text, float x, float y, u32 color, int px, float li
                     for (int i = 0; i < m; ++i) line[i] = p[i];
                     line[m] = L'…';
                     line[m + 1] = 0;
-                    DrawText(line, x, y + lineH * (float)lines, color, px, weight);
+                    const float w = DrawText(line, x, ly, color, px, weight);
+                    if (tail) DrawText(tail, x + w, ly, tailColor, px, weight);
                 }
-                return lines + 1;
+                return maxLines;
             }
-            if (draw && n > 0) {
+            if (draw && n > 0 && lines >= skip) {
                 wchar_t line[256];
                 for (int i = 0; i < n; ++i) line[i] = p[i];
                 line[n] = 0;
-                DrawText(line, x, y + lineH * (float)lines, color, px, weight);
+                DrawText(line, x, ly, color, px, weight);
             }
             ++lines;
             p = next;
@@ -1103,7 +1108,11 @@ int DrawLines(const wchar_t* text, float x, float y, u32 color, int px, float li
         if (*end == 0) break;
         p = end + 1;
     }
-    return lines;
+    return lines > skip ? lines - skip : 0;
+}
+
+int DrawLines(const wchar_t* text, float x, float y, u32 color, int px, float lineH, float maxW, int maxLines, bool draw, int weight) {
+    return DrawLinesEx(text, x, y, color, px, lineH, maxW, 0, maxLines, draw, nullptr, 0, weight);
 }
 
 // ---- Pictures from files ----------------------------------------------------------------------------------------

@@ -24,8 +24,9 @@ enum : unsigned {
     kPadReset = 1u << 10,       // Y / Triangle: Backspace
     kPadOpen = 1u << 11,        // View + Menu (Create + Options) held together: opens and closes the menu
     kPadAction = 1u << 12,      // X / Square: a page's second action (the mods page opens the selected mod's folder)
+    kPadDetails = 1u << 13,     // R3 (the right stick pressed): the selected row's full description, as F1
 };
-constexpr int kPadLogicalCount = 13;
+constexpr int kPadLogicalCount = 14;
 // Held, these come again: first after 350 ms, then every 90 ms. The others act once per press (a held A must not flip a switch
 // ten times a second).
 constexpr unsigned kPadRepeating = kPadUp | kPadDown | kPadLeft | kPadRight | kPadPageUp | kPadPageDown;
@@ -33,7 +34,7 @@ constexpr unsigned kPadFirstRepeatMs = 350, kPadRepeatMs = 90;
 
 // Bits of the Xbox layout's buttons.
 constexpr unsigned kXbA = 1u << 0, kXbB = 1u << 1, kXbX = 1u << 2, kXbY = 1u << 3, kXbLB = 1u << 4, kXbRB = 1u << 5, kXbBack = 1u << 6,
-                   kXbStart = 1u << 7, kXbLT = 1u << 10, kXbRT = 1u << 11;
+                   kXbStart = 1u << 7, kXbRS = 1u << 9, kXbLT = 1u << 10, kXbRT = 1u << 11;
 constexpr unsigned kPadOpenPair = kXbBack | kXbStart;
 
 // The left stick counts as a direction past half of its travel and lets go below 0.375 of it: a stick resting near the
@@ -124,6 +125,7 @@ inline MenuPadFrame MenuPadUpdate(MenuPad& p, const MenuPadRaw& raw, unsigned no
         if (b & kXbB) d |= kPadBack;
         if (b & kXbX) d |= kPadAction;
         if (b & kXbY) d |= kPadReset;
+        if (b & kXbRS) d |= kPadDetails;
         if (b & kXbLB) d |= kPadPrevSection;
         if (b & kXbRB) d |= kPadNextSection;
         const int z = (int)raw.z - 32767;

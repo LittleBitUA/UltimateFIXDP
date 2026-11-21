@@ -4,11 +4,13 @@
 // (grouped, with switches and sliders, scrollable), a description of the selected setting at the bottom.
 // Keys: F10 opens/closes, Up/Down selects, Left/Right changes (on a row of action buttons it only moves the highlight),
 // Enter/Space toggles or presses the highlighted button, Backspace puts the selected setting back to its default (a changed
-// one has a grey dot after its label), Tab / PgUp / PgDn switches the section, Esc closes. The mouse
+// one has a grey dot after its label), F1 shows the selected row's whole description on a card (a click on the description
+// box too), Tab / PgUp / PgDn switches the section, Esc closes. The mouse
 // works too: click a section, a switch, a slider, a button or the value; the wheel scrolls.
 // A gamepad ([Menu] PadControl) does the same: View + Menu (Create + Options) held together opens and closes, the D-pad or the
 // left stick moves and changes (held, it repeats, and a slider speeds up), A / Cross is Enter, B / Circle is Esc, Y / Triangle
-// is Backspace, LB / RB the section, LT / RT a screen of rows. The hints at the bottom name the pad's buttons while it is used.
+// is Backspace, R3 is F1, LB / RB the section, LT / RT a screen of rows. The hints at the bottom name the pad's buttons while
+// it is used.
 // A change of a setting that has an ini key is written to UltimateFix.ini at once (a slider when the drag ends). Rows
 // without a key (most of the photo mode and the cheats) last for the session only.
 #include "ui.h"
@@ -211,8 +213,8 @@ Item g_pageDisplay[] = {
      {L"Панель з'являється плавно, виділення ковзає до вибраного рядка й розділу, повзунок перемикача пересувається. Вимкнено: усе змінюється миттєво. Закривається меню завжди одразу.",
       L"The panel fades in, the selection glides to the chosen row and section, the knob of a switch slides across. Off: everything changes at once. The menu always closes at once."}, NOTR},
     {{L"Керування меню ґеймпадом", L"Gamepad control of the menu"}, &g_cfg.menuPadControl, kBool, 0, 1, 1, false, L"Menu", L"PadControl", nullptr, nullptr,
-     {L"Меню F10 працює й на ґеймпаді: View + Menu разом (на DualSense Create + Options) відкриває і закриває його, хрестовина або лівий стік ходять, A / хрестик вибирає, B / коло закриває, LB / RB (L1 / R1) перемикають розділ, LT / RT гортають на екран, Y / трикутник повертає типове, X / квадрат на сторінці «Моди» відкриває теку мода, на інших перезапускає гру, коли налаштування чекають перезапуску (спершу запитає). Гра в цей час ґеймпада не бачить. Діє з наступного відкриття меню.",
-      L"The F10 menu also works on a gamepad: View + Menu together (Create + Options on a DualSense) opens and closes it, the D-pad or the left stick moves, A / Cross picks, B / Circle closes, LB / RB (L1 / R1) switch the section, LT / RT scroll a screen, Y / Triangle restores the default, X / Square opens a mod's folder on the Mods page and, on the others, restarts the game while settings wait for a restart (it asks first). The game does not see the pad meanwhile. Takes effect the next time the menu opens."}, NOTR},
+     {L"Меню F10 працює й на ґеймпаді: View + Menu разом (на DualSense Create + Options) відкриває і закриває його, хрестовина або лівий стік ходять, A / хрестик вибирає, B / коло закриває, LB / RB (L1 / R1) перемикають розділ, LT / RT гортають на екран, Y / трикутник повертає типове, R3 показує весь опис, X / квадрат на сторінці «Моди» відкриває теку мода, на інших перезапускає гру, коли налаштування чекають перезапуску (спершу запитає). Гра в цей час ґеймпада не бачить. Діє з наступного відкриття меню.",
+      L"The F10 menu also works on a gamepad: View + Menu together (Create + Options on a DualSense) opens and closes it, the D-pad or the left stick moves, A / Cross picks, B / Circle closes, LB / RB (L1 / R1) switch the section, LT / RT scroll a screen, Y / Triangle restores the default, R3 shows the whole description, X / Square opens a mod's folder on the Mods page and, on the others, restarts the game while settings wait for a restart (it asks first). The game does not see the pad meanwhile. Takes effect the next time the menu opens."}, NOTR},
     {{L"Перевіряти оновлення", L"Check for updates"}, &g_cfg.checkUpdates, kBool, 0, 1, 1, true, L"Menu", L"CheckUpdates", nullptr, nullptr,
      {L"На старті один анонімний запит до GitHub: чи вийшла нова версія. Якщо так, плашка на старті й сторінка «Про мод» пропонують F9: мод сам завантажить її, замінить X3DAudio1_7.dll та іконки й перезапустить гру. Налаштування, моди й копії збережень лишаються.",
       L"One anonymous request to GitHub at the start: is a new version out. If so, the start card and the About page offer F9: the mod downloads it, replaces X3DAudio1_7.dll and the icons and restarts the game. Settings, mods and save backups stay."}, NOTR},
@@ -1185,6 +1187,19 @@ bool Scrollable() {
     return y > kListBottom;
 }
 
+// The description box under the list (Draw), and the card that shows its whole text over the list and the box. The card is
+// as wide as the panel's content with the list's scroll bar, which it hides.
+constexpr float kHintBoxTop = 18, kHintBoxBottom = 118;  // below kListBottom
+bool OnHintBox(float mx, float my) {
+    return mx >= kCx - 12 && mx < kCr + 12 && my >= kListBottom + kHintBoxTop && my < kListBottom + kHintBoxBottom;
+}
+void HelpCardRect(float* x, float* y, float* w, float* h) {
+    *x = kCx - 12;
+    *y = kListTop;
+    *w = kCr + 24 - *x;
+    *h = kListBottom + kHintBoxBottom - *y;
+}
+
 // --- input -------------------------------------------------------------------------------------------
 bool Down(int vk) { return (GetAsyncKeyState(vk) & 0x8000) != 0; }
 
@@ -1196,7 +1211,7 @@ bool Pressed(int vk) {
 }
 
 const int kMenuKeys[] = {VK_F10, VK_ESCAPE, VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT, VK_RETURN, VK_SPACE, VK_TAB,
-                         VK_PRIOR, VK_NEXT, VK_LBUTTON, VK_BACK, 'Y', 'N', 'R', VK_F9};
+                         VK_PRIOR, VK_NEXT, VK_LBUTTON, VK_BACK, 'Y', 'N', 'R', VK_F9, VK_F1};
 
 void RememberKeys() {
     for (int vk : kMenuKeys) g_prev[vk] = Down(vk) ? 1 : 0;
@@ -1322,6 +1337,19 @@ void SetValue(Item& it, int v) {
 
 int g_confirm = 0;  // 0 nothing, 1 asking about this page, 2 asking about everything, 3 asking to restart the game
 constexpr int kConfirmRestart = 3;
+
+// The card with the selected row's whole description (F1, R3, a click on the description box): about 15 Ukrainian hints are
+// longer than the box's six lines and lost their ending. It is modal like the question: the list under it does not move.
+bool g_helpOpen = false;
+int g_helpScroll = 0;  // its first visible line
+int g_helpMax = 0;     // the largest first line, from the last frame it was drawn
+int g_helpPage = 1;    // lines that PgUp / PgDn (LT / RT) move it
+
+void OpenHelp() {
+    g_helpOpen = true;
+    g_helpScroll = 0;
+    g_helpMax = 0;  // until it is drawn once nothing scrolls
+}
 
 // Called by the chips: only asks. The work is done by PerformReset after the player confirms.
 void ResetPageDefaults() {
@@ -1497,6 +1525,7 @@ void SelectPage(int page) {
     g_scroll = 0;
     g_editing = false;
     g_confirm = 0;
+    g_helpOpen = false;
     FlushUnsaved();  // a value held on the pad when RB / LB left its page: the About or Mods page never gets to the flush
     BuildRows();
 }
@@ -1539,6 +1568,47 @@ int PresetIndex(const Item& it) {  // index of the preset equal to the value, -1
 // A row of buttons that each do something once (a quality preset, money, the hour, the weather, Apply ...): its value
 // is put back to 0 at once, so it is none of the presets. The arrows only move the highlight on such a row.
 bool IsActionRow(const Item& it) { return it.presets && !it.key && !it.format && PresetIndex(it) < 0; }
+
+// The description of a row. A setting without one (the photo sliders, three filter sliders) gets one made from what the row
+// knows, so its box is not empty: its range or choices, the default and, for a row without a restart note, that it applies at
+// once. `out` holds at least 512 characters. Null for a row of buttons without a text: there is nothing to say about it.
+const wchar_t* HintText(const Item& it, wchar_t* out) {
+    const wchar_t* h = Tx(it.hint);
+    if (h && *h) return h;
+    if (!it.value || IsActionRow(it)) return nullptr;
+    const bool en = g_cfg.language == 1;
+    wchar_t a[64], b[64];
+    out[0] = 0;
+    if (it.kind == kBool) {
+        lstrcpyW(out, en ? L"A switch: on or off." : L"Перемикач: увімкнено або вимкнено.");
+    } else if (it.names || it.presets) {
+        lstrcpyW(out, en ? L"Choices: " : L"Варіанти: ");
+        const int n = it.names ? it.hi - it.lo + 1 : it.presetCount;
+        for (int i = 0; i < n; ++i) {
+            const wchar_t* name = it.names ? Tx(it.names[i]) : Tx(it.presetNames[i]);
+            if (lstrlenW(out) + lstrlenW(name) + 4 > 300) break;  // the rest of the sentence still fits the 512
+            if (i) lstrcatW(out, L", ");
+            lstrcatW(out, name);
+        }
+        lstrcatW(out, L".");
+    } else {
+        FormatValue(it, it.lo, a);
+        FormatValue(it, it.hi, b);
+        wsprintfW(out, en ? L"From %s to %s" : L"Від %s до %s", a, b);
+        // a formatted value (tenths, stops, a scale) would read its step as a raw number
+        if (!it.format && it.step > 1) wsprintfW(out + lstrlenW(out), en ? L", in steps of %d" : L", крок %d", it.step);
+        lstrcatW(out, L".");
+    }
+    if (it.def != kNoDefault && !Changed(it)) {  // a changed row names its default on the line under the text already
+        FormatValue(it, it.def, a);
+        wsprintfW(out + lstrlenW(out), en ? L" Default: %s." : L" Типово: %s.", a);
+    }
+    if (!RestartRow(it)) {  // a restart row has its own note under the text
+        if (it.key) lstrcatW(out, en ? L" Applies at once." : L" Діє одразу.");
+        else lstrcatW(out, en ? L" Applies at once, until the game is closed (not saved)." : L" Діє одразу, до виходу з гри (не зберігається).");
+    }
+    return out;
+}
 
 void ChipLayout(const Item& it, float* x, float* w, int* n) {
     // a last chip appears only when the value is none of the presets: it shows that value and a click types a new one
@@ -1755,6 +1825,24 @@ void HandleInput(bool foreground) {
         }
         return;
     }
+    if (g_helpOpen && !pg.about) {  // the description card: ↑ ↓, the wheel and PgUp / PgDn (LT / RT) scroll it
+        g_hoverRow = -1;  // no button of the list under it lights up
+        int lines = -g_wheel * 2;
+        g_wheel = 0;
+        if (Pressed(VK_UP) || (pad & kPadUp)) --lines;
+        if (Pressed(VK_DOWN) || (pad & kPadDown)) ++lines;
+        if (Pressed(VK_PRIOR) || (pad & kPadPageUp)) lines -= g_helpPage;
+        if (Pressed(VK_NEXT) || (pad & kPadPageDown)) lines += g_helpPage;
+        g_helpScroll += lines;
+        if (g_helpScroll > g_helpMax) g_helpScroll = g_helpMax;
+        if (g_helpScroll < 0) g_helpScroll = 0;
+        // Esc, F1, B, R3 or a click outside the card closes it; the click does nothing else (it lands on the list or the sidebar)
+        float mx, my, cx, cy, cw, ch;
+        HelpCardRect(&cx, &cy, &cw, &ch);
+        const bool outside = Pressed(VK_LBUTTON) && MousePosition(&mx, &my) && (mx < cx || mx >= cx + cw || my < cy || my >= cy + ch);
+        if (Pressed(VK_ESCAPE) || Pressed(VK_F1) || (pad & (kPadBack | kPadDetails)) || outside) g_helpOpen = false;
+        return;
+    }
     const int pageBefore = g_page;
     if (pg.about) {  // nothing to change on this page: keys for the sections, clicks for the sidebar
         if (Pressed(VK_ESCAPE) || (pad & kPadBack)) g_open = false;
@@ -1799,6 +1887,11 @@ void HandleInput(bool foreground) {
         if (pad & (kPadUp | kPadDown | kPadLeft | kPadRight)) PadEditStep(it, pad);
         HandleEditKeys(it);
         if (Pressed(VK_LBUTTON)) g_editing = false;  // a click elsewhere cancels
+        return;
+    }
+    if (Pressed(VK_F1) || (pad & kPadDetails)) {
+        OpenHelp();
+        g_wheel = 0;
         return;
     }
     if (Pressed(VK_ESCAPE) || (pad & kPadBack)) g_open = false;
@@ -1954,6 +2047,10 @@ void HandleInput(bool foreground) {
             return;
         }
         if (click && SidebarClick(mx, my)) return;
+        if (click && OnHintBox(mx, my)) {  // the description box: its whole text on a card
+            OpenHelp();
+            return;
+        }
         // the scroll bar: click or drag
         if (Scrollable()) {
             bool onBar = mx >= kCr + 4 && mx <= kCr + 30 && my >= kListTop && my <= kListBottom;
@@ -2065,7 +2162,7 @@ float PadCap(const wchar_t* label, bool disc, float x, float y, int px, bool dra
     return w;
 }
 
-// The cap(s) of a token: {A} {B} {X} {Y} {LB} {RB} {LT} {RT} {OPEN}. Returns the width, 0 for an unknown token.
+// The cap(s) of a token: {A} {B} {X} {Y} {LB} {RB} {LT} {RT} {R3} {OPEN}. Returns the width, 0 for an unknown token.
 float PadToken(const wchar_t* t, int n, float x, float y, int px, bool draw) {
     auto is = [t, n](const wchar_t* s) {
         int i = 0;
@@ -2081,6 +2178,7 @@ float PadToken(const wchar_t* t, int n, float x, float y, int px, bool draw) {
     if (is(L"RB")) return PadCap(ps ? L"R1" : L"RB", false, x, y, px, draw);
     if (is(L"LT")) return PadCap(ps ? L"L2" : L"LT", false, x, y, px, draw);
     if (is(L"RT")) return PadCap(ps ? L"R2" : L"RT", false, x, y, px, draw);
+    if (is(L"R3")) return PadCap(L"R3", false, x, y, px, draw);  // the description box says "R3" on both families
     if (is(L"OPEN")) {
         float w = PadCap(ps ? L"Create" : L"View", false, x, y, px, draw);
         const float plus = TextWidth(L"+", px);
@@ -2553,6 +2651,58 @@ void DrawRestartBlock() {
     else if (!g_padMode) DrawText(L"R", tx, kRestartY + 8, kFaint, 13, kSemibold);
 }
 
+// The card of g_helpOpen: the selected row's label, its whole description (scrolled by HandleInput) and, under a hairline,
+// its default, its value now and when a change applies. Solid, unlike the panel: the list must not show through the text.
+void DrawHelpCard(const Item& it) {
+    const bool en = g_cfg.language == 1;
+    float x, y, w, h;
+    HelpCardRect(&x, &y, &w, &h);
+    FillRoundFramed(x, y, w, h, 10, kRaised, kLine2);
+    const float left = x + 20, textW = w - 40 - 16;  // 16: the scroll bar
+    DrawFitted(Tx(it.label), left, y + 18, kText, 18, w - 40, kSemibold);
+    wchar_t made[512];
+    const wchar_t* hint = HintText(it, made);
+    constexpr float kLineH = 20;
+    const float textTop = y + 52, factsY = y + h - 32;
+    int visible = (int)((factsY - 16 - textTop) / kLineH);
+    if (visible < 1) visible = 1;
+    const int total = hint ? DrawLines(hint, 0, 0, 0, 15, kLineH, textW, 999, false) : 0;
+    g_helpMax = total > visible ? total - visible : 0;
+    g_helpPage = visible > 1 ? visible - 1 : 1;  // one line stays in sight across a page
+    if (g_helpScroll > g_helpMax) g_helpScroll = g_helpMax;
+    if (hint) DrawLinesEx(hint, left, textTop, kText, 15, kLineH, textW, g_helpScroll, visible, true, nullptr, 0);
+    else DrawText(en ? L"No description." : L"Опису немає.", left, textTop, kFaint, 15);
+    if (g_helpMax > 0) {  // where in the text the card is, as the list's scroll bar
+        const float th = kLineH * (float)visible, bx = x + w - 20;
+        FillRound(bx, textTop, 4, th, 2, kLine);
+        const float frac = (float)visible / (float)total;
+        FillRound(bx - 2, textTop + (th - th * frac) * ((float)g_helpScroll / (float)g_helpMax), 8, th * frac, 4, kFaint);
+    }
+    FillRect(left, factsY - 12, w - 40, 1, kLine);
+    if (!it.value || IsActionRow(it)) return;  // a row of buttons has no value to name
+    wchar_t facts[160], value[64];
+    facts[0] = 0;
+    if (it.def != kNoDefault) {
+        FormatValue(it, it.def, value);
+        wsprintfW(facts, en ? L"Default: %s  ·  " : L"Типово: %s  ·  ", value);
+    }
+    FormatValue(it, *it.value, value);
+    wsprintfW(facts + lstrlenW(facts), en ? L"now: %s  ·  " : L"зараз: %s  ·  ", value);
+    const float right = x + w - 20;
+    const float fx = left + DrawFitted(facts, left, factsY, kMuted, 14, right - left);
+    wchar_t when[128];
+    const bool pending = Pending(it);
+    if (pending) {
+        FormatValue(it, it.boot, value);
+        wsprintfW(when, en ? L"applies after a restart (runs: %s)" : L"діє після перезапуску (працює: %s)", value);
+    } else if (RestartRow(it)) {
+        lstrcpyW(when, en ? L"applies after a restart" : L"діє після перезапуску");
+    } else {
+        lstrcpyW(when, it.key ? (en ? L"applies at once" : L"діє одразу") : (en ? L"applies at once, not saved" : L"діє одразу, не зберігається"));
+    }
+    if (right - fx > 24) DrawFitted(when, fx, factsY, pending ? kWarn : kMuted, 14, right - fx);
+}
+
 // A background colour with its alpha scaled by the menu opacity setting.
 u32 Fade(u32 c) {
     u32 a = (c >> 24) * (u32)g_cfg.menuOpacity / 100;
@@ -2654,12 +2804,12 @@ void Draw() {
 
     // the description box: word-wrapped to its width, in a smaller font when the text needs more lines than fit
     const float hintTop = kListBottom + 24, hintBottom = kListBottom + 116, hintW = kCr - kCx - 8;
-    FillRound(kCx - 12, kListBottom + 18, kCr - kCx + 24, hintBottom - kListBottom - 16, 10, Fade(kRaised));  // as the site's hint
+    FillRound(kCx - 12, kListBottom + kHintBoxTop, kCr - kCx + 24, kHintBoxBottom - kHintBoxTop, 10, Fade(kRaised));  // as the site's hint
     Item& cur = pg.items[g_sel];
     const bool en = g_cfg.language == 1;
     // A notice (the answer to a button of this page, a failure, a warning) takes the box for its few seconds, so it appears
     // right under the row that caused it and never over the page's title. Selecting another row after 1.5 s ends it early.
-    if (DrawNoticeInBox(kCx - 12, kListBottom + 18, kCr - kCx + 24, hintBottom - kListBottom - 16, g_page * 100000 + g_sel)) {
+    if (DrawNoticeInBox(kCx - 12, kListBottom + kHintBoxTop, kCr - kCx + 24, kHintBoxBottom - kHintBoxTop, g_page * 100000 + g_sel)) {
         // the selected row's description comes back when the notice is over
     } else if (g_editing) {
         wchar_t line[256];
@@ -2675,7 +2825,8 @@ void Draw() {
                          : L"Ширина (1920, 2560, 3840) або висота (1080, 1440, 2160): число менше 1280 вважається висотою.",
                       kCx + 4, hintTop + 19.f * (float)used, kFaint, 15, 19, hintW, 4 - used, true);
     } else {
-        const wchar_t* hint = Tx(cur.hint);
+        wchar_t made[512];
+        const wchar_t* hint = HintText(cur, made);
         // a row that waits names what runs until then; any other restart row only says when a change applies
         wchar_t note[128];
         const bool pending = Pending(cur);
@@ -2693,12 +2844,16 @@ void Draw() {
         int px = 15;
         float lh = 18;
         int room = (int)((hintBottom - hintTop) / lh) - reserved;
-        if (hint && DrawLines(hint, 0, 0, 0, px, lh, hintW, 99, false) > room) {
+        int lines = hint ? DrawLines(hint, 0, 0, 0, px, lh, hintW, 99, false) : 0;
+        if (lines > room) {
             px = 13;
             lh = 15;
             room = (int)((hintBottom - hintTop) / lh) - reserved;
+            lines = DrawLines(hint, 0, 0, 0, px, lh, hintW, 99, false);
         }
-        int used = hint ? DrawLines(hint, kCx + 4, hintTop, kMuted, px, lh, hintW, room, true) : 0;
+        // a text that is still too long ends with how to read all of it (the card, DrawHelpCard)
+        const wchar_t* more = lines > room ? (en ? L" F1 / R3: in full" : L" F1 / R3: повністю") : nullptr;
+        int used = hint ? DrawLinesEx(hint, kCx + 4, hintTop, kMuted, px, lh, hintW, 0, room, true, more, kFaint) : 0;
         if (restart) DrawFitted(note, kCx + 4, hintTop + lh * (float)used++ + 2, pending ? kWarn : kFaint, 13, hintW);
         if (changed) {
             wchar_t value[64], line[128];
@@ -2709,6 +2864,17 @@ void Draw() {
         }
     }
 
+    if (g_helpOpen) {  // over the list and the box; the key line under it is the card's
+        DrawHelpCard(cur);
+        if (g_padMode)
+            DrawPadLineImpl(en ? L"↑ ↓ scroll     {LT} {RT} a screen up / down     {B} {R3} close" : L"↑ ↓ гортати     {LT} {RT} на екран вище / нижче     {B} {R3} закрити",
+                            kCx, kPy + kPh - 36, kFaint, 13, kCr + 24 - kCx);
+        else
+            DrawFitted(en ? L"↑ ↓ or the wheel scroll     PgUp PgDn a screen     Esc or F1 close     a click outside the card closes"
+                          : L"↑ ↓ або колесо гортати     PgUp PgDn на екран     Esc або F1 закрити     клік поза карткою закриває",
+                       kCx, kPy + kPh - 36, kFaint, 13, kCr + 24 - kCx);
+        return;
+    }
     if (g_confirm) {
         DrawConfirm();
         return;
@@ -2717,16 +2883,16 @@ void Draw() {
         DrawPadLineImpl(en ? L"↑ ↓ select     ← → change / pick a button     {A} toggle / press / set a number     {B} close     {LB} {RB} section"
                            : L"↑ ↓ вибір     ← → змінити / вибрати кнопку     {A} вибрати / натиснути / число     {B} закрити     {LB} {RB} розділ",
                         kCx, kPy + kPh - 36, kFaint, 13, kCr + 24 - kCx);
-        DrawPadLineImpl(en ? L"{Y} default     {LT} {RT} a screen up / down     {OPEN} open / close the menu"
-                           : L"{Y} типове     {LT} {RT} на екран вище / нижче     {OPEN} відкрити / закрити меню",
+        DrawPadLineImpl(en ? L"{Y} default     {R3} whole description     {LT} {RT} a screen up / down     {OPEN} open / close the menu"
+                           : L"{Y} типове     {R3} увесь опис     {LT} {RT} на екран вище / нижче     {OPEN} відкрити / закрити меню",
                         kCx, kPy + kPh - 20, kFaint, 12, kCr + 24 - kCx);
         return;
     }
     DrawFitted(en ? L"↑ ↓ select     ← → change / pick a button     Enter type a number / press     Tab section     wheel / click     F10 or Esc close"
                   : L"↑ ↓ вибір     ← → змінити / вибрати кнопку     Enter ввести число / натиснути     Tab розділ     колесо / клік     F10 або Esc закрити",
                kCx, kPy + kPh - 36, kFaint, 13, kCr + 24 - kCx);
-    DrawFitted(en ? L"Backspace default     drag the header: move     drag the corner: resize     double-click the corner: reset"
-                  : L"Backspace типове     заголовок: перенести     куточок: розмір     подвійний клік по куточку: скинути",
+    DrawFitted(en ? L"Backspace default     F1 whole description     drag the header: move     drag the corner: resize     double-click the corner: reset"
+                  : L"Backspace типове     F1 увесь опис     заголовок: перенести     куточок: розмір     подвійний клік по куточку: скинути",
                kCx, kPy + kPh - 20, kFaint, 12, kCr + 24 - kCx);
 }
 
@@ -3183,6 +3349,7 @@ void OpenChanged(bool foreground) {
     g_editing = false;  // half-typed digits or a pending question must not wait for the next opening (and hit item 0)
     g_chipRow = -1;     // the button highlight starts on the first button again
     g_confirm = 0;
+    g_helpOpen = false;
     g_dragging = false;
     FlushUnsaved();
     Log("menu: %s", g_open ? "opened" : "closed");

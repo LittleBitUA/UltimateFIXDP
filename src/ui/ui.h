@@ -54,6 +54,11 @@ float DrawFitted(const wchar_t* text, float x, float y, u32 color, int px, float
 // it only counts them.
 int DrawLines(const wchar_t* text, float x, float y, u32 color, int px, float lineH, float maxW, int maxLines, bool draw,
               int weight = kRegular);
+// The same from line `skip` of the wrapped text on (a scrolled text keeps the wrap it has unscrolled), drawn from y. When the
+// text goes on past the last line, that line ends with "…" and then `tail` (null = nothing) in tailColor: the description box
+// says there how to read the rest. Returns the number of lines drawn, or with draw = false how many there would be.
+int DrawLinesEx(const wchar_t* text, float x, float y, u32 color, int px, float lineH, float maxW, int skip, int maxLines, bool draw,
+                const wchar_t* tail, u32 tailColor, int weight = kRegular);
 
 // A picture read from a file (PNG, JPG, BMP, DDS through d3dx9_43), cached by its path; `width` and `height` get the size
 // of the file, for cropping. Null when it cannot be read (tried once, logged once) and, for a frame, while another picture
