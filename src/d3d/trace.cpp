@@ -463,14 +463,16 @@ void WriteDrawFile(void* dev, u32 from, const wchar_t* path) {
 // at the end whatever their size, and the three strongest are explained in UltimateFix\hunt_<caller>_<shader>.txt with their
 // textures saved as PNG. Standing still keeps the picture the same from frame to frame.
 struct DrawGroup {
-    u32 from, shader;
+    u32 from, shader, tex0, tex1;  // a smoke of many particles shares its textures; the scenery behind it uses other ones
 };
 struct ScanHit {
     int group, gain, draws;
-    u32 from, shader, count;
+    u32 from, shader, count, tex0, tex1;
     char tex[4][40];
 };
-constexpr int kMaxGroups = 1024;
+constexpr int kMaxGroups = 4096;
+constexpr int kGroupSlots = 8192;  // open hash: group index + 1, 0 empty
+u16 g_groupSlot[kGroupSlots];
 DrawGroup g_groups[kMaxGroups];
 int g_groupCount = 0;
 struct DrawScan {
@@ -480,23 +482,31 @@ struct DrawScan {
     int frames, measured;
     int base, baseCount;   // running baseline (sum of R+G+B, 0..765)
     int first;             // brightness with every draw, -1 unknown
-    ScanHit all[kMaxGroups / 4];  // the strongest effects so far (kept sorted, largest gain first)
-    int allCount;
+    int allCount;          // groups measured
     int hits;
     int explain[3], explainCount, explainStep;
     DWORD lastNotice;
 } g_scan;
+ScanHit* g_effect = nullptr;  // per group (VirtualAlloc'd, kMaxGroups): its effect once measured, draws 0 = not measured
 ScanHit g_skipInfo;        // the left-out group in this frame: its first draw, and how many were left out
 int g_explainGroup = -1;   // explain the first draw of this group in the coming frame (not left out)
 int g_huntDraws = 0;       // the game's draws so far in this frame
 void* g_huntDev = nullptr;
 
-int GroupOf(u32 from, u32 shader, bool add) {
-    for (int k = 0; k < g_groupCount; ++k)
-        if (g_groups[k].from == from && g_groups[k].shader == shader) return k;
-    if (!add || g_groupCount >= kMaxGroups) return -1;
-    g_groups[g_groupCount] = {from, shader};
-    return g_groupCount++;
+int GroupOf(u32 from, u32 shader, u32 tex0, u32 tex1, bool add) {
+    u32 h = (from * 2654435761u) ^ (shader * 40503u) ^ (tex0 * 2246822519u) ^ (tex1 * 3266489917u);
+    for (int probe = 0; probe < kGroupSlots; ++probe, ++h) {
+        u16& slot = g_groupSlot[h & (kGroupSlots - 1)];
+        if (!slot) {
+            if (!add || g_groupCount >= kMaxGroups) return -1;
+            g_groups[g_groupCount] = {from, shader, tex0, tex1};
+            slot = (u16)(++g_groupCount);
+            return g_groupCount - 1;
+        }
+        const DrawGroup& g = g_groups[slot - 1];
+        if (g.from == from && g.shader == shader && g.tex0 == tex0 && g.tex1 == tex1) return slot - 1;
+    }
+    return -1;
 }
 
 void SaveStagePng(void* tex, int stage, u32 from) {
@@ -524,12 +534,13 @@ bool HuntSkips(void* dev, u32 from, UINT count) {
     if (!g_scan.on && g_explainGroup < 0) return false;
     g_huntDev = dev;
     ++g_huntDraws;
-    const u32 shader = (u32)(uintptr_t)g_curPs;
+    const u32 shader = (u32)(uintptr_t)g_curPs, tex0 = (u32)(uintptr_t)g_stageTex[0], tex1 = (u32)(uintptr_t)g_stageTex[1];
     if (g_scan.survey) {
-        GroupOf(from, shader, true);
+        GroupOf(from, shader, tex0, tex1, true);
         return false;
     }
-    if (g_explainGroup >= 0 && g_groups[g_explainGroup].from == from && g_groups[g_explainGroup].shader == shader) {
+    auto same = [&](const DrawGroup& g) { return g.from == from && g.shader == shader && g.tex0 == tex0 && g.tex1 == tex1; };
+    if (g_explainGroup >= 0 && same(g_groups[g_explainGroup])) {
         g_explainGroup = -1;
         char t[4][48];
         for (int st = 0; st < 4; ++st) DescribeTexture(g_stageTex[st], t[st]);
@@ -541,12 +552,13 @@ bool HuntSkips(void* dev, u32 from, UINT count) {
         return false;
     }
     if (!g_scan.on || g_scan.skipping < 0) return false;
-    const DrawGroup& gr = g_groups[g_scan.skipping];
-    if (gr.from != from || gr.shader != shader) return false;
+    if (!same(g_groups[g_scan.skipping])) return false;
     if (g_skipInfo.draws++ == 0) {
         g_skipInfo.from = from;
         g_skipInfo.shader = shader;
         g_skipInfo.count = count;
+        g_skipInfo.tex0 = tex0;
+        g_skipInfo.tex1 = tex1;
         for (int st = 0; st < 4; ++st) {
             char t[48];
             DescribeTexture(g_stageTex[st], t);
@@ -600,14 +612,30 @@ int MiddleBrightness(void* dev) {
 
 // Note: wsprintfA (Log) has no '+' flag; "%+d" shifted the arguments and a %s read a number as a string (a crash at the end of a scan).
 void NoteEffect(const ScanHit& h) {
-    const int cap = kMaxGroups / 4;
-    int at = g_scan.allCount;
-    while (at > 0 && g_scan.all[at - 1].gain < h.gain) --at;
-    if (at >= cap) return;
-    const int last = g_scan.allCount < cap ? g_scan.allCount : cap - 1;
-    for (int i = last; i > at; --i) g_scan.all[i] = g_scan.all[i - 1];
-    g_scan.all[at] = h;
-    if (g_scan.allCount < cap) ++g_scan.allCount;
+    if (!g_effect || h.group < 0 || h.group >= kMaxGroups) return;
+    g_effect[h.group] = h;
+    ++g_scan.allCount;
+}
+
+// The back buffer as the scan measures it, with the measured square in the middle, to UltimateFix\hunt_frame.png
+void SaveMeasuredFrame(void* dev) {
+    typedef HRESULT(WINAPI * SaveSurfFn)(const wchar_t*, DWORD, void*, const void*, const RECT*);
+    typedef HRESULT(WINAPI * GetBbFn)(void*, UINT, UINT, DWORD, void**);
+    typedef ULONG(WINAPI * RelFn)(void*);
+    HMODULE d3dx = GetModuleHandleW(L"d3dx9_43.dll");
+    SaveSurfFn save = d3dx ? (SaveSurfFn)(void*)GetProcAddress(d3dx, "D3DXSaveSurfaceToFileW") : nullptr;
+    void* bb = nullptr;
+    if (!save || !dev || FAILED(((GetBbFn)(*(void***)dev)[18])(dev, 0, 0, 0, &bb)) || !bb) return;
+    wchar_t path[MAX_PATH + 32];
+    wsprintfW(path, L"%sUltimateFix\\hunt_frame.png", g_paths.gameDir);
+    const HRESULT hr = save(path, 3 /*PNG*/, bb, nullptr, nullptr);
+    ((RelFn)(*(void***)bb)[2])(bb);
+    Log("hunt: the measured picture saved as %S (%s); the measured square is its middle 64x64", path, SUCCEEDED(hr) ? "ok" : "failed");
+}
+
+void LogEffect(const char* what, int rank, const ScanHit& h) {
+    Log("hunt: %s %d: %d without %d draws from %08X, shader %08X, s0 %08X s1 %08X (first: %u primitives): s0 %s | s1 %s | s2 %s | s3 %s", what, rank,
+        h.gain, h.draws, h.from, h.shader, h.tex0, h.tex1, h.count, h.tex[0], h.tex[1], h.tex[2], h.tex[3]);
 }
 
 void ScanFinish() {
@@ -615,14 +643,27 @@ void ScanFinish() {
     g_scan.skipping = -1;
     Log("hunt: scan done over %d groups (%d frames, %d measured), middle %d with everything, baseline %d; %d groups make it brighter by 12 or more",
         g_groupCount, g_scan.frames, g_scan.measured, g_scan.first, g_scan.base, g_scan.hits);
-    for (int i = 0; i < g_scan.allCount && i < 10; ++i) {
-        const ScanHit& h = g_scan.all[i];
-        Log("hunt: top %d: brighter by %d without %d draws from %08X, shader %08X (first: %u primitives): s0 %s | s1 %s | s2 %s | s3 %s", i + 1, h.gain,
-            h.draws, h.from, h.shader, h.count, h.tex[0], h.tex[1], h.tex[2], h.tex[3]);
-    }
+    // the ten that brighten the middle most, and the five that darken it most (these show that the measuring works)
+    bool used[kMaxGroups];
+    __builtin_memset(used, 0, sizeof(used));
     g_scan.explainCount = 0;
-    for (int i = 0; i < g_scan.allCount && i < 3; ++i)
-        if (g_scan.all[i].gain > 0) g_scan.explain[g_scan.explainCount++] = g_scan.all[i].group;
+    for (int rank = 1; rank <= 10 && g_effect; ++rank) {
+        int best = -1;
+        for (int k = 0; k < g_groupCount; ++k)
+            if (!used[k] && g_effect[k].draws && (best < 0 || g_effect[k].gain > g_effect[best].gain)) best = k;
+        if (best < 0) break;
+        used[best] = true;
+        LogEffect("brighter", rank, g_effect[best]);
+        if (g_scan.explainCount < 3 && g_effect[best].gain > 0) g_scan.explain[g_scan.explainCount++] = best;
+    }
+    for (int rank = 1; rank <= 5 && g_effect; ++rank) {
+        int worst = -1;
+        for (int k = 0; k < g_groupCount; ++k)
+            if (!used[k] && g_effect[k].draws && (worst < 0 || g_effect[k].gain < g_effect[worst].gain)) worst = k;
+        if (worst < 0) break;
+        used[worst] = true;
+        LogEffect("darker", rank, g_effect[worst]);
+    }
     g_scan.explainStep = 0;
     wchar_t uk[220], en[220];
     if (g_scan.measured == 0) {
@@ -650,6 +691,9 @@ void HuntFrame(bool k3, bool, bool, bool) {
             return;
         }
         __builtin_memset(&g_scan, 0, sizeof(g_scan));
+        __builtin_memset(g_groupSlot, 0, sizeof(g_groupSlot));
+        if (!g_effect) g_effect = (ScanHit*)VirtualAlloc(nullptr, sizeof(ScanHit) * kMaxGroups, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+        if (g_effect) __builtin_memset(g_effect, 0, sizeof(ScanHit) * kMaxGroups);
         g_groupCount = 0;
         g_scan.on = true;
         g_scan.survey = true;  // the coming frame lists the groups
@@ -663,7 +707,7 @@ void HuntFrame(bool k3, bool, bool, bool) {
     if (!g_scan.on) return;
     if (g_scan.survey) {
         g_scan.survey = false;
-        Log("hunt: scan started: %d draws of the game in the frame, %d groups (caller + pixel shader)", draws, g_groupCount);
+        Log("hunt: scan started: %d draws of the game in the frame, %d groups (caller + pixel shader + textures s0, s1)", draws, g_groupCount);
     }
     const int m = MiddleBrightness(g_huntDev);
     ++g_scan.frames;
@@ -672,6 +716,7 @@ void HuntFrame(bool k3, bool, bool, bool) {
         if (g_scan.first < 0) {
             g_scan.first = m;
             Log("hunt: middle brightness %d (0..765) with every draw", m);
+            SaveMeasuredFrame(g_huntDev);
         }
         if (g_scan.skipping < 0) {
             g_scan.base = g_scan.baseCount ? (g_scan.base * 3 + m) / 4 : m;
