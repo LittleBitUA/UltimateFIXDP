@@ -31,7 +31,8 @@ void FinalImagePass(void* device, void** shader, bool* failed, const char* name,
                     const char* const* profiles, int percent, const float* extra);
 // Xbox 360 look (xbox_look.cpp). Begin runs right before the game's final composite draw: when the bound pixel shader is the
 // game's composite, it is swapped for ours and true is returned; End then puts the shader and the constants back. The same
-// pair draws the smooth upscaling of the bloom and the depth of field ([Graphics] SmoothBloom), with the Xbox look off too.
+// pair draws the smooth upscaling of the bloom and the depth of field ([Graphics] SmoothBloom) and the dither against banding
+// ([Graphics] Dither), with the Xbox look off too.
 struct LookSaved {
     void* shader;        // the game's pixel shader (a reference is held until End)
     float constants[8];  // c20 and c21 as they were

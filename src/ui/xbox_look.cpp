@@ -35,6 +35,13 @@
 //    both with a cubic B-spline (four bilinear fetches); their sizes go into c23. Without the Xbox look the copy draws with
 //    the neutral constants (no grading, no soft highlights, no colour offset), so the colours stay those of the PC.
 //    Not a console feature: the Xbox showed the same buffers at 720p, where each of their texels covered fewer pixels.
+// 6. Dither against colour banding ([Graphics] Dither), with or without the Xbox look: the composite turns the HDR scene
+//    into the 8 bits of the back buffer in one step, so slow gradients (a night sky, fog, a dark room, the edge of a halo)
+//    become flat steps one level apart. Our copy adds a fixed noise of +-0.5 of one level (interleaved gradient noise of
+//    the pixel position, VPOS) right before that write: the steps break up into a pattern finer than the eye resolves.
+//    The same noise goes into the TV gamma pass (2 above), which re-curves the 8-bit picture and quantises it again. The
+//    noise does not move from frame to frame (moving noise reads as film grain), and pure black and pure white stay as
+//    they are (half a level rounds back). Without the Xbox look the copy draws with the neutral constants, as for 5.
 //
 // Nothing here was run in the game: the HLSL below is compiled on the player's machine by d3dx9_43, and a compile error
 // is written to the log and leaves the game's own shader in place.
@@ -61,6 +68,8 @@ enum { kAliasRegister = 17 };
 enum { kFirstRegister = 9, kOurRegister = 20, kSizeRegister = 23, kRegisterCount = 15 };
 // IDirect3DResource9::GetType (D3DRTYPE_TEXTURE = 3), and the two stages the smooth upscaling reads.
 enum { kResourceGetType = 10, kTypeTexture = 3, kBloomStage = 1, kBlurStage = 3 };
+// IDirect3DSurface9::GetDesc, for the one log line of the dither (the format of the target the composite writes).
+enum { kSurfaceGetDesc = 12 };
 
 typedef ULONG(WINAPI* ReleaseFn)(void*);
 typedef HRESULT(WINAPI* GetShaderFn)(void*, void**);
@@ -75,11 +84,13 @@ typedef HRESULT(WINAPI* GetSamplerFn)(void*, DWORD, DWORD, DWORD*);
 typedef HRESULT(WINAPI* LevelDescFn)(void*, UINT, u32*);
 typedef DWORD(WINAPI* GetTypeFn)(void*);
 typedef HRESULT(WINAPI* SetSamplerFn)(void*, DWORD, DWORD, DWORD);
+typedef HRESULT(WINAPI* GetTargetFn)(void*, DWORD, void**);
+typedef HRESULT(WINAPI* SurfaceDescFn)(void*, u32*);
 
 // The game's shader, statement for statement (disassembled from BD4638h), up to `col = col * gain + bloom`: depth of
 // field mix by the packed depth, the bluish night tone by the average luminance, exposure, bloom. The alpha is what the
 // game writes (scene alpha times the gain plus the bloom alpha). Then the tail: soft highlights, contrast as one
-// multiply-add (c20.xy, worked out on the CPU for the chosen formula), saturation, colour offset.
+// multiply-add (c20.xy, worked out on the CPU for the chosen formula), saturation, colour offset; with DITHER the noise.
 const char kLookSource[] =
     "sampler s0 : register(s0);\n"   // HDR scene
     "sampler s1 : register(s1);\n"   // bloom
@@ -118,7 +129,18 @@ const char kLookSource[] =
     "         g1.y * (g0.x * tex2D(s, float2(t0.x, t1.y)) + g1.x * tex2D(s, t1));\n"
     "}\n"
     "#endif\n"
-    "float4 main(float2 uv : TEXCOORD0) : COLOR {\n"
+    "#ifdef DITHER\n"
+    // Interleaved gradient noise (Jimenez 2014) of the pixel, 0..1: neighbouring pixels differ a lot, so the pattern has
+    // almost no low frequencies, and it is fixed on the screen. VPOS holds the pixel's position in the render target.
+    "float Ign(float2 pixel) {\n"
+    "  return frac(52.9829189 * frac(dot(pixel, float2(0.06711056, 0.00583715))));\n"
+    "}\n"
+    "#endif\n"
+    "float4 main(float2 uv : TEXCOORD0\n"
+    "#ifdef DITHER\n"
+    "            , float2 vpos : VPOS\n"
+    "#endif\n"
+    "            ) : COLOR {\n"
     "  float d = saturate(dot(tex2D(s4, uv).rgb, float3(65535.0, 255.0, 1.0)) * 0.0039215689) * 255.0;\n"
     "  float2 nf = c15.xz - d * c15.yw;\n"
     "  float blur = max(saturate(max(nf.x, 1.0 - nf.y)), c16.x);\n"
@@ -152,26 +174,38 @@ const char kLookSource[] =
     "  float grey = dot(col, float3(0.30, 0.59, 0.11));\n"
     "  col = grey + (col - grey) * c20.z;\n"
     "  col = col + c21.rgb;\n"
+    "#ifdef DITHER\n"
+    // +-0.5 of one 8-bit level, the same for the three channels (no coloured noise); the alpha is left as the game writes it
+    "  col = col + (Ign(vpos) - 0.5) * 0.0039215689;\n"
+    "#endif\n"
     "  return float4(col, sharp.a * gain + bloom.a);\n"
     "}\n";
 // The same text compiled with GAME_ALIAS defined is the copy for the game's 4-tap filter, with SMOOTH_BLOOM the one with
-// the smooth upscaling. The four copies are indexed by these bits and built when first needed.
+// the smooth upscaling, with DITHER the one with the dither. The eight copies are indexed by these bits and built when
+// first needed; the bits go by importance (XboxLookBegin gives up the lowest first when a copy cannot be built).
 const char kAliasDefine[] = "#define GAME_ALIAS 1\n";
 const char kSmoothDefine[] = "#define SMOOTH_BLOOM 1\n";
-enum { kCopyAlias = 1, kCopySmooth = 2, kCopyKinds = 4 };
-char g_copySource[sizeof(kAliasDefine) - 1 + sizeof(kSmoothDefine) - 1 + sizeof(kLookSource)];
+const char kDitherDefine[] = "#define DITHER 1\n";
+enum { kCopySmooth = 1, kCopyDither = 2, kCopyAlias = 4, kCopyKinds = 8 };
+char g_copySource[sizeof(kAliasDefine) - 1 + sizeof(kSmoothDefine) - 1 + sizeof(kDitherDefine) - 1 + sizeof(kLookSource)];
 // The game draws the composite with a vs_3_0 vertex shader, and Direct3D 9 pairs that only with a ps_3_0 pixel shader.
 const char* const kProfilesLook[] = {"ps_3_0", nullptr};
 
-// Per channel: the sRGB curve of a PC monitor undone, the BT.709 curve of a TV applied. c0.z = strength.
+// Per channel: the sRGB curve of a PC monitor undone, the BT.709 curve of a TV applied. c0.z = strength. The curve
+// stretches the dark levels of the 8-bit picture apart, so its result gets the composite's dither again, scaled by c1.x
+// (one 8-bit level with Dither=1, 0 without). ps_2_x has no VPOS: the pixel is uv / texel size (RunPass draws the copy
+// 1:1 over the back buffer, c0.xy = 1 / its size).
 const char kGammaSource[] =
     "sampler s0 : register(s0);\n"
     "float4 c0 : register(c0);\n"
+    "float4 c1 : register(c1);\n"  // x: dither amount (1/255 or 0)
     "float4 main(float2 uv : TEXCOORD0) : COLOR {\n"
     "  float3 c = tex2D(s0, uv).rgb;\n"
     "  float3 lin = lerp(c / 12.92, pow(abs((c + 0.055) / 1.055), 2.4), step(0.04045, c));\n"
     "  float3 tv = lerp(lin * 4.5, 1.099 * pow(max(lin, 0.000001), 0.45) - 0.099, step(0.018, lin));\n"
-    "  return float4(lerp(c, tv, c0.z), 1.0);\n"
+    "  float2 pixel = floor(uv / c0.xy);\n"
+    "  float noise = frac(52.9829189 * frac(dot(pixel, float2(0.06711056, 0.00583715)))) - 0.5;\n"
+    "  return float4(lerp(c, tv, c0.z) + noise * c1.x, 1.0);\n"
     "}\n";
 const char* const kProfilesGamma[] = {"ps_2_b", "ps_2_a", "ps_2_0", nullptr};
 
@@ -226,7 +260,7 @@ void NoteOtherComposite(void* shader) {
             known = true;
         }
         if (!known && g_otherCount < 8 && !g_cfg.xboxLook) {
-            // the smooth upscaling alone (on by default) only notes it: the files are for the Xbox look's support
+            // the smooth upscaling or the dither alone (on by default) only notes it: the files are for the Xbox look's support
             g_otherSeen[g_otherCount++] = h;
             Log("composite: this scene's composite is another shader (%u bytes, hash %08X), drawn as the game does", size, h);
         } else if (!known && g_otherCount < 8) {
@@ -297,7 +331,7 @@ void AliasOffsetBegin(void* dev, LookSaved* saved, bool graded) {
     Log("composite: the game's own 4-tap filter is on (mode %d, %s), offset %s; the game's c17 is half a pixel of %dx%d, "
         "scene %ux%u, output %ux%u, s0 filter min %u mag %u",
         g_cfg.gameAlias,
-        graded ? (g_cfg.xboxLook ? "the mod's copy with the Xbox grading" : "the mod's copy without grading, for the smooth bloom")
+        graded ? (g_cfg.xboxLook ? "the mod's copy with the Xbox grading" : "the mod's copy without grading, for the smooth bloom or the dither")
                : "the game's variant 31",
         saved->offset ? "a quarter of an output pixel" : (g_cfg.gameAlias == 2 ? "the game's (the mod's could not be set)" : "the game's"),
         gameW, gameH, desc[6], desc[7], (u32)vp.width, (u32)vp.height, (u32)minFilter, (u32)magFilter);
@@ -309,7 +343,7 @@ void AliasOffsetEnd(void* dev, const LookSaved* saved) {
 
 // c20 and c21 for our shader from the game's c11..c14 and the settings. The strength scales the parameters, so 0 gives
 // the neutral set (scale 1, offset 0, saturation 1, nothing added). With the Xbox look off (the copy draws only for the
-// smooth upscaling) the whole set is neutral, soft highlights and colour offset included: the PC colours.
+// smooth upscaling or the dither) the whole set is neutral, soft highlights and colour offset included: the PC colours.
 void LookConstants(const float* game, float* out) {
     if (!g_cfg.xboxLook) {
         const float neutral[8] = {1.f, 0.f, 1.f, 0.f, 0.f, 0.f, 0.f, 0.f};
@@ -379,14 +413,19 @@ void* CopyShader(void* dev, int kind) {
         __builtin_memcpy(p, kSmoothDefine, sizeof(kSmoothDefine) - 1);
         p += sizeof(kSmoothDefine) - 1;
     }
+    if (kind & kCopyDither) {
+        __builtin_memcpy(p, kDitherDefine, sizeof(kDitherDefine) - 1);
+        p += sizeof(kDitherDefine) - 1;
+    }
     __builtin_memcpy(p, kLookSource, sizeof(kLookSource));  // with its terminating zero
     const size_t length = (size_t)(p - g_copySource) + sizeof(kLookSource) - 1;
     if (!BuildPixelShader(dev, g_copySource, length, &g_copies[kind], kProfilesLook, "xboxlook")) {
         g_copies[kind] = nullptr;
         g_copyFailed[kind] = true;
         if (kind)
-            Log("xboxlook: the copy of the composite%s%s could not be built (d3dx9_43, ps_3_0)",
-                (kind & kCopyAlias) ? " with the game's 4-tap filter" : "", (kind & kCopySmooth) ? " with the smooth upscaling" : "");
+            Log("xboxlook: the copy of the composite%s%s%s could not be built (d3dx9_43, ps_3_0)",
+                (kind & kCopyAlias) ? " with the game's 4-tap filter" : "", (kind & kCopySmooth) ? " with the smooth upscaling" : "",
+                (kind & kCopyDither) ? " with the dither" : "");
     }
     return g_copies[kind];
 }
@@ -435,6 +474,23 @@ void SmoothFiltersEnd(void* dev, const LookSaved* saved) {
             Method<SetSamplerFn>(dev, kSetSamplerState)(dev, kSmoothStages[i >> 1], kSmoothFilters[i & 1], saved->filters[i]);
 }
 
+// One line the first time the dither is drawn: the target the composite writes (D3DFMT 21 A8R8G8B8 and 22 X8R8G8B8 are the
+// 8-bit ones the dither is for; on a 16-bit float target it changes nothing visible) and how the copy draws.
+void DitherLog(void* dev) {
+    static bool logged = false;
+    if (logged) return;
+    logged = true;
+    u32 desc[8] = {};  // Format, Type, Usage, Pool, MultiSampleType, MultiSampleQuality, Width, Height
+    void* target = nullptr;
+    if (SUCCEEDED(Method<GetTargetFn>(dev, kGetRenderTarget)(dev, 0, &target)) && target) {
+        Method<SurfaceDescFn>(target, kSurfaceGetDesc)(target, desc);
+        Method<ReleaseFn>(target, kRelease)(target);
+    }
+    Log("composite: dither against banding on (fixed interleaved gradient noise, +-0.5 of an 8-bit level); target %ux%u "
+        "format %u; drawn with the mod's copy of the composite (%s)",
+        desc[6], desc[7], desc[0], g_cfg.xboxLook ? "with the Xbox grading" : "no grading: the PC colours");
+}
+
 // One line when the smooth upscaling starts and whenever the buffer sizes change (a new resolution), at most 8 per run.
 // The game's filters as D3DTEXF: 1 point, 2 linear, 3 anisotropic.
 void SmoothLog(const u32* dims, const LookSaved* saved) {
@@ -456,13 +512,13 @@ void SmoothLog(const u32* dims, const LookSaved* saved) {
 
 // Also with every strength at 0: the shader then gives the game's own picture (neutral constants), which is the way to
 // check the copy against the original in the game, and the ENV numbers still reach the log. With the Xbox look off the
-// copy draws only for the smooth upscaling (SmoothBloom), with the neutral constants.
+// copy draws only for the smooth upscaling (SmoothBloom) or the dither (Dither), with the neutral constants.
 bool XboxLookBegin(void* dev, LookSaved* saved) {
     saved->offset = false;
     saved->smooth = false;
     saved->filterSet = 0;
     const bool grade = g_cfg.xboxLook != 0;
-    if (g_lookFailed || (!grade && !g_cfg.smoothBloom)) return false;
+    if (g_lookFailed || (!grade && !g_cfg.smoothBloom && !g_cfg.dither)) return false;
     void* shader = nullptr;
     if (FAILED(Method<GetShaderFn>(dev, kGetPixelShader)(dev, &shader)) || !shader) return false;
     const int variant = CompositeVariant(shader);
@@ -482,24 +538,35 @@ bool XboxLookBegin(void* dev, LookSaved* saved) {
         unsized = true;
         Log("composite: the bloom (s1) or the blur (s3) of a composite is not a plain 2D texture, that one is not smoothed");
     }
-    if (!grade && !smooth) {
+    bool dither = g_cfg.dither != 0;
+    if (!grade && !smooth && !dither) {
         Method<ReleaseFn>(shader, kRelease)(shader);
         return false;
     }
     // the game's 4-tap filter is on, or the game drew with it itself: the copy with the same taps
     bool alias = variant == 31 || g_cfg.gameAlias > 0;
-    int kind = (alias ? kCopyAlias : 0) | (smooth ? kCopySmooth : 0);
-    void* copy = CopyShader(dev, kind);
+    const int wanted = (alias ? kCopyAlias : 0) | (smooth ? kCopySmooth : 0) | (dither ? kCopyDither : 0);
+    // The most of what is wanted that builds: the subsets of the wanted bits from the largest number down, so the smoothing
+    // is given up first, then the dither, the filter last (the plain copy is the last try). Without the grading the filter
+    // is never given up (the game's own variant 31 draws it then, ssao.cpp) and the smoothing or the dither must remain,
+    // or the copy has nothing to do and the game's own shader draws.
+    void* copy = nullptr;
+    int kind = wanted;
+    for (int sub = wanted;; sub = (sub - 1) & wanted) {
+        const bool useful = grade || ((sub & kCopyAlias) == (wanted & kCopyAlias) && (sub & (kCopySmooth | kCopyDither)) != 0);
+        if (useful && (copy = CopyShader(dev, sub)) != nullptr) {
+            kind = sub;
+            break;
+        }
+        if (sub == 0) break;
+    }
     if (!copy && !grade) {
-        // the copy was only for the smoothing: the game's own shader draws (and its variant 31 for GameAliasFilter, ssao.cpp)
         Method<ReleaseFn>(shader, kRelease)(shader);
         return false;
     }
-    // with the grading: without the smoothing first, then without the filter, then the plain copy
-    const int tries[3] = {kind & ~kCopySmooth, kind & ~kCopyAlias, 0};
-    for (int i = 0; i < 3 && !copy; ++i) copy = CopyShader(dev, kind = tries[i]);
     alias = (kind & kCopyAlias) != 0;
     smooth = (kind & kCopySmooth) != 0;
+    dither = (kind & kCopyDither) != 0;
     float game[kRegisterCount * 4];
     const char* why = nullptr;
     if (!copy)
@@ -533,6 +600,7 @@ bool XboxLookBegin(void* dev, LookSaved* saved) {
         SmoothLog(dims, saved);
     }
     if (alias) AliasOffsetBegin(dev, saved, true);
+    if (dither) DitherLog(dev);
     if (grade && !g_lookLogged) {
         g_lookLogged = true;
         Log("xboxlook: the final composite is drawn with the mod's shader (grading %d%%, contrast formula %d, chroma formula %d, "
@@ -602,11 +670,16 @@ void XboxGammaFrame(void* dev) {
         Log("xboxlook gamma: the shader could not be built (d3dx9_43), the TV gamma is off");
         return;
     }
+    // c1 (and c2, FinalImagePass sets two registers): the dither amount; the pass's state block puts both back
+    const float extra[8] = {g_cfg.dither ? 0.0039215689f : 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f, 0.f};
     FinalImagePass(dev, &g_gammaShader, &g_gammaFailed, "xboxlook gamma", kGammaSource, sizeof(kGammaSource) - 1, kProfilesGamma,
-                   g_cfg.xboxGamma, nullptr);
-    if (!g_gammaLogged && !g_gammaFailed) {
+                   g_cfg.xboxGamma, extra);
+    static int loggedDither = -1;
+    if ((!g_gammaLogged || loggedDither != g_cfg.dither) && !g_gammaFailed) {
         g_gammaLogged = true;
-        Log("xboxlook gamma: the TV gamma pass is on for the finished picture (%d%%)", g_cfg.xboxGamma);
+        loggedDither = g_cfg.dither;
+        Log("xboxlook gamma: the TV gamma pass is on for the finished picture (%d%%), dither %s", g_cfg.xboxGamma,
+            g_cfg.dither ? "on" : "off");
     }
 }
 

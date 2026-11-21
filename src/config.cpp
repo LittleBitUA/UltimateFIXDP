@@ -232,6 +232,11 @@ static const char kDefaultIni[] =
     "; the buffers are already larger). The final picture is then drawn with the mod's copy of the game's shader, with the\r\n"
     "; PC colours unless XboxLook is on; if that copy cannot be built, the game's own shader draws. Changes at once.\r\n"
     "SmoothBloom=1\r\n"
+    "; 1 = a fixed, very fine noise of half a brightness level is added to the final picture just before it is stored with\r\n"
+    "; 8 bits per colour (and again after the TV gamma of XboxLook): smooth gradients in night skies, fog, dark rooms and\r\n"
+    "; around halos lose their contour bands. It does not move and is not visible as grain. Drawn by the same copy of the\r\n"
+    "; game's shader as SmoothBloom, with the PC colours unless XboxLook is on. Not a console feature. Changes at once.\r\n"
+    "Dither=1\r\n"
     "; The PC port darkens the picture by 0.85 (and 0.75 more in one cutscene state); the console did not.\r\n"
     "; 1 = remove the factors (about 15% brighter). Changes at once.\r\n"
     "XboxExposure=0\r\n"
@@ -802,6 +807,7 @@ void LoadConfig(const wchar_t* ini) {
     if (g_cfg.bloomStrength < 0) g_cfg.bloomStrength = 0;
     if (g_cfg.bloomStrength > 300) g_cfg.bloomStrength = 300;
     g_cfg.smoothBloom = GetPrivateProfileIntW(L"Graphics", L"SmoothBloom", 1, ini) ? 1 : 0;
+    g_cfg.dither = GetPrivateProfileIntW(L"Graphics", L"Dither", 1, ini) ? 1 : 0;
     g_cfg.exposureComp = (int)GetPrivateProfileIntW(L"Graphics", L"ExposureComp", 0, ini);
     if (g_cfg.exposureComp < -30) g_cfg.exposureComp = -30;
     if (g_cfg.exposureComp > 30) g_cfg.exposureComp = 30;
@@ -864,6 +870,7 @@ void LoadConfig(const wchar_t* ini) {
         g_cfg.ambientOcclusion = 0;
         g_cfg.xboxLook = 0;  // its composite hook (the SSAO one) and its world test are not installed in this mode
         g_cfg.smoothBloom = 0;  // the same composite hook
+        g_cfg.dither = 0;       // the same composite hook
         g_cfg.sharpen = 0;
         g_cfg.frameStats = 0;
         g_cfg.perfOverlay = 0;

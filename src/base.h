@@ -106,6 +106,7 @@ struct Config {
     int nearPlane;           // near plane of the play camera in tenths (game 10 = 1.0), 10..60: depth precision far away
     int bloomStrength;       // percent of the game's own bloom (100 = as the game)
     int smoothBloom;         // bloom and depth of field blur read with a cubic B-spline in the composite (the mod's copy of it)
+    int dither;              // fixed +-0.5/255 noise before the 8-bit write of the composite and the TV gamma pass (banding)
     int exposureComp;        // exposure compensation in tenths of a stop (-30..30)
     int fullscreenEdgeFix;   // full-screen 2D quads (fades, item notice) cover the last pixel row and column above 720p
     int gameLook;            // a photo filter applied all the time (0 = none), [Graphics] GameLook
