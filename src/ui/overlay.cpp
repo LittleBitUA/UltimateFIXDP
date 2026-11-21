@@ -5,6 +5,7 @@
 // saved with a state block and restored afterwards; the game never notices.
 #include "ui.h"
 #include "d3d9.h"
+#include "theme.h"
 
 namespace ufx {
 namespace ui {
@@ -381,6 +382,179 @@ void FillRect(float x, float y, float w, float h, u32 argb) {
     Quad(x0, y0, x1, y1, argb, 0.f, 0.f, 1.f, 1.f);
 }
 
+// ---- Rounded shapes ---------------------------------------------------------------------------------------------
+// One white disk whose alpha is its coverage. A rounded rectangle is nine quads cut from it: the four corners take the four
+// quarters of the disk, the edges and the middle its solid centre, so one texture serves every radius and the straight edges
+// stay on whole pixels. The disk carries its own smaller levels, each drawn at its own size: a corner of 9 pixels samples a
+// quarter of 32 texels, and with the big level alone the bilinear sampler would skip texels and the curve would step.
+// MANAGED like the text textures, so a Reset does not lose it; it is still let go before one with the other overlay
+// resources and made again at the next use.
+namespace {
+constexpr int kDiskSize = 64, kDiskLevels = 7;  // 64, 32, 16, 8, 4, 2, 1
+void* g_disk = nullptr;
+bool g_diskFailed = false;  // CreateTexture or LockRect failed: the shapes stay square for the session
+
+float Sqrt(float x) { float r; __asm__("fsqrt" : "=t"(r) : "0"(x)); return r; }
+
+bool MakeDisk() {
+    typedef HRESULT(WINAPI * CreateTextureFn)(void*, UINT, UINT, UINT, DWORD, DWORD, DWORD, void**, void*);
+    typedef HRESULT(WINAPI * LockFn)(void*, UINT, LockedRect*, const RECT*, DWORD);
+    typedef HRESULT(WINAPI * UnlockFn)(void*, UINT);
+    void* tex = nullptr;
+    HRESULT hr = Method<CreateTextureFn>(g_dev, kCreateTexture)(g_dev, kDiskSize, kDiskSize, kDiskLevels, 0, 21 /*A8R8G8B8*/,
+                                                                 1 /*MANAGED*/, &tex, nullptr);
+    if (FAILED(hr) || !tex) {
+        Log("overlay: rounded shapes unavailable (CreateTexture %08X), square fallback", (u32)hr);
+        return false;
+    }
+    for (int level = 0; level < kDiskLevels; ++level) {
+        const int size = kDiskSize >> level;
+        const float radius = (float)size * 0.5f;
+        LockedRect lr;
+        if (FAILED(Method<LockFn>(tex, kTexLockRect)(tex, (UINT)level, &lr, nullptr, 0))) {
+            Method<ReleaseFn>(tex, kRelease)(tex);
+            Log("overlay: rounded shapes unavailable (LockRect of level %d), square fallback", level);
+            return false;
+        }
+        for (int y = 0; y < size; ++y) {
+            u32* row = (u32*)((u8*)lr.bits + (size_t)y * lr.pitch);
+            for (int x = 0; x < size; ++x) {
+                const float dx = (float)x + 0.5f - radius, dy = (float)y + 0.5f - radius;
+                float a = radius + 0.5f - Sqrt(dx * dx + dy * dy);  // the share of the texel inside the circle, to a good guess
+                if (a < 0.f) a = 0.f;
+                if (a > 1.f) a = 1.f;
+                row[x] = ((u32)(a * 255.f + 0.5f) << 24) | 0x00FFFFFF;
+            }
+        }
+        Method<UnlockFn>(tex, kTexUnlockRect)(tex, (UINT)level);
+    }
+    g_disk = tex;
+    static bool logged = false;
+    if (!logged) {
+        logged = true;
+        Log("overlay: rounded shapes ready (%dx%d disk, %d levels)", kDiskSize, kDiskSize, kDiskLevels);
+    }
+    return true;
+}
+
+void ReleaseDisk() {
+    if (g_disk) Method<ReleaseFn>(g_disk, kRelease)(g_disk);
+    g_disk = nullptr;
+}
+
+// Binds the disk with the colour from the vertex and alpha = coverage x vertex alpha (as DrawText), and trilinear filtering
+// so the small corners take the small levels. False = no disk, draw square.
+bool BeginRound() {
+    if (!g_disk) {
+        if (g_diskFailed) return false;
+        if (!MakeDisk()) {
+            g_diskFailed = true;
+            return false;
+        }
+    }
+    typedef HRESULT(WINAPI * SetTexFn)(void*, DWORD, void*);
+    Method<SetTexFn>(g_dev, kSetTexture)(g_dev, 0, g_disk);
+    SetTSS(TSS_COLOROP, TOP_SELECTARG2);
+    SetTSS(TSS_COLORARG2, TA_DIFFUSE);
+    SetTSS(TSS_ALPHAOP, TOP_MODULATE);
+    SetTSS(TSS_ALPHAARG1, TA_TEXTURE);
+    SetTSS(TSS_ALPHAARG2, TA_DIFFUSE);
+    SetSampler(SAMP_MIPFILTER, 2);     // LINEAR between the levels
+    SetSampler(SAMP_MIPMAPLODBIAS, 0);  // the game's own bias or level limit must not blur or sharpen the corners
+    SetSampler(SAMP_MAXMIPLEVEL, 0);
+    return true;
+}
+
+// The overlay's sampler as BeginOverlay set it (the text textures have one level; the state block restores the rest).
+void EndRound() { SetSampler(SAMP_MIPFILTER, 0); }
+
+// A rounded rectangle in back buffer pixels, x0..x1 and y0..y1 on whole pixels, corner radius r in pixels (any fraction).
+void RoundPixels(float x0, float y0, float x1, float y1, float r, u32 argb) {
+    if (x1 <= x0 || y1 <= y0) return;
+    const float half = (x1 - x0 < y1 - y0 ? x1 - x0 : y1 - y0) * 0.5f;
+    if (r > half) r = half;
+    if (r < 0.f) r = 0.f;
+    // The columns and rows of the nine parts. A pill has no straight middle: its two inner lines are the same line, and the
+    // empty parts are left out (two triangles sharing an edge never leave a gap or cover a pixel twice).
+    float xs[4] = {x0, x0 + r, x1 - r, x1}, ys[4] = {y0, y0 + r, y1 - r, y1};
+    if (xs[2] < xs[1]) xs[1] = xs[2] = (x0 + x1) * 0.5f;
+    if (ys[2] < ys[1]) ys[1] = ys[2] = (y0 + y1) * 0.5f;
+    const float uv[4] = {0.f, 0.5f, 0.5f, 1.f};  // the middle parts sample the solid centre of the disk
+    Vertex v[54];
+    UINT count = 0;
+    for (int j = 0; j < 3; ++j)
+        for (int i = 0; i < 3; ++i) {
+            if (xs[i + 1] <= xs[i] || ys[j + 1] <= ys[j]) continue;
+            const float a = xs[i] - 0.5f, b = xs[i + 1] - 0.5f, c = ys[j] - 0.5f, d = ys[j + 1] - 0.5f;  // as in Quad
+            const float u0 = uv[i], u1 = uv[i + 1], v0 = uv[j], v1 = uv[j + 1];
+            Vertex* q = &v[count];
+            q[0] = {a, c, 0.f, 1.f, argb, u0, v0};
+            q[1] = {b, c, 0.f, 1.f, argb, u1, v0};
+            q[2] = {a, d, 0.f, 1.f, argb, u0, v1};
+            q[3] = {b, c, 0.f, 1.f, argb, u1, v0};
+            q[4] = {b, d, 0.f, 1.f, argb, u1, v1};
+            q[5] = {a, d, 0.f, 1.f, argb, u0, v1};
+            count += 6;
+        }
+    if (!count) return;
+    typedef HRESULT(WINAPI * DrawUpFn)(void*, DWORD, UINT, const void*, UINT);
+    Method<DrawUpFn>(g_dev, kDrawPrimitiveUP)(g_dev, 4 /*TRIANGLELIST*/, count / 3, v, sizeof(Vertex));
+}
+
+// A border of `units` layout units in whole pixels, at least one.
+float BorderPixels(float units) {
+    const float p = SnapWhole(units * ScaleY());
+    return p < 1.f ? 1.f : p;
+}
+}  // namespace
+
+void FillRound(float x, float y, float w, float h, float r, u32 argb) {
+    if (w == 0.f || h == 0.f) return;
+    if (r <= 0.f || !BeginRound()) {
+        FillRect(x, y, w, h, argb);
+        return;
+    }
+    float x0, x1, y0, y1;
+    SnapSpan(x, w, ScaleX(), &x0, &x1);
+    SnapSpan(y, h, ScaleY(), &y0, &y1);
+    RoundPixels(x0, y0, x1, y1, r * ScaleY(), argb);
+    EndRound();
+}
+
+void FillRoundFramed(float x, float y, float w, float h, float r, u32 fill, u32 frame, float frameWidth) {
+    if (w == 0.f || h == 0.f) return;
+    if (r <= 0.f || !BeginRound()) {  // square: the frame as a rectangle under the inside
+        FillRect(x, y, w, h, frame);
+        const float b = BorderPixels(frameWidth) / ScaleX();
+        FillRect(x + b, y + b, w - 2 * b, h - 2 * b, fill);
+        return;
+    }
+    float x0, x1, y0, y1;
+    SnapSpan(x, w, ScaleX(), &x0, &x1);
+    SnapSpan(y, h, ScaleY(), &y0, &y1);
+    const float rp = r * ScaleY(), b = BorderPixels(frameWidth);
+    RoundPixels(x0, y0, x1, y1, rp, frame);
+    RoundPixels(x0 + b, y0 + b, x1 - b, y1 - b, rp > b ? rp - b : 0.f, fill);
+    EndRound();
+}
+
+void Switch(float x, float y, bool on) {
+    float x0, x1, y0, y1;
+    SnapSpan(x, kSwitchW, ScaleX(), &x0, &x1);
+    SnapSpan(y, kSwitchH, ScaleY(), &y0, &y1);
+    // the knob is inset 3 units (18 of 24 at 1x, as the site's switch), in whole pixels on every side
+    const float inset = SnapWhole(3.f * ScaleY()), knob = (y1 - y0) - 2.f * inset;
+    const float kx = on ? x1 - inset - knob : x0 + inset;
+    if (!BeginRound()) {  // square, as the switch was before
+        FillRect(x, y, kSwitchW, kSwitchH, on ? theme::kAccent : theme::kLine2);
+        FillRect(kx / ScaleX(), (y0 + inset) / ScaleY(), knob / ScaleX(), knob / ScaleY(), theme::kWhite);
+        return;
+    }
+    RoundPixels(x0, y0, x1, y1, (y1 - y0) * 0.5f, on ? theme::kAccent : theme::kLine2);
+    RoundPixels(kx, y0 + inset, kx + knob, y0 + inset + knob, knob * 0.5f, theme::kWhite);
+    EndRound();
+}
+
 float TextWidth(const wchar_t* text, int px, int weight) {
     TextEntry* e = GetText(text, FontPx(px), weight);
     return e ? (float)(e->width - 4) / ScaleX() : 0.f;
@@ -631,8 +805,8 @@ void PerfOverlayFrame(void* dev, double fps, double frameMs, double presentMs, d
     }
     if (!OverlayBegin(dev)) return;
     FillRect(8, 8, 520, 44, 0xB0000000);
-    DrawText(line1, 14, 10, 0xFFFFFFFF, 16);
-    DrawText(line2, 14, 30, 0xFFC4C4CE, 13);
+    DrawText(line1, 14, 10, theme::kWhite, 16);
+    DrawText(line2, 14, 30, theme::kMuted, 13);
     OverlayEnd();
 }
 
@@ -686,15 +860,15 @@ void FrameStatsPanel(void* dev, double totalMs, double gameMs, double physicsMs,
     static const wchar_t* const namesEn[7] = {L"Total:", L"Game (CPU):", L"  of it physics:", L"Present:", L"Worst:", L"Mod passes:", L"Game thread busy:"};
     const wchar_t* const* names = g_cfg.language == 1 ? namesEn : namesUk;
     for (int i = 0; i < 7; ++i) {
-        DrawText(names[i], x + 8.f, y + 6.f + 17.f * (float)i, i == 2 ? 0xFFA8A8B4 : 0xFFE8E8F0, 13);
+        DrawText(names[i], x + 8.f, y + 6.f + 17.f * (float)i, i == 2 ? theme::kFaint : theme::kText, 13);
         float tw = TextWidth(t[i], 13);
-        DrawText(t[i], x + w - 8.f - tw, y + 6.f + 17.f * (float)i, i == 0 ? 0xFFFFFFFF : 0xFFC4C4CE, 13);
+        DrawText(t[i], x + w - 8.f - tw, y + 6.f + 17.f * (float)i, i == 0 ? theme::kWhite : theme::kMuted, 13);
     }
     wchar_t foot[64];
     const bool en = g_cfg.language == 1;
     const wchar_t* api = g_usingDxvk ? L"DXVK" : g_d3dWrapper ? (en ? L"D3D9 (wrapper)" : L"D3D9 (обгортка)") : L"D3D9";
     wsprintfW(foot, en ? L"%d FPS   %d Hz   %s" : L"%d FPS   %d Гц   %s", totalMs > 0.0 ? (int)(1000.0 / totalMs + 0.5) : 0, hz, api);
-    DrawText(foot, x + 8.f, y + 6.f + 17.f * 7.f, 0xFFA8A8B4, 12);
+    DrawText(foot, x + 8.f, y + 6.f + 17.f * 7.f, theme::kFaint, 12);
     // graph of the last 120 frames: the scale is 2 x 16.7 ms (60 frames/s) or the worst frame; a thin line marks 16.7 ms
     double scale = 33.4;
     for (int i = 0; i < 120; ++i)
@@ -706,14 +880,15 @@ void FrameStatsPanel(void* dev, double totalMs, double gameMs, double physicsMs,
         float h = (float)(v / scale) * gh;
         if (h > gh) h = gh;
         if (h < 1.f) h = 1.f;
-        FillRect(gx + (float)i * bw, gy - h, bw > 1.f ? bw - 0.4f : bw, h, v > totalMs * 1.6 + 2.0 ? 0xFFE05050 : 0xFFB8B8C4);
+        FillRect(gx + (float)i * bw, gy - h, bw > 1.f ? bw - 0.4f : bw, h, v > totalMs * 1.6 + 2.0 ? theme::kAccentHi : theme::kMuted);
     }
     FillRect(gx, gy - (float)(16.7 / scale) * gh, w - 16.f, 1.f, 0x90FFFFFF);
     OverlayEnd();
 }
 
 // Before a Reset: the copy is a default-pool texture, and the reused state block holds references to the game's
-// textures, so both must go (they are made again on the next frame).
+// textures, so both must go (they are made again on the next frame). The disk of the rounded shapes goes too, though a
+// managed texture would survive: it is made again at the next rounded shape.
 namespace {
 void ReleaseAoTargets();  // the horizon-based occlusion's two targets (below)
 }  // namespace
@@ -723,6 +898,7 @@ void ReleasePostResources() {
     ReleaseAoTargets();
     ReleaseSmaaTargets();
     ReleaseStateBlockCache();
+    ReleaseDisk();
 }
 
 namespace {

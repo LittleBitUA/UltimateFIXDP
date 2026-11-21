@@ -24,6 +24,16 @@ inline float SnapWhole(float v) {
 }
 
 void FillRect(float x, float y, float w, float h, u32 argb);
+// A rectangle with rounded corners of radius r (layout units; at most half the shorter side, so r = h / 2 is a pill). The
+// straight edges lie on whole pixels like FillRect's, the corners are anti-aliased. Without the disk texture it is drawn
+// square by FillRect.
+void FillRound(float x, float y, float w, float h, float r, u32 argb);
+// The same with a border of `frameWidth` layout units (whole pixels, at least one) in `frame` and the inside in `fill`.
+void FillRoundFramed(float x, float y, float w, float h, float r, u32 fill, u32 frame, float frameWidth = 1.f);
+// The on/off switch of the menu and the mods page: a pill (red when on, grey when off) with a round white knob, its top-left
+// corner at x,y. The knob is centred in back buffer pixels, so it sits evenly in the track at every scale.
+constexpr float kSwitchW = 40, kSwitchH = 24;
+void Switch(float x, float y, bool on);
 // Draws text with its top-left corner at x,y. Returns the width in layout units. One string is at most 255 characters
 // (longer ones are not drawn): long texts are wrapped by the caller.
 float DrawText(const wchar_t* text, float x, float y, u32 argb, int pixelHeight, int weight = kRegular);

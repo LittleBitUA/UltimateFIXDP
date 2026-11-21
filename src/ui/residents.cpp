@@ -4,12 +4,13 @@
 // A row says what the timetable says, not where the person stands: the game can send a resident on the way before the next entry
 // begins (FUN_004C6EC0 weighs the travel time), and some entries only pass them on ("next.table", "dummy").
 #include "ui.h"
+#include "theme.h"
 
 namespace ufx {
 namespace ui {
 namespace {
 
-constexpr u32 kText = 0xFFF2F2F5, kSoft = 0xFFC4C4CE, kDim = 0xFF9696A4, kAccent = 0xFFD0343C, kLine = 0xFF2A2A34;  // the menu's colours
+using namespace theme;  // the menu's colours (theme.h)
 constexpr float kRowH = 22;
 constexpr int kMaxRows = 50;  // NPC_LIST has 50 records
 
@@ -328,12 +329,12 @@ void ResidentsScroll(int rows) { g_scroll += rows; }
 void ResidentsPage(float left, float top, float right, float bottom) {
     Refresh();
     const bool en = English();
-    DrawText(en ? L"wheel or ↑ ↓ scroll     Tab section     F10 or Esc close" : L"колесо або ↑ ↓ прокрутка     Tab розділ     F10 або Esc закрити", left, bottom + 8, kDim, 13);
+    DrawText(en ? L"wheel or ↑ ↓ scroll     Tab section     F10 or Esc close" : L"колесо або ↑ ↓ прокрутка     Tab розділ     F10 або Esc закрити", left, bottom + 8, kFaint, 13);
     if (g_count < 0) {
         const wchar_t* why = en ? L"Off: SafeMode is on, or this DP.exe is not the supported build." : L"Вимкнено: увімкнено безпечний режим (SafeMode) або це не та версія DP.exe.";
         if (g_count == kScheduleNoGame) why = en ? L"The timetable shows while a game is played: load a save or start a game." : L"Розклад видно під час гри: завантажте збереження або почніть гру.";
         else if (g_count == kScheduleNotInUse) why = en ? L"Right now the game does not lead the residents by a timetable (some chapters and places)." : L"Зараз гра не веде жителів за розкладом (так буває в деяких розділах і місцях).";
-        Fitted(why, left, top, kSoft, 15, right - left);
+        Fitted(why, left, top, kMuted, 15, right - left);
         return;
     }
     wchar_t line[160];
@@ -342,21 +343,21 @@ void ResidentsPage(float left, float top, float right, float bottom) {
     Fitted(line, left, top, kText, 15, right - left);
     Fitted(en ? L"By the game's timetable: a person may still be on the way."
               : L"За розкладом гри: людина може бути ще в дорозі.",
-           left, top + 22, kDim, 13, right - left);
+           left, top + 22, kFaint, 13, right - left);
 
     const float nameW = 112, width = right - left;
     const float nowX = left + nameW, nextX = nowX + (width - nameW) * 0.54f;
     const float headY = top + 50, listTop = headY + 24;
-    DrawText(en ? L"Resident" : L"Житель", left, headY, kAccent, 13, kSemibold);
-    DrawText(en ? L"Now (since)" : L"Зараз (від)", nowX, headY, kAccent, 13, kSemibold);
-    DrawText(en ? L"Next (from)" : L"Далі (від)", nextX, headY, kAccent, 13, kSemibold);
+    DrawText(en ? L"Resident" : L"Житель", left, headY, kAccentHi, 13, kSemibold);
+    DrawText(en ? L"Now (since)" : L"Зараз (від)", nowX, headY, kAccentHi, 13, kSemibold);
+    DrawText(en ? L"Next (from)" : L"Далі (від)", nextX, headY, kAccentHi, 13, kSemibold);
     FillRect(left, headY + 19, width, 1, kLine);
 
     int visible = (int)((bottom - listTop) / kRowH);
     if (visible < 1) visible = 1;
     if (g_scroll > g_count - visible) g_scroll = g_count - visible;
     if (g_scroll < 0) g_scroll = 0;
-    if (g_count == 0) DrawText(en ? L"The loaded timetables have no residents." : L"У завантажених розкладах немає жителів.", left, listTop, kSoft, 15);
+    if (g_count == 0) DrawText(en ? L"The loaded timetables have no residents." : L"У завантажених розкладах немає жителів.", left, listTop, kMuted, 15);
     for (int i = 0; i < visible && g_scroll + i < g_count; ++i) {
         const ResidentRow& r = g_rows[g_order[g_scroll + i]];
         const float y = listTop + (float)i * kRowH;
@@ -365,17 +366,17 @@ void ResidentsPage(float left, float top, float right, float bottom) {
         Fitted(text, left, y, kText, 15, nameW - 8);
         EntryText(r.nowHour, r.nowMinute, r.nowPlace, r.nowAction, text);
         const bool onIt = OnTimetable(r);
-        Fitted(text, nowX, y, onIt ? kSoft : kDim, 14, nextX - nowX - 12);
+        Fitted(text, nowX, y, onIt ? kMuted : kFaint, 14, nextX - nowX - 12);
         if (!onIt) continue;
         if (r.nextHour < 0) lstrcpyW(text, en ? L"all day" : L"весь день");
         else EntryText(r.nextHour, r.nextMinute, r.nextPlace, r.nextAction, text);
-        Fitted(text, nextX, y, kDim, 14, right - nextX);
+        Fitted(text, nextX, y, kFaint, 14, right - nextX);
     }
     if (g_count > visible) {  // the same slim scroll bar as the settings pages
         const float trackH = (float)visible * kRowH, frac = (float)visible / (float)g_count;
         const float pos = (float)g_scroll / (float)(g_count - visible);
-        FillRect(right + 14, listTop, 4, trackH, kLine);
-        FillRect(right + 12, listTop + (trackH - trackH * frac) * pos, 8, trackH * frac, kDim);
+        FillRound(right + 14, listTop, 4, trackH, 2, kLine);
+        FillRound(right + 12, listTop + (trackH - trackH * frac) * pos, 8, trackH * frac, 4, kFaint);
     }
 }
 

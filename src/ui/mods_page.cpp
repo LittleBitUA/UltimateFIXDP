@@ -2,14 +2,14 @@
 // saved at once and used from the next start, because the text and the textures are loaded when the game starts.
 #include "../base.h"
 #include "ui.h"
+#include "theme.h"
 
 namespace ufx {
 namespace ui {
 namespace {
 
-constexpr u32 kText = 0xFFF2F2F5, kSoft = 0xFFC4C4CE, kDim = 0xFF9696A4, kAccent = 0xFFD0343C, kLine = 0xFF2A2A34,
-              kRowSel = 0xFF1D1D26, kOn = 0xFF35C27A, kOff = 0xFF3C3C48, kAmber = 0xFFE5A83A;
-constexpr float kRowH = 52, kSwitchW = 46, kSwitchH = 22, kButtonW = 30, kButtonH = 26;
+using namespace theme;  // the menu's colours (theme.h); the switch is the menu's too (ui.h)
+constexpr float kRowH = 52, kButtonW = 30, kButtonH = 26;
 
 int g_sel = 0;     // the selected row: 0..ModCount()-1 are mods, ModCount() is "open the folder"
 int g_scroll = 0;  // the first row shown
@@ -55,15 +55,12 @@ void Contents(const ModInfo& m, int index, wchar_t* out) {
     wsprintfW(out, L"%s%s%s%s%s", text, text[0] && tex[0] ? L" · " : L"", tex, (text[0] || tex[0]) && files[0] ? L" · " : L"", files);
 }
 
-void Switch(float x, float y, bool on) {
-    FillRect(x, y, kSwitchW, kSwitchH, on ? kOn : kOff);
-    FillRect(on ? x + kSwitchW - kSwitchH + 3 : x + 3, y + 3, kSwitchH - 6, kSwitchH - 6, 0xFFFFFFFF);
-}
-
+// A quiet button like the menu's: raised, a hairline border, rounded corners. One that does nothing here has no border.
 void Button(float x, float y, const wchar_t* label, bool enabled) {
-    FillRect(x, y, kButtonW, kButtonH, enabled ? 0xFF2E2E3A : 0xFF1A1A22);
+    if (enabled) FillRoundFramed(x, y, kButtonW, kButtonH, 6, kRaised, kLine2);
+    else FillRound(x, y, kButtonW, kButtonH, 6, kRaised);
     const float w = TextWidth(label, 15);
-    DrawText(label, x + (kButtonW - w) / 2, y + 4, enabled ? kText : kOff, 15);
+    DrawText(label, x + (kButtonW - w) / 2, y + 4, enabled ? kText : kLine2, 15);
 }
 
 void ClampSelection() {
@@ -113,30 +110,30 @@ void ModsPage(float left, float top, float right, float bottom) {
     const int count = ModCount();
     ClampSelection();
     DrawText(T(L"↑ ↓ вибір     Enter вмк./вимк.     ← → вище / нижче     Tab розділ     F10 або Esc закрити",
-               L"↑ ↓ select     Enter on/off     ← → higher / lower     Tab section     F10 or Esc close"), left, bottom + 8, kDim, 13);
+               L"↑ ↓ select     Enter on/off     ← → higher / lower     Tab section     F10 or Esc close"), left, bottom + 8, kFaint, 13);
 
     float y = top;
     if (ModsChanged()) {
         Fitted(T(L"Зміни збережено. Вони почнуть діяти після перезапуску гри: текст і текстури вантажаться на старті.",
-                 L"Saved. The changes take effect after the game is restarted: text and textures are loaded at start."), left, y, kAmber, 15, right - left);
+                 L"Saved. The changes take effect after the game is restarted: text and textures are loaded at start."), left, y, kWarn, 15, right - left);
     } else {
         Fitted(T(L"Мод вище в списку перекриває ті, що нижче. Текст береться з першого ввімкненого мода з текстом.",
-                 L"A mod higher in the list wins over the ones below. Text comes from the first mod that is on and has text."), left, y, kSoft, 15, right - left);
+                 L"A mod higher in the list wins over the ones below. Text comes from the first mod that is on and has text."), left, y, kMuted, 15, right - left);
     }
     y += 28;
     if (count == 0) {
         Fitted(T(L"Модів ще немає. Кожен мод це тека в UltimateFix\\mods\\ (поруч із DP.exe):", L"No mods yet. Each mod is a folder in UltimateFix\\mods\\ (next to DP.exe):"),
                left, y, kText, 15, right - left);
         Fitted(T(L"  text\\       mes_all.json і glyphmap.json із SWERY Localization Tool (переклад)", L"  text\\       mes_all.json and glyphmap.json from the SWERY Localization Tool (a translation)"),
-               left, y + 24, kSoft, 15, right - left);
-        Fitted(T(L"  textures\\   заміни текстур <хеш>.dds або .png", L"  textures\\   texture replacements <hash>.dds or .png"), left, y + 46, kSoft, 15, right - left);
+               left, y + 24, kMuted, 15, right - left);
+        Fitted(T(L"  textures\\   заміни текстур <хеш>.dds або .png", L"  textures\\   texture replacements <hash>.dds or .png"), left, y + 46, kMuted, 15, right - left);
         Fitted(T(L"  будь-що     файли гри просто в теці мода: fontwide.xpc, mes_all.mes, FONTWIDE.DDS, або шлях UPDATA\\...", L"  anything    game files right in the mod folder: fontwide.xpc, mes_all.mes, FONTWIDE.DDS, or a path UPDATA\\..."),
-               left, y + 68, kSoft, 15, right - left);
+               left, y + 68, kMuted, 15, right - left);
         Fitted(T(L"  mod.txt     Назва: , Автор: , Версія: , Опис:  (необов'язково, UTF-8; або mod.ini)", L"  mod.txt     Name: , Author: , Version: , Description:  (optional, UTF-8; or mod.ini)"),
-               left, y + 90, kSoft, 15, right - left);
+               left, y + 90, kMuted, 15, right - left);
         Fitted(T(L"Хеші текстур: DumpTextures=1 у [Debug] UltimateFix.ini, гра скине всі текстури в UltimateFix\\textures\\dump\\ з готовими назвами",
                  L"Texture hashes: DumpTextures=1 in [Debug] of UltimateFix.ini dumps every texture to UltimateFix\\textures\\dump\\ named by its hash"),
-               left, y + 118, kDim, 13, right - left);
+               left, y + 118, kFaint, 13, right - left);
         y += 146;
     }
     FillRect(left, y - 6, right - left, 1, kLine);
@@ -154,11 +151,11 @@ void ModsPage(float left, float top, float right, float bottom) {
         const float ry = y + (float)g_shown * kRowH;
         const bool sel = r == g_sel;
         if (sel) {
-            FillRect(left - 8, ry - 4, right - left + 16, kRowH - 4, kRowSel);
+            FillRect(left - 8, ry - 4, right - left + 16, kRowH - 4, kSelected);
             FillRect(left - 8, ry - 4, 3, kRowH - 4, kAccent);
         }
         if (r == count) {  // the action row
-            DrawText(T(L"Відкрити теку модів", L"Open the mods folder"), left, ry + 8, sel ? kText : kSoft, 18);
+            DrawText(T(L"Відкрити теку модів", L"Open the mods folder"), left, ry + 8, sel ? kText : kMuted, 18);
             continue;
         }
         const ModInfo& m = *ModAt(r);
@@ -169,15 +166,15 @@ void ModsPage(float left, float top, float right, float bottom) {
         else if (m.author[0]) wsprintfW(title, L"%s  ·  %s", m.name, m.author);
         else lstrcpyW(title, m.name);
         const float textX = left + kSwitchW + 14, textW = right - textX - 2 * kButtonW - 20;
-        Fitted(title, textX, ry, m.enabled ? kText : kDim, 18, textW);
+        Fitted(title, textX, ry, m.enabled ? kText : kFaint, 18, textW);
         wchar_t line[300];
         Contents(m, r, line);
         if (m.description[0]) {
             wchar_t both[420];
             wsprintfW(both, L"%s  —  %s", line, m.description);
-            Fitted(both, textX, ry + 24, kDim, 13, textW);
+            Fitted(both, textX, ry + 24, kFaint, 13, textW);
         } else {
-            Fitted(line, textX, ry + 24, kDim, 13, textW);
+            Fitted(line, textX, ry + 24, kFaint, 13, textW);
         }
         Button(right - 2 * kButtonW - 8, ry, L"▲", r > 0);
         Button(right - kButtonW, ry, L"▼", r + 1 < count);

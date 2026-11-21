@@ -13,6 +13,7 @@
 #include "../base.h"
 #include "../sites.h"
 #include "../ui/ui.h"
+#include "../ui/theme.h"
 
 namespace ufx {
 
@@ -85,11 +86,15 @@ void DrawNotice(void* device) {
     w += 32.f;
     const float x = (1280.f - w) / 2, h = 38.f + 18.f * (float)g_noticeLineCount;
     const u32 alpha = g_noticeMs - age < 1000 ? (g_noticeMs - age) * 255 / 1000 : 255;  // fades out over the last second
-    ui::FillRect(x, kNoticeTop, w, h, WithAlpha(0xD0101014, alpha));
-    ui::FillRect(x, kNoticeTop, 3.f, h, WithAlpha(0xFFE5A83A, alpha));
-    ui::DrawText(t.title, x + 16.f, kNoticeTop + 8.f, WithAlpha(0xFFF2F2F5, alpha), 16, ui::kSemibold);
+    // The start card's look (theme.h): a raised box with a hairline border and rounded corners, and the one red mark inside
+    // it. Not amber: most notices are no warning ("Report written"). Opaque: the inside is drawn over the border's shape, so a
+    // see-through one would not let the game show anyway, only the border's grey.
+    namespace theme = ui::theme;
+    ui::FillRoundFramed(x, kNoticeTop, w, h, 10, WithAlpha(theme::kRaised, alpha), WithAlpha(theme::kLine2, alpha));
+    ui::FillRound(x + 7.f, kNoticeTop + 10.f, 3.f, h - 20.f, 1.5f, WithAlpha(theme::kAccent, alpha));
+    ui::DrawText(t.title, x + 16.f, kNoticeTop + 8.f, WithAlpha(theme::kWhite, alpha), 16, ui::kSemibold);
     for (int i = 0; i < g_noticeLineCount; ++i)
-        ui::DrawText(g_noticeLine[i], x + 16.f, kNoticeTop + 31.f + 18.f * (float)i, WithAlpha(0xFFC4C4CE, alpha), 14);
+        ui::DrawText(g_noticeLine[i], x + 16.f, kNoticeTop + 31.f + 18.f * (float)i, WithAlpha(theme::kMuted, alpha), 14);
     ui::OverlayEnd();
 }
 
