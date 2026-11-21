@@ -339,6 +339,17 @@ int main(int argc, char** argv) {
               q[21] == 0xC4 && q[22] == 0x04 && q[23] == 0xC3, "fly bridge", "cmp / jne / jmp game / push ecx / call worker / add esp, 4");
         Check(kSitePlayerPhysicsCall.va + 5 + Rd32(kSitePlayerPhysicsCall.bytes + 1) == kPlayerPhysicsFn, "fly bridge", "the site calls 004E3280");
     }
+    // special material slot probe
+    {
+        uint8_t q[48];
+        const uint32_t va = 0x10000000;
+        size_t n = BuildSlotProbe(q, va, 0x20000000);
+        printf("material slot probe %zu bytes\n", n);
+        Check(n == 31 && q[0] == 0x51 && q[1] == 0xFF && q[2] == 0x74 && q[3] == 0x24 && q[4] == 0x08 && q[5] == 0xFF && q[8] == 0x08 && q[9] == 0xE8 &&
+              Rel32To(q, va, 9, 0x20000000) && q[14] == 0x83 && q[15] == 0xC4 && q[16] == 0x08 && q[17] == 0x59 && q[18] == 0x8B && q[19] == 0x44 &&
+              q[22] == 0x89 && q[23] == 0x81 && Rd32(q + 24) == 0x31C && q[28] == 0xC2 && q[29] == 0x04 && q[30] == 0x00,
+              "slot probe", "push ecx / push slot / push return / call / add esp, 8 / pop ecx / the original store / ret 4");
+    }
     // reflection probe: three loads from the frame, a counter, the original compare, back
     {
         uint8_t q[64];

@@ -649,6 +649,22 @@ inline size_t BuildFlyPhysicsBridge(uint8_t* out, uint32_t outVa, uint32_t flagV
     return (size_t)(p - out);
 }
 
+// Replaces the start of FUN_006E10F0 (sets the special material slot of a draw, thiscall, ret 4): hands the caller's return address
+// and the slot to a cdecl worker, then does what the function did (`[ecx+31Ch] = slot`) and returns.
+inline size_t BuildSlotProbe(uint8_t* out, uint32_t outVa, uint32_t workerVa) {
+    uint8_t* p = out;
+    *p++ = 0x51;                                                                  // push ecx
+    *p++ = 0xFF; *p++ = 0x74; *p++ = 0x24; *p++ = 0x08;                           // push dword [esp+8]   (the slot)
+    *p++ = 0xFF; *p++ = 0x74; *p++ = 0x24; *p++ = 0x08;                           // push dword [esp+8]   (the return address)
+    *p++ = 0xE8; StubPut32(p, workerVa - (outVa + (uint32_t)(p - out) + 4));      // call worker(caller, slot)
+    *p++ = 0x83; *p++ = 0xC4; *p++ = 0x08;                                        // add esp, 8
+    *p++ = 0x59;                                                                  // pop ecx
+    *p++ = 0x8B; *p++ = 0x44; *p++ = 0x24; *p++ = 0x04;                           // mov eax, [esp+4]
+    *p++ = 0x89; *p++ = 0x81; StubPut32(p, 0x31C);                                // mov [ecx+31Ch], eax
+    *p++ = 0xC2; *p++ = 0x04; *p++ = 0x00;                                        // ret 4
+    return (size_t)(p - out);
+}
+
 // Jumped to from kSiteReflectionChoice: copies the source kind, its weight and the blend into rec[0..2], counts the frame in
 // rec[3], then the original `cmp dword [ebp-1988h], -1` and back (the je after the site reads its flags).
 inline size_t BuildReflectionProbe(uint8_t* out, uint32_t outVa, uint32_t recVa, uint32_t backVa) {

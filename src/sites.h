@@ -844,6 +844,8 @@ constexpr SiteDef kSiteRouteCall2 = {"resident route lookup", 0x4D1363, 5, {0xE8
 // FUN_006D32E0, right after the scene list: the planar reflection pass (FUN_006D8B50, 006D454C far / 006D464C near) runs only
 // when a reflection source was found (local [ebp-1988h] != -1: 1 water 40000h, 0 mirror), its weight [ebp-1030h] > 0, and the
 // blend [ebp-3DF0h] is above 0.01 (far) or below 0.99 (near). The water diagnostic records these three here every frame.
+constexpr SiteDef kSiteMaterialSlot = {"special material slot setter", 0x6E10F0, 16,
+                                       {0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B, 0x45, 0xFC, 0x8B, 0x4D, 0x08, 0x89, 0x88, 0x1C}};
 constexpr SiteDef kSiteReflectionChoice = {"reflection source check", 0x6D44DF, 7, {0x83, 0xBD, 0x78, 0xE6, 0xFF, 0xFF, 0xFF}};
 constexpr uint32_t kReflectionChoiceBack = 0x6D44E6;
 // The player's own physics, once a frame from the player event (FUN_0052EBC0): FUN_004E3280 (thiscall, ecx = player) finds the
@@ -913,7 +915,7 @@ constexpr uint32_t kNanTrapNumber = 0x409EA8;
 
 constexpr const SiteDef* kAllSites[] = {
     &kSiteNanTrap,
-    &kSiteMouseX, &kSiteMouseY, &kSiteLoaderSleep, &kSiteRouteCall1, &kSiteRouteCall2, &kSiteQteGauge, &kSitePlayerPhysicsCall, &kSiteReflectionChoice, &kSiteLockOnDrop, &kSiteLockOnHeight, &kSiteFullQuad[0], &kSiteFullQuad[1], &kSiteFullQuad[2], &kSiteSetThreadWake, &kSiteRouteFlush1, &kSiteRouteFlush2, &kSiteRouteFlushFn,
+    &kSiteMouseX, &kSiteMouseY, &kSiteLoaderSleep, &kSiteRouteCall1, &kSiteRouteCall2, &kSiteQteGauge, &kSitePlayerPhysicsCall, &kSiteReflectionChoice, &kSiteMaterialSlot, &kSiteLockOnDrop, &kSiteLockOnHeight, &kSiteFullQuad[0], &kSiteFullQuad[1], &kSiteFullQuad[2], &kSiteSetThreadWake, &kSiteRouteFlush1, &kSiteRouteFlush2, &kSiteRouteFlushFn,
     &kSiteGameFileBranch, &kSiteGameFileAddon, &kSiteGameFileArchive, &kSiteGameFileStore, &kSiteGameFileHave,
     &kSiteBeaconCall, &kSiteBeaconDraw, &kSiteBeaconMove, &kStorySites[0], &kStorySites[1], &kStorySites[2], &kStorySites[3], &kStorySites[4],
     &kStorySites[5], &kStorySites[6], &kStorySites[7], &kStorySites[8], &kStorySites[9], &kStorySites[10],

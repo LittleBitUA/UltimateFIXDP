@@ -1375,6 +1375,30 @@ void DetectD3dLibrary() { NameD3dLibrary(); }
 // source, and a frame counter. WaterFrame turns them into log lines.
 volatile u32 g_reflRec[4];
 
+// TraceWater: which draws get a special material slot (FUN_006E10F0; slot 0 of the table at A000A0 carries the smoke cloud),
+// each distinct (caller, slot) once in the log
+extern "C" void __cdecl MaterialSlotWorker(u32 caller, int slot) {
+    static u32 seen[48];
+    static int count = 0;
+    const u32 key = caller * 7u + (u32)(slot + 1);
+    for (int i = 0; i < count; ++i) if (seen[i] == key) return;
+    if (count >= 48) return;
+    seen[count++] = key;
+    Log("material slot: %d set from %08X%s", slot, caller, slot == 0 ? " (slot 0 = the smoke cloud material)" : "");
+}
+
+void InstallMaterialSlotProbe() {
+    const SiteDef& s = kSiteMaterialSlot;
+    if (!BytesMatch(s.va, s.bytes, s.len)) {
+        Log("material slot: the setter at %08X differs from DP.exe 1.01b, no probe", s.va);
+        return;
+    }
+    u8* stub = AllocStub(48);
+    if (!stub) return;
+    BuildSlotProbe(stub, (u32)(uintptr_t)stub, (u32)(uintptr_t)&MaterialSlotWorker);
+    if (PatchJump(s.va, s.bytes, s.len, stub)) Log("material slot: probe installed (which draws get a special material)");
+}
+
 void InstallReflectionProbe() {
     const SiteDef& s = kSiteReflectionChoice;
     if (!BytesMatch(s.va, s.bytes, s.len)) {
@@ -1452,7 +1476,10 @@ void WaterFrame() {
 }  // display.cpp, at the first Present
 
 bool InstallD3dTrace(bool full) {
-    if (g_cfg.traceWater) InstallReflectionProbe();
+    if (g_cfg.traceWater) {
+        InstallReflectionProbe();
+        InstallMaterialSlotProbe();
+    }
     g_fullLayer = full;
     void** slot = FindImportSlot(GetModuleHandleW(nullptr), "d3d9.dll", "Direct3DCreate9");
     if (!slot) {
