@@ -456,34 +456,48 @@ void WriteDrawFile(void* dev, u32 from, const wchar_t* path) {
     Log("water: the draw from %08X explained in %S", from, path);
 }
 
-// [Debug] TraceWater=1: the draw scan (Numpad 3). The frame's draws by the game are numbered in their order; the scan leaves out one
-// draw per frame, from the first to the last, and measures the brightness of the middle of the picture (a 64x64 patch, read back
-// at Present before the mod's own filters). Every few frames nothing is left out, for the baseline. A draw whose absence makes the
-// middle brighter is part of the black patch there: it goes to the log, and the strongest ones are explained afterwards in
-// UltimateFix\hunt_<caller>_<shader>.txt with their textures saved as PNG. Several draws together may make the patch, so all of
-// them are listed, not only the strongest. Standing still keeps the numbering the same from frame to frame.
+// [Debug] TraceWater=1: the draw scan (Numpad 3). The game's draws of a frame are grouped by where in DP.exe they come from and the
+// pixel shader they use (a smoke made of many particles is one group). The scan leaves out one group per frame and measures the
+// brightness of the middle of the picture (a 64x64 patch read back at Present, before the mod's own filters); every 8th frame
+// leaves out nothing, for the baseline. Groups whose absence makes the middle brighter go to the log, the ten strongest are listed
+// at the end whatever their size, and the three strongest are explained in UltimateFix\hunt_<caller>_<shader>.txt with their
+// textures saved as PNG. Standing still keeps the picture the same from frame to frame.
+struct DrawGroup {
+    u32 from, shader;
+};
 struct ScanHit {
-    int index, gain;
+    int group, gain, draws;
     u32 from, shader, count;
     char tex[4][40];
 };
+constexpr int kMaxGroups = 1024;
+DrawGroup g_groups[kMaxGroups];
+int g_groupCount = 0;
 struct DrawScan {
-    bool on;
-    int next;              // the draw to leave out in the coming frame, -1 for a baseline frame
-    int skipping;          // the draw left out in the frame being drawn now, -1 none
-    int frames;
+    bool on, survey;       // survey: the coming frame lists the groups
+    int next;              // the group to leave out next
+    int skipping;          // the group left out in the frame being drawn now, -1 none
+    int frames, measured;
     int base, baseCount;   // running baseline (sum of R+G+B, 0..765)
-    int total;             // the game's draws in a frame when the scan started
-    ScanHit hits[64];
-    int hitCount;
+    int first;             // brightness with every draw, -1 unknown
+    ScanHit all[kMaxGroups / 4];  // the strongest effects so far (kept sorted, largest gain first)
+    int allCount;
+    int hits;
     int explain[3], explainCount, explainStep;
     DWORD lastNotice;
 } g_scan;
-ScanHit g_skipInfo;        // what the left-out draw was
-int g_huntIndex = 0;       // the game's draws so far in this frame
-int g_huntLastFrame = 0;   // the game's draws in the previous frame
-int g_explainIndex = -1;   // explain this draw (not left out) in the coming frame
+ScanHit g_skipInfo;        // the left-out group in this frame: its first draw, and how many were left out
+int g_explainGroup = -1;   // explain the first draw of this group in the coming frame (not left out)
+int g_huntDraws = 0;       // the game's draws so far in this frame
 void* g_huntDev = nullptr;
+
+int GroupOf(u32 from, u32 shader, bool add) {
+    for (int k = 0; k < g_groupCount; ++k)
+        if (g_groups[k].from == from && g_groups[k].shader == shader) return k;
+    if (!add || g_groupCount >= kMaxGroups) return -1;
+    g_groups[g_groupCount] = {from, shader};
+    return g_groupCount++;
+}
 
 void SaveStagePng(void* tex, int stage, u32 from) {
     typedef HRESULT(WINAPI * SaveFn)(const wchar_t*, DWORD, void*, const void*);
@@ -507,29 +521,37 @@ bool HuntSkips(void* dev, u32 from, UINT count) {
         selfHi = selfLo + ((const IMAGE_NT_HEADERS*)(base + ((const IMAGE_DOS_HEADER*)base)->e_lfanew))->OptionalHeader.SizeOfImage;
     }
     if (from >= selfLo && from < selfHi) return false;  // the mod's own drawing (menu, filters) is not counted
+    if (!g_scan.on && g_explainGroup < 0) return false;
     g_huntDev = dev;
-    const int i = g_huntIndex++;
-    if (i == g_explainIndex) {
-        g_explainIndex = -1;
+    ++g_huntDraws;
+    const u32 shader = (u32)(uintptr_t)g_curPs;
+    if (g_scan.survey) {
+        GroupOf(from, shader, true);
+        return false;
+    }
+    if (g_explainGroup >= 0 && g_groups[g_explainGroup].from == from && g_groups[g_explainGroup].shader == shader) {
+        g_explainGroup = -1;
         char t[4][48];
         for (int st = 0; st < 4; ++st) DescribeTexture(g_stageTex[st], t[st]);
-        Log("hunt: draw no. %d: %u primitives from %08X, pixel shader %08X: s0 %s | s1 %s | s2 %s | s3 %s", i, count, from,
-            (u32)(uintptr_t)g_curPs, t[0], t[1], t[2], t[3]);
+        Log("hunt: explained: %u primitives from %08X, pixel shader %08X: s0 %s | s1 %s | s2 %s | s3 %s", count, from, shader, t[0], t[1], t[2], t[3]);
         wchar_t path[MAX_PATH + 64];
-        wsprintfW(path, L"%sUltimateFix\\hunt_%08X_%08X.txt", g_paths.gameDir, from, (u32)(uintptr_t)g_curPs);
+        wsprintfW(path, L"%sUltimateFix\\hunt_%08X_%08X.txt", g_paths.gameDir, from, shader);
         WriteDrawFile(dev, from, path);
         for (int st = 0; st < 4; ++st) SaveStagePng(g_stageTex[st], st, from);
         return false;
     }
-    if (!g_scan.on || i != g_scan.skipping) return false;
-    g_skipInfo.index = i;
-    g_skipInfo.from = from;
-    g_skipInfo.shader = (u32)(uintptr_t)g_curPs;
-    g_skipInfo.count = count;
-    for (int st = 0; st < 4; ++st) {
-        char t[48];
-        DescribeTexture(g_stageTex[st], t);
-        lstrcpynA(g_skipInfo.tex[st], t, 40);
+    if (!g_scan.on || g_scan.skipping < 0) return false;
+    const DrawGroup& gr = g_groups[g_scan.skipping];
+    if (gr.from != from || gr.shader != shader) return false;
+    if (g_skipInfo.draws++ == 0) {
+        g_skipInfo.from = from;
+        g_skipInfo.shader = shader;
+        g_skipInfo.count = count;
+        for (int st = 0; st < 4; ++st) {
+            char t[48];
+            DescribeTexture(g_stageTex[st], t);
+            lstrcpynA(g_skipInfo.tex[st], t, 40);
+        }
     }
     return true;
 }
@@ -576,93 +598,114 @@ int MiddleBrightness(void* dev) {
     return result;
 }
 
+void NoteEffect(const ScanHit& h) {
+    const int cap = kMaxGroups / 4;
+    int at = g_scan.allCount;
+    while (at > 0 && g_scan.all[at - 1].gain < h.gain) --at;
+    if (at >= cap) return;
+    const int last = g_scan.allCount < cap ? g_scan.allCount : cap - 1;
+    for (int i = last; i > at; --i) g_scan.all[i] = g_scan.all[i - 1];
+    g_scan.all[at] = h;
+    if (g_scan.allCount < cap) ++g_scan.allCount;
+}
+
 void ScanFinish() {
     g_scan.on = false;
     g_scan.skipping = -1;
-    Log("hunt: scan done over %d draws in %d frames, baseline %d; %d draws make the middle brighter when left out", g_scan.total, g_scan.frames,
-        g_scan.base, g_scan.hitCount);
-    // the strongest three get explained, one per frame
-    g_scan.explainCount = 0;
-    for (int k = 0; k < 3; ++k) {
-        int best = -1;
-        for (int j = 0; j < g_scan.hitCount; ++j) {
-            bool taken = false;
-            for (int q = 0; q < g_scan.explainCount; ++q) taken |= g_scan.explain[q] == j;
-            if (!taken && (best < 0 || g_scan.hits[j].gain > g_scan.hits[best].gain)) best = j;
-        }
-        if (best < 0) break;
-        g_scan.explain[g_scan.explainCount++] = best;
-        const ScanHit& h = g_scan.hits[best];
-        Log("hunt: strongest no. %d: draw %d, +%d brighter: %u primitives from %08X, shader %08X", k + 1, h.index, h.gain, h.count, h.from, h.shader);
+    Log("hunt: scan done over %d groups (%d frames, %d measured), middle %d with everything, baseline %d; %d groups make it brighter by 12 or more",
+        g_groupCount, g_scan.frames, g_scan.measured, g_scan.first, g_scan.base, g_scan.hits);
+    for (int i = 0; i < g_scan.allCount && i < 10; ++i) {
+        const ScanHit& h = g_scan.all[i];
+        Log("hunt: top %d: %+d without %d draws from %08X, shader %08X (first: %u primitives): s0 %s | s1 %s | s2 %s | s3 %s", i + 1, h.gain,
+            h.draws, h.from, h.shader, h.count, h.tex[0], h.tex[1], h.tex[2], h.tex[3]);
     }
+    g_scan.explainCount = 0;
+    for (int i = 0; i < g_scan.allCount && i < 3; ++i)
+        if (g_scan.all[i].gain > 0) g_scan.explain[g_scan.explainCount++] = g_scan.all[i].group;
     g_scan.explainStep = 0;
-    wchar_t uk[200], en[200];
-    wsprintfW(uk, L"Знайдено малювань, що темнять центр: %d. Пришли ufx.log і файли UltimateFix\\hunt_*.", g_scan.hitCount);
-    wsprintfW(en, L"Draws that darken the middle: %d. Send ufx.log and the UltimateFix\\hunt_* files.", g_scan.hitCount);
+    wchar_t uk[220], en[220];
+    if (g_scan.measured == 0) {
+        wsprintfW(uk, L"Яскравість не вдалося виміряти. Пришли ufx.log.");
+        wsprintfW(en, L"The brightness could not be measured. Send ufx.log.");
+    } else {
+        wsprintfW(uk, L"Груп малювань, що темнять центр: %d. Пришли ufx.log і файли UltimateFix\\hunt_*.", g_scan.hits);
+        wsprintfW(en, L"Draw groups that darken the middle: %d. Send ufx.log and the UltimateFix\\hunt_* files.", g_scan.hits);
+    }
     ShowNotice(L"Сканування завершено", L"Scan finished", uk, en, 12);
 }
 
 // Once per frame, from WaterFrame (at Present, the game's picture complete)
 void HuntFrame(bool k3, bool, bool, bool) {
-    g_huntLastFrame = g_huntIndex;
-    g_huntIndex = 0;
-    if (g_scan.explainStep < g_scan.explainCount) {  // after a scan: explain the strongest draws, one per frame
-        g_explainIndex = g_scan.hits[g_scan.explain[g_scan.explainStep++]].index;
+    const int draws = g_huntDraws;
+    g_huntDraws = 0;
+    if (g_scan.explainStep < g_scan.explainCount) {  // after a scan: explain the strongest groups, one per frame
+        g_explainGroup = g_scan.explain[g_scan.explainStep++];
         return;
     }
     if (k3) {
         if (g_scan.on) {
-            Log("hunt: scan stopped at draw %d of %d", g_scan.next, g_scan.total);
+            Log("hunt: scan stopped at group %d of %d", g_scan.next, g_groupCount);
             ScanFinish();
             return;
         }
         __builtin_memset(&g_scan, 0, sizeof(g_scan));
+        g_groupCount = 0;
         g_scan.on = true;
-        g_scan.next = -1;
+        g_scan.survey = true;  // the coming frame lists the groups
         g_scan.skipping = -1;
-        g_scan.total = g_huntLastFrame;
+        g_scan.first = -1;
         g_scan.lastNotice = GetTickCount();
-        Log("hunt: scan started over %d draws of the game in a frame", g_scan.total);
-        ShowNotice(L"Сканування", L"Scan", L"Не рухайтеся, діра в центрі екрана. Numpad 3 зупиняє.",
-                   L"Do not move, the hole in the middle of the screen. Numpad 3 stops.", 5);
+        ShowNotice(L"Сканування", L"Scan", L"Не рухайтеся, туман у центрі екрана. Numpad 3 зупиняє.",
+                   L"Do not move, the fog in the middle of the screen. Numpad 3 stops.", 5);
         return;
     }
     if (!g_scan.on) return;
+    if (g_scan.survey) {
+        g_scan.survey = false;
+        Log("hunt: scan started: %d draws of the game in the frame, %d groups (caller + pixel shader)", draws, g_groupCount);
+    }
     const int m = MiddleBrightness(g_huntDev);
     ++g_scan.frames;
     if (m >= 0) {
+        ++g_scan.measured;
+        if (g_scan.first < 0) {
+            g_scan.first = m;
+            Log("hunt: middle brightness %d (0..765) with every draw", m);
+        }
         if (g_scan.skipping < 0) {
             g_scan.base = g_scan.baseCount ? (g_scan.base * 3 + m) / 4 : m;
             ++g_scan.baseCount;
         } else if (g_scan.baseCount) {
-            const int gain = m - g_scan.base;
-            if (gain >= 12) {
-                Log("hunt: draw %d left out: middle %d (baseline %d, +%d): %u primitives from %08X, shader %08X: s0 %s | s1 %s | s2 %s | s3 %s",
-                    g_skipInfo.index, m, g_scan.base, gain, g_skipInfo.count, g_skipInfo.from, g_skipInfo.shader, g_skipInfo.tex[0],
-                    g_skipInfo.tex[1], g_skipInfo.tex[2], g_skipInfo.tex[3]);
-                if (g_scan.hitCount < 64) {
-                    g_scan.hits[g_scan.hitCount] = g_skipInfo;
-                    g_scan.hits[g_scan.hitCount++].gain = gain;
+            ScanHit h = g_skipInfo;
+            h.group = g_scan.skipping;
+            h.gain = m - g_scan.base;
+            if (h.draws > 0) {
+                NoteEffect(h);
+                if (h.gain >= 12) {
+                    ++g_scan.hits;
+                    Log("hunt: group %d left out (%d draws): middle %d (baseline %d, %+d): from %08X, shader %08X", h.group, h.draws, m, g_scan.base,
+                        h.gain, h.from, h.shader);
                 }
             }
         }
+    } else if (g_scan.frames == 1) {
+        Log("hunt: the middle of the picture could not be read (device %08X)", (u32)(uintptr_t)g_huntDev);
     }
-    if (g_scan.frames == 1) Log("hunt: middle brightness %d (0..765) with every draw", m);
-    // next: a baseline frame every 8th, else the next draw
+    __builtin_memset(&g_skipInfo, 0, sizeof(g_skipInfo));
     if (g_scan.frames % 8 == 0 || g_scan.baseCount < 4) {
         g_scan.skipping = -1;
     } else {
-        g_scan.skipping = ++g_scan.next;
-        if (g_scan.next >= g_scan.total) {
+        if (g_scan.next >= g_groupCount) {
             ScanFinish();
             return;
         }
+        g_scan.skipping = g_scan.next++;
     }
     if (GetTickCount() - g_scan.lastNotice > 3000) {
         g_scan.lastNotice = GetTickCount();
         wchar_t uk[160], en[160];
-        wsprintfW(uk, L"%d з %d малювань, знайдено %d. Не рухайтеся.", g_scan.next < 0 ? 0 : g_scan.next, g_scan.total, g_scan.hitCount);
-        wsprintfW(en, L"%d of %d draws, %d found. Do not move.", g_scan.next < 0 ? 0 : g_scan.next, g_scan.total, g_scan.hitCount);
+        wsprintfW(uk, L"%d з %d груп, знайдено %d. Не рухайтеся.", g_scan.next, g_groupCount, g_scan.hits);
+        wsprintfW(en, L"%d of %d groups, %d found. Do not move.", g_scan.next, g_groupCount, g_scan.hits);
         ShowNotice(L"Сканування", L"Scan", uk, en, 4);
     }
 }
