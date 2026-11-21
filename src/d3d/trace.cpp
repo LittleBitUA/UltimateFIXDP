@@ -253,7 +253,7 @@ bool NoteWaterDraw(UINT count, u32 from) {
     if (!g_curPs) return false;
     bool water = false;
     for (int i = 0; i < g_waterShaderCount && !water; ++i) water = g_waterShaders[i] == g_curPs;
-    if (water && g_cfg.traceWater && g_waterKeyCount < 40) {
+    if (water && g_waterKeyCount < 40) {
         {
             u32 key = (u32)(uintptr_t)g_curPs * 31u + (u32)(uintptr_t)g_stageTex[0] * 7u + (u32)(uintptr_t)g_stageTex[1] * 13u +
                       (u32)(uintptr_t)g_stageTex[5] * 17u + (u32)(uintptr_t)g_stageTex[6] * 19u + (u32)Milli(g_psC[10][2]) * 23u;
@@ -274,7 +274,7 @@ bool NoteWaterDraw(UINT count, u32 from) {
             }
         }
     }
-    if (!water && g_cfg.traceWater && g_reflKeyCount < 24 && (IsTarget(g_stageTex[5]) || IsTarget(g_stageTex[6]))) {
+    if (!water && g_reflKeyCount < 24 && (IsTarget(g_stageTex[5]) || IsTarget(g_stageTex[6]))) {
         const u32 key = (u32)(uintptr_t)g_curPs * 31u + (u32)(uintptr_t)g_stageTex[0] * 7u + (u32)(uintptr_t)g_stageTex[5] * 17u;
         bool seen = false;
         for (int i = 0; i < g_reflKeyCount && !seen; ++i) seen = g_reflKeys[i] == key;
@@ -295,30 +295,9 @@ bool NoteWaterDraw(UINT count, u32 from) {
 // [Debug] WaterTest, for the water draw only: c10.z is the bias of the river's own texture over the reflection
 // (out = lerp(reflection, s0, saturate(s0.a + c10.z))). The river came with 1.0 (texture only, the flat blue), the rippled
 // water with -0.75 at times. 1 = -0.75 (reflection mostly), 2 = 0 (the texture by its own alpha).
-// RiverReflections: the rivers' own texture is DXT1 on PC (no alpha, so 1.0 everywhere), and the share of the texture is
-// saturate(alpha + c10.z): with c10.z >= 0 the river is the flat texture even when its reflection is drawn. For water whose s0
-// is DXT1 and whose c10.z is not already negative, c10.z becomes -RiverReflectionMix/100: that share of the reflection shows.
-bool IsDxt1(void* tex) {
-    if (!tex) return false;
-    void** vt = *(void***)tex;
-    typedef DWORD(WINAPI * TypeFn)(void*);
-    if (((TypeFn)vt[10])(tex) != 3) return false;
-    u32 desc[8] = {0};
-    typedef HRESULT(WINAPI * DescFn)(void*, UINT, void*);
-    return SUCCEEDED(((DescFn)vt[17])(tex, 0, desc)) && desc[0] == 0x31545844u;  // 'DXT1'
-}
-
 template <typename Draw> HRESULT WaterDraw(void* dev, bool water, Draw draw) {
-    if (!water || !r_SetPsConstF) return draw();
-    float z;
-    if (g_cfg.waterTest == 1 || g_cfg.waterTest == 2) {
-        z = g_cfg.waterTest == 1 ? -0.75f : 0.0f;
-    } else if (g_cfg.riverReflections && g_psC[10][2] >= 0.f && IsDxt1(g_stageTex[0])) {
-        z = -(float)g_cfg.riverReflectionMix / 100.f;
-    } else {
-        return draw();
-    }
-    float v[4] = {g_psC[10][0], g_psC[10][1], z, g_psC[10][3]};
+    if (!water || (g_cfg.waterTest != 1 && g_cfg.waterTest != 2) || !r_SetPsConstF) return draw();
+    float v[4] = {g_psC[10][0], g_psC[10][1], g_cfg.waterTest == 1 ? -0.75f : 0.0f, g_psC[10][3]};
     r_SetPsConstF(dev, 10, v, 1);
     const HRESULT hr = draw();
     r_SetPsConstF(dev, 10, g_psC[10], 1);
@@ -349,7 +328,7 @@ void NoteVsConst(UINT start, const float* data, UINT count) {
 // The shadow pass hands its map size to the pixel shader as register c0 = {512 or 1024, 0, 0, 0}. When the
 // maps are enlarged the value has to follow, or the filtering steps no longer match the texels.
 HRESULT WINAPI H_SetPsConstF(void* dev, UINT start, const float* data, UINT count) {
-    if (g_cfg.traceWater || g_cfg.waterTest || g_cfg.riverReflections) NotePsConst(start, data, count);
+    if (g_cfg.traceWater || g_cfg.waterTest) NotePsConst(start, data, count);
     if (start == 0 && count >= 1 && data && g_cfg.shadowScale > 100) {
         const u32* b = (const u32*)data;
         int base = b[0] == 0x44000000u ? 512 : (b[0] == 0x44800000u ? 1024 : 0);  // 512.0f, 1024.0f
@@ -365,7 +344,7 @@ HRESULT WINAPI H_SetPsConstF(void* dev, UINT start, const float* data, UINT coun
 // drawn at the real output resolution the offset has to be half a pixel of THAT viewport, or sprites sample their
 // neighbours in the atlas (icons show a strip of the next icon). Only calls made at the output viewport are changed.
 HRESULT WINAPI H_SetVsConstF(void* dev, UINT start, const float* data, UINT count) {
-    if (g_cfg.traceWater || g_cfg.waterTest || g_cfg.riverReflections) NoteVsConst(start, data, count);
+    if (g_cfg.traceWater || g_cfg.waterTest) NoteVsConst(start, data, count);
     if (start == 0 && count == 1 && data && g_cfg.pixelOffsetFix && g_outputW && g_vpW == (u32)g_outputW &&
         g_vpH == (u32)g_outputH) {
         const u32* b = (const u32*)data;
@@ -409,7 +388,7 @@ void PatchDevice(void* dev) {
         bool t = PatchSlot(vt, kSetTexture, (void*)H_SetTexture, (void**)&r_SetTexture);
         Log("d3d: icon atlas swap hooked (%d)", t);
     }
-    if (g_cfg.traceWater || g_cfg.waterTest || g_cfg.riverReflections) {
+    if (g_cfg.traceWater || g_cfg.waterTest) {
         const bool a = PatchSlot(vt, kSetPixelShaderConstantF, (void*)H_SetPsConstF, (void**)&r_SetPsConstF);
         const bool b = PatchSlot(vt, kSetVertexShaderConstantF, (void*)H_SetVsConstF, (void**)&r_SetVsConstF);
         const bool c = PatchSlot(vt, kSetTexture, (void*)H_SetTexture, (void**)&r_SetTexture);
@@ -589,7 +568,7 @@ void InstallReflectionProbe() {
 
 // Once per frame (display.cpp): with the water hooks on, Numpad 1 switches the water test, so the same view can be compared.
 void WaterFrame() {
-    if (!g_waterHooked || !(g_cfg.traceWater || g_cfg.waterTest)) return;  // the hooks may be in for RiverReflections only
+    if (!g_waterHooked) return;
     static DWORD s_start = 0;
     static bool s_counted = false;
     if (!s_start) s_start = GetTickCount();
