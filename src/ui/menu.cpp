@@ -2207,6 +2207,11 @@ MMRESULT WINAPI H_joyGetPosEx(UINT id, LPJOYINFOEX info) {
                 if (r == JOYERR_NOERROR && info) ConvertSonyLayout(id, info);
             }
             if (r != JOYERR_NOERROR && id == 0 && g_cfg.xinputFallback && XInputToJoy(info)) r = JOYERR_NOERROR;
+            static bool s_fallbackOff = false;
+            if (r != JOYERR_NOERROR && id == 0 && !g_cfg.xinputFallback && !s_fallbackOff) {
+                s_fallbackOff = true;
+                Log("input: no WinMM pad, and the XInput fallback is off ([Input] XInputFallback=0): an Xbox pad without Steam Input stays unseen");
+            }
         }
         if (id == 0) PadCapture(r == JOYERR_NOERROR ? info : nullptr);
         if (!g_open) AutoInputTick(id, info, (unsigned)r, r_GetAsyncKeyState);

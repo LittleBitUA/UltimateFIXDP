@@ -70,9 +70,28 @@ bool XInputTriggers(unsigned char* lt, unsigned char* rt) {
 // Returns true and fills `j` when an XInput pad is connected.
 bool XInputToJoy(void* raw) {
     JOYINFOEX* j = (JOYINFOEX*)raw;
-    if (!j || j->dwSize != sizeof(JOYINFOEX)) return false;
+    static bool s_whyNot = false;
+    if (!j || j->dwSize != sizeof(JOYINFOEX)) {
+        if (!s_whyNot) {
+            s_whyNot = true;
+            Log("input: XInput fallback: the game's pad record has size %u, not %u", j ? (u32)j->dwSize : 0u, (u32)sizeof(JOYINFOEX));
+        }
+        return false;
+    }
     XState s;
-    if (!Poll(&s)) return false;
+    if (!Poll(&s)) {
+        if (!s_whyNot && g_lastScan) {  // once, after the first scan of the slots
+            s_whyNot = true;
+            if (!g_get) {
+                Log("input: XInput fallback: no XInput library could be loaded");
+            } else {
+                XState t;
+                Log("input: XInput fallback: no XInput pad (XInputGetState of slots 0..3: %u %u %u %u)", (u32)g_get(0, &t), (u32)g_get(1, &t),
+                    (u32)g_get(2, &t), (u32)g_get(3, &t));
+            }
+        }
+        return false;
+    }
     if (g_cfg.swapTriggers) {  // as for the DualSense (dualsense.cpp, sony_layout.cpp)
         BYTE t = s.lt;
         s.lt = s.rt;
