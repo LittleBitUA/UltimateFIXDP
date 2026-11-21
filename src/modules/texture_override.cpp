@@ -36,6 +36,19 @@ typedef HRESULT(WINAPI* FromMemoryExFn)(void*, const void*, UINT, UINT, UINT, UI
 typedef HRESULT(WINAPI* FromFileExWFn)(void*, const wchar_t*, UINT, UINT, UINT, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD,
                                        void*, void*, void**);
 FromMemoryExFn g_real = nullptr;
+typedef HRESULT(WINAPI* FromMemoryCubeFn)(void*, const void*, UINT, UINT, UINT, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, void*, void*,
+                                          void**);
+FromMemoryCubeFn g_realCube = nullptr;
+void DumpTexture(u32 hash, const void* data, UINT size);
+u32 DdsBytes(const void* data);
+HRESULT WINAPI H_CubeFromMemoryEx(void* dev, const void* data, UINT size, UINT edge, UINT mips, DWORD usage, DWORD fmt, DWORD pool,
+                                  DWORD filter, DWORD mipFilter, DWORD colorKey, void* info, void* palette, void** out) {
+    if (data) {
+        const UINT real = size == 0x7FFFFFFFu ? DdsBytes(data) : size;
+        if (real >= 128) DumpTexture(SuperFastHash((const u8*)data, (int)real), data, real);
+    }
+    return g_realCube(dev, data, size, edge, mips, usage, fmt, pool, filter, mipFilter, colorKey, info, palette, out);
+}
 FromFileExWFn g_fromFile = nullptr;
 
 bool ParseHash(const wchar_t* name, u32* hash, bool* png) {
@@ -110,11 +123,56 @@ const Entry* Find(u32 hash) {
     return nullptr;
 }
 
-// Diagnostic: writes the original DDS data of every texture the game loads to UltimateFix\textures\dump\<hash>.dds
-// (small ones only, once each), so that the atlas of the interface icons and other textures can be found and replaced.
+// The byte size of a DDS file from its header (several levels, the six faces of a cube, the slices of a volume), or 0 when the
+// format is not one this knows. The game hands some textures over with the size 0x7FFFFFFF (the menus, the add-ons, the DDS kept
+// inside DP.exe): their true size is only in the header.
+u32 DdsBytes(const void* data) {
+    const u32* d = (const u32*)data;
+    if (!d || d[0] != 0x20534444u /*"DDS "*/ || d[1] != 124) return 0;
+    const u32 height = d[3], width = d[4], depth = d[6], fourCC = d[21], pfFlags = d[20], bits = d[22], caps2 = d[28];
+    if (!width || !height || width > 16384 || height > 16384) return 0;
+    u32 block = 0, pixel = 0;  // bytes per 4x4 block, or per pixel
+    if (pfFlags & 4 /*DDPF_FOURCC*/) {
+        switch (fourCC) {
+            case 0x31545844: /*DXT1*/ case 0x31495441: /*ATI1*/ block = 8; break;
+            case 0x32545844: case 0x33545844: case 0x34545844: case 0x35545844: /*DXT2..5*/ case 0x32495441: /*ATI2*/ block = 16; break;
+            case 111: pixel = 2; break;                       // R16F
+            case 112: case 114: pixel = 4; break;             // G16R16F, R32F
+            case 36: case 113: case 115: pixel = 8; break;    // A16B16G16R16, A16B16G16R16F, G32R32F
+            case 116: pixel = 16; break;                      // A32B32G32R32F
+            default: return 0;
+        }
+    } else {
+        pixel = bits / 8;
+        if (!pixel || pixel > 16) return 0;
+    }
+    const u32 levels = (d[2] & 0x20000 /*MIPMAPCOUNT*/) && d[7] ? (d[7] > 16 ? 16 : d[7]) : 1;
+    u32 faces = 1;
+    if (caps2 & 0x200 /*CUBEMAP*/) {
+        faces = 0;
+        for (u32 f = 0x400; f <= 0x8000; f <<= 1) faces += (caps2 & f) ? 1 : 0;
+        if (!faces) faces = 6;
+    }
+    const bool volume = (caps2 & 0x200000) && depth > 1;
+    u64 total = 0;
+    for (u32 i = 0; i < levels; ++i) {
+        u32 w = width >> i, h = height >> i, z = volume ? depth >> i : 1;
+        if (!w) w = 1;
+        if (!h) h = 1;
+        if (!z) z = 1;
+        const u64 one = block ? (u64)((w + 3) / 4) * ((h + 3) / 4) * block : (u64)w * h * pixel;
+        total += one * z;
+    }
+    total = total * faces + 128;
+    return total > (256u << 20) ? 0 : (u32)total;
+}
+
+// Diagnostic: writes the original DDS data of every texture the game loads to UltimateFix\textures\dump\<hash>.dds (once each),
+// so textures can be found and replaced. The name is the hash a replacement is looked up by.
 u32 g_dumped = 0;
 void DumpTexture(u32 hash, const void* data, UINT size) {
-    if (g_dumped >= 6000 || size < 128 || size > (1u << 20)) return;
+    if (size == 0x7FFFFFFFu) size = DdsBytes(data);  // the size is only in the header
+    if (g_dumped >= 100000 || size < 128 || size > (256u << 20)) return;
     wchar_t dir[MAX_PATH], path[MAX_PATH + 24];
     lstrcpyW(dir, g_paths.dataDir);
     lstrcatW(dir, L"textures");
@@ -127,7 +185,8 @@ void DumpTexture(u32 hash, const void* data, UINT size) {
     DWORD w;
     WriteFile(f, data, size, &w, nullptr);
     CloseHandle(f);
-    if (++g_dumped <= 5) Log("textures: dumping to %S (first of up to 6000)", dir);
+    if (++g_dumped <= 3) Log("textures: dumping to %S", dir);
+    if (g_dumped % 500 == 0) Log("textures: %u textures dumped so far", g_dumped);
 }
 
 // ---- Interface icon atlas ---------------------------------------------------------------------------------------
@@ -196,7 +255,7 @@ HRESULT FromMemoryInner(void* dev, const void* data, UINT size, UINT w, UINT h, 
         }
     }
     UINT hashed = size == 0x7FFFFFFFu ? (w * h / 2) : size;
-    const bool dump = g_cfg.dumpTextures && size != 0x7FFFFFFFu;
+    const bool dump = g_cfg.dumpTextures != 0;
     // one pass over the data, and only when something needs the hash (a pack or the dump)
     const u32 hash = (data && hashed && (g_count || dump)) ? SuperFastHash((const u8*)data, (int)hashed) : 0;
     if (dump && data && hashed) DumpTexture(hash, data, size);
@@ -221,7 +280,7 @@ HRESULT FromMemoryInner(void* dev, const void* data, UINT size, UINT w, UINT h, 
     // more on each side that carry one level; render targets, cube maps and the 2D atlases of the interface are left alone.
     if (g_cfg.generateMips && mips <= 1 && data && size >= 128 && size != 0x7FFFFFFFu && usage == 0) {
         const u32* dds = (const u32*)data;
-        const u32 height = dds[3], width = dds[4], levels = dds[7], caps2 = dds[29];
+        const u32 height = dds[3], width = dds[4], levels = dds[7], caps2 = dds[28];
         const bool square2 = (width & (width - 1)) == 0 && (height & (height - 1)) == 0;  // the atlases are not powers of two
         if (dds[0] == 0x20534444 /*"DDS "*/ && levels <= 1 && width >= 128 && height >= 128 && square2 && !(caps2 & 0x200) /*cube*/) {
             HRESULT hr = g_real(dev, data, size, w, h, 0 /*all levels*/, usage, fmt, pool, filter, 5 /*D3DX_FILTER_BOX*/, colorKey, info,
@@ -358,6 +417,13 @@ bool InstallTextureOverride() {
     }
     g_real = (FromMemoryExFn)*slot;
     if (g_cfg.glyphTheme) ReadGamePadFile();
+    if (g_cfg.dumpTextures) {  // cube maps (the environment reflections) only for the dump; they are not replaced
+        void** cube = FindImportSlot(GetModuleHandleW(nullptr), "d3dx9_43.dll", "D3DXCreateCubeTextureFromFileInMemoryEx");
+        if (cube) {
+            g_realCube = (FromMemoryCubeFn)*cube;
+            Log("textures: cube textures dumped too (%d)", (int)SwapImport(cube, (void*)H_CubeFromMemoryEx, nullptr));
+        }
+    }
     if (!SwapImport(slot, (void*)H_FromMemoryEx, nullptr)) return false;
     Log("textures: %d replacement files indexed, texture loading hooked", g_count);
     return true;
