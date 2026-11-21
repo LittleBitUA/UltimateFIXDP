@@ -555,6 +555,12 @@ void ExplainCloudReader(void* dev, u32 from) {
     SaveFn save = d3dx ? (SaveFn)(void*)GetProcAddress(d3dx, "D3DXSaveTextureToFileW") : nullptr;
     for (int st = 0; st < 8 && save; ++st) {
         if (!g_stageTex[st]) continue;
+        // a full-size target (3840x2160, maybe 16-bit float) takes D3DX seconds to write as PNG: the picture stood still for 8 s
+        void** tvt = *(void***)g_stageTex[st];
+        typedef DWORD(WINAPI * TypeFn)(void*);
+        typedef HRESULT(WINAPI * DescFn)(void*, UINT, void*);
+        u32 dd[8] = {0};
+        if (((TypeFn)tvt[10])(g_stageTex[st]) != 3 || FAILED(((DescFn)tvt[17])(g_stageTex[st], 0, dd)) || dd[6] > 1024 || dd[7] > 1024) continue;
         wsprintfW(path, L"%sUltimateFix\\cloud_%08X_s%d.png", g_paths.gameDir, from, st);
         const HRESULT hr = save(path, 3 /*PNG*/, g_stageTex[st], nullptr);
         Log("cloud:   s%d saved as %S (%s)", st, path, SUCCEEDED(hr) ? "ok" : "failed");
