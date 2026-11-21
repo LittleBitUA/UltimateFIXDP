@@ -615,17 +615,134 @@ void TextureSize(void* tex, u32* w, u32* h) {
 
 u32 g_smokeFrame = 0;             // Present count (WaterFrame)
 u32 g_smokeMaskFrame = ~0u;       // the frame the mask sheet was last seen in
-u32 g_smokeSheetFrame = ~0u;      // the frame the sheets below were counted in
-int g_smokeSheetNo = 0;           // 256x128 sheets drawn so far in that frame
-bool g_smokeSwap = false;         // Numpad 6: the first sheet of the frame is model 2
+bool g_smokeSwap = false;         // Numpad 6: the two models swapped
+UINT g_drawStartIndex = 0;        // DrawIndexedPrimitive's start index of the draw being made
+// The two smoke models, told apart by their own geometry (vertex buffer, its offset, first vertex and first index) and, when
+// both use the same, by the place of the root bone. The game sorts the translucent draws by distance, so their order in the frame
+// changes with the camera: it does not say which model is which (test19/20 went by it, and the grey layer turned black).
+struct SmokeModel {
+    bool used;
+    u32 geo;
+    float pos[3];
+    u32 frame;  // drawn last in
+};
+SmokeModel g_smokeModels[2];
+int g_smokeOrderFlips = 0;
 void* g_smokeLight = nullptr;     // the light buffer seen in s8 at a smoke draw of this frame
 u32 g_smokeLightFrame = ~0u;
 // The game's UV scroll (g_vScrlParam, c243 = scale x, y and offset u, v) at the two mask draws of the frame. The PC port gives the
 // models' running scroll to their mask sheets; on the Xbox it moves the sheet (c200 = 1, 1, 0, -t for model 1 and +t for model 2:
 // the two layers crawl in opposite directions), so it is taken from there for the sheets.
-float g_smokeScroll[2][4];
-int g_smokeScrollCount = 0;
+float g_smokeScroll[4] = {1.f, 1.f, 0.f, -4.89506f};
 u32 g_smokeScrollFrame = ~0u;
+
+// IEEE half to float (the PC vertex data keeps the UVs as FLOAT16)
+float HalfToFloat(u16 h) {
+    const u32 sign = (u32)(h & 0x8000u) << 16, exp = (h >> 10) & 31u, man = h & 0x3FFu;
+    u32 bits;
+    if (exp == 0) {
+        float f = (float)man / 16777216.f;  // subnormal: man * 2^-24
+        return sign ? -f : f;
+    }
+    bits = sign | ((exp == 31 ? 255u : exp + 112u) << 23) | (man << 13);
+    float f;
+    __builtin_memcpy(&f, &bits, 4);
+    return f;
+}
+
+// Once: the first 24 vertices of a smoke sheet, its UV (stream 0, offset 12) next to the FLOAT16_2 the PC declaration calls the
+// tangent (stream 1, offset 8), which the mod reads as the second UV
+void LogSmokeVertices(void* dev) {
+    static bool done = false;
+    if (done) return;
+    done = true;
+    typedef HRESULT(WINAPI * GetStreamFn)(void*, UINT, void**, UINT*, UINT*);
+    typedef HRESULT(WINAPI * VbLockFn)(void*, UINT, UINT, void**, DWORD);
+    typedef HRESULT(WINAPI * VbUnlockFn)(void*);
+    typedef ULONG(WINAPI * RelFn)(void*);
+    void** dvt = *(void***)dev;
+    void* vb[2] = {nullptr, nullptr};
+    UINT off[2] = {0, 0}, stride[2] = {0, 0};
+    const void* ptr[2] = {nullptr, nullptr};
+    for (int st = 0; st < 2; ++st) {
+        ((GetStreamFn)dvt[101])(dev, st, &vb[st], &off[st], &stride[st]);
+        void* p = nullptr;
+        if (vb[st] && stride[st] && stride[st] <= 64 &&
+            SUCCEEDED(((VbLockFn)(*(void***)vb[st])[11])(vb[st], off[st] + g_drawFirstVertex * stride[st], stride[st] * 24, &p, 0x10)))
+            ptr[st] = p;
+    }
+    Log("smoke: vertices of a sheet (stride %u and %u, first vertex %u): UV of stream 0 | the second FLOAT16_2 of stream 1, in thousandths",
+        stride[0], stride[1], g_drawFirstVertex);
+    if (ptr[0] && ptr[1] && stride[0] >= 16 && stride[1] >= 12) {
+        char line[400];
+        int n = 0;
+        for (int v = 0; v < 24; ++v) {
+            const u16* a = (const u16*)((const u8*)ptr[0] + v * stride[0] + 12);
+            const u16* b = (const u16*)((const u8*)ptr[1] + v * stride[1] + 8);
+            n += wsprintfA(line + n, "%d %d | %d %d;  ", Milli(HalfToFloat(a[0])), Milli(HalfToFloat(a[1])), Milli(HalfToFloat(b[0])),
+                           Milli(HalfToFloat(b[1])));
+            if (v % 4 == 3) {
+                Log("smoke:   %s", line);
+                n = 0;
+            }
+        }
+    } else {
+        Log("smoke:   the vertex buffers could not be read");
+    }
+    for (int st = 0; st < 2; ++st) {
+        if (ptr[st]) ((VbUnlockFn)(*(void***)vb[st])[12])(vb[st]);
+        if (vb[st]) ((RelFn)(*(void***)vb[st])[2])(vb[st]);
+    }
+}
+
+// Which of the two smoke models this sheet draw is: 0 (the black one) or 1 (the grey one)
+int SmokeModelOf(void* dev) {
+    typedef HRESULT(WINAPI * GetStreamFn)(void*, UINT, void**, UINT*, UINT*);
+    typedef HRESULT(WINAPI * GetCFn)(void*, UINT, float*, UINT);
+    typedef ULONG(WINAPI * RelFn)(void*);
+    void** dvt = *(void***)dev;
+    void* vb = nullptr;
+    UINT off = 0, stride = 0;
+    ((GetStreamFn)dvt[101])(dev, 0, &vb, &off, &stride);
+    if (vb) ((RelFn)(*(void***)vb)[2])(vb);
+    const u32 geo = (u32)(uintptr_t)vb * 31u + off * 7u + g_drawFirstVertex * 13u + g_drawStartIndex * 17u;
+    float bone[12];
+    ((GetCFn)dvt[95])(dev, 23, bone, 3);  // g_mWorld[0]: the root bone, its place in the w column
+    const float pos[3] = {bone[3], bone[7], bone[11]};
+    auto dist = [&](const SmokeModel& m) {
+        float d = 0;
+        for (int k = 0; k < 3; ++k) d += (m.pos[k] - pos[k]) * (m.pos[k] - pos[k]);
+        return d;
+    };
+    int pick;
+    SmokeModel* m = g_smokeModels;
+    if (!m[0].used) {
+        pick = 0;
+    } else if (!m[1].used) {
+        // a second model: other geometry, or the same geometry drawn once more in a frame where the first is already drawn
+        pick = (geo != m[0].geo || m[0].frame == g_smokeFrame) ? 1 : 0;
+    } else if (m[0].geo != m[1].geo) {
+        pick = geo == m[1].geo ? 1 : geo == m[0].geo ? 0 : (dist(m[1]) < dist(m[0]) ? 1 : 0);
+    } else {
+        pick = dist(m[1]) < dist(m[0]) ? 1 : 0;
+        if (m[pick].frame == g_smokeFrame && m[1 - pick].frame != g_smokeFrame) pick = 1 - pick;  // both are drawn each frame
+    }
+    if (!m[pick].used) {
+        m[pick].used = true;
+        m[pick].geo = geo;
+        Log("smoke: model %d (%s) is the sheet with vertex buffer %08X offset %u, first vertex %u, first index %u; root bone at %d %d %d "
+            "(thousandths)", pick + 1, pick ? "grey" : "black", (u32)(uintptr_t)vb, off, g_drawFirstVertex, g_drawStartIndex,
+            Milli(pos[0]), Milli(pos[1]), Milli(pos[2]));
+    }
+    if (pick == 0 && m[1].used && m[1].frame == g_smokeFrame) {  // model 2 drawn before model 1 in this frame
+        ++g_smokeOrderFlips;
+        if (g_smokeOrderFlips == 1 || g_smokeOrderFlips == 100 || g_smokeOrderFlips == 10000)
+            Log("smoke: the grey model drawn before the black one in %d frames so far (the game sorts them by distance)", g_smokeOrderFlips);
+    }
+    for (int k = 0; k < 3; ++k) m[pick].pos[k] = pos[k];
+    m[pick].frame = g_smokeFrame;
+    return pick;
+}
 
 // Draws a smoke sheet the Xbox way when this is one; false when the game draws it as it is
 template <typename Draw> bool SmokeDraw(void* dev, Draw draw, HRESULT* hr) {
@@ -668,20 +785,20 @@ template <typename Draw> bool SmokeDraw(void* dev, Draw draw, HRESULT* hr) {
     if (maskSheet) {  // the Xbox draws no sheet of the bare mask: it is only read by the sheets
         g_smokeMask = g_stageTex[0];
         g_smokeMaskFrame = g_smokeFrame;
-        if (g_smokeScrollFrame != g_smokeFrame) {
-            g_smokeScrollFrame = g_smokeFrame;
-            g_smokeScrollCount = 0;
-        }
-        if (g_smokeScrollCount < 2) {
-            float* sc = g_smokeScroll[g_smokeScrollCount++];
+        {
+            float sc[4];
             ((GetCFn)dvt[95])(dev, 243, sc, 1);  // GetVertexShaderConstantF: the scroll the game set for this draw
             static int toldScroll = 0;
             static u32 lastTold = 0;
-            if (toldScroll < 6 && g_smokeFrame - lastTold >= 120) {  // a few samples, 2 s apart at 60 FPS, to see it run
+            if (toldScroll < 8 && g_smokeFrame - lastTold >= 120) {  // a few samples to see it run
                 lastTold = g_smokeFrame;
                 ++toldScroll;
-                Log("smoke: the game's scroll at mask draw %d of frame %u: %d %d %d %d (thousandths)", g_smokeScrollCount, g_smokeFrame,
-                    Milli(sc[0]), Milli(sc[1]), Milli(sc[2]), Milli(sc[3]));
+                Log("smoke: the game's scroll at a mask draw (%s shader) of frame %u: %d %d %d %d (thousandths)",
+                    deferred ? "deferred" : "forward", g_smokeFrame, Milli(sc[0]), Milli(sc[1]), Milli(sc[2]), Milli(sc[3]));
+            }
+            if (sc[3] != 0.f) {  // the running scroll (the very first frames give 0)
+                for (int k = 0; k < 4; ++k) g_smokeScroll[k] = sc[k];
+                g_smokeScrollFrame = g_smokeFrame;
             }
         }
         static bool told[2];
@@ -693,14 +810,16 @@ template <typename Draw> bool SmokeDraw(void* dev, Draw draw, HRESULT* hr) {
         *hr = 0;
         return true;
     }
-    if (g_smokeMaskFrame != g_smokeFrame || !g_smokeMask) return false;  // no mask drawn before it in this frame
-    if (g_smokeSheetFrame != g_smokeFrame) {
-        g_smokeSheetFrame = g_smokeFrame;
-        g_smokeSheetNo = 0;
-    }
-    const int no = g_smokeSheetNo++;
-    const bool modelB = ((no & 1) != 0) != g_smokeSwap;
-    void* light = deferred ? bound8 : (g_smokeLightFrame == g_smokeFrame ? g_smokeLight : nullptr);
+    // the mask draws are sorted among the sheets by distance too: a mask seen in the last 10 s of frames stands (the same texture
+    // while the prologue lasts; a new level draws no smoke before its own mask is seen)
+    if (!g_smokeMask || g_smokeFrame - g_smokeMaskFrame > 600) return false;
+    LogSmokeVertices(dev);
+    const int model = SmokeModelOf(dev);
+    const int no = model;
+    const bool modelB = (model == 1) != g_smokeSwap;
+    // the light buffer: the one the deferred draws bind in s8 (still bound at the forward draws), or seen in the last frames
+    void* light = deferred || (bound8 && bound8 == g_smokeLight) ? bound8
+                  : (g_smokeFrame - g_smokeLightFrame <= 2 ? g_smokeLight : nullptr);
     void* diffuse = modelB && g_smokeCloud ? g_smokeCloud : g_stageTex[0];
     typedef HRESULT(WINAPI * GetVsFn)(void*, void**);
     typedef HRESULT(WINAPI * SetVsFn)(void*, void*);
@@ -708,16 +827,13 @@ template <typename Draw> bool SmokeDraw(void* dev, Draw draw, HRESULT* hr) {
     typedef HRESULT(WINAPI * SetSsFn)(void*, DWORD, DWORD, DWORD);
     GetSsFn getSs = (GetSsFn)dvt[68];
     SetSsFn setSs = (SetSsFn)dvt[69];
-    // UV1 = UV * scale + offset, the running scroll of the model (the Xbox c200: 1, 1, 0, -t for model 1, +t for model 2); the
-    // sheet wraps. From the frame's mask draws: by the sign of the offset when they differ, else in their order. Without them
-    // (never seen so far), the value of the Xbox capture, standing still.
-    float scroll[4] = {1.f, 1.f, 0.f, modelB ? 4.89506f : -4.89506f};
-    if (g_smokeScrollFrame == g_smokeFrame && g_smokeScrollCount > 0) {
-        int pick = g_smokeScrollCount > 1 ? (no & 1) : 0;
-        if (g_smokeScrollCount > 1 && (g_smokeScroll[0][3] < 0.f) != (g_smokeScroll[1][3] < 0.f))
-            pick = (g_smokeScroll[0][3] < 0.f) == !modelB ? 0 : 1;  // model 1 crawls with -t, model 2 with +t
-        for (int k = 0; k < 4; ++k) scroll[k] = g_smokeScroll[pick][k];
-        if (g_smokeScrollCount == 1 && modelB == (scroll[3] < 0.f)) scroll[3] = -scroll[3];  // one mask seen: the other way
+    // UV1 = UV * scale + offset, the running scroll the game sets at the mask draws (1, 1, 0, -t), as the Xbox c200 has it:
+    // -t for model 1, +t for model 2 (the same t: the two layers crawl in opposite directions). The sheet wraps.
+    float scroll[4];
+    for (int k = 0; k < 4; ++k) scroll[k] = g_smokeScroll[k];
+    {
+        const float t = scroll[3] < 0.f ? -scroll[3] : scroll[3];
+        scroll[3] = modelB ? t : -t;
     }
     float ownVs243[4];
     ((GetCFn)dvt[95])(dev, 243, ownVs243, 1);  // GetVertexShaderConstantF
@@ -755,16 +871,9 @@ template <typename Draw> bool SmokeDraw(void* dev, Draw draw, HRESULT* hr) {
     static bool told[2][2];
     if (!told[modelB][light != nullptr]) {
         told[modelB][light != nullptr] = true;
-        Log("smoke: sheet %d of the frame drawn as Xbox model %d (%s x the 128x64 mask at the second UV, V %s 4.895), lit by %s", no + 1,
+        Log("smoke: model %d drawn as Xbox model %d (%s x the 128x64 mask at the second UV, V %s t), lit by %s", no + 1,
             modelB ? 2 : 1, modelB ? (g_smokeCloud ? "the Xbox grey sheet" : "the black sheet, no cloud.png") : "the black sheet",
             modelB ? "+" : "-", light ? "the light buffer (deferred)" : "the game's forward lights (no light buffer in this frame)");
-    }
-    if (no == 2) {
-        static bool toldMore = false;
-        if (!toldMore) {
-            toldMore = true;
-            Log("smoke: more than two 256x128 smoke sheets in one frame (counted by twos)");
-        }
     }
     return true;
 }
@@ -1490,6 +1599,7 @@ HRESULT WINAPI H_DrawIp(void* dev, DWORD prim, INT base, UINT minIdx, UINT verts
         return 0;
     }
     g_drawFirstVertex = (UINT)(base + (INT)minIdx);
+    g_drawStartIndex = start;
     g_capDev = dev;
     if (g_cap.on) CapDraw(dev, from, "DIP", prim, count);
     if (g_cfg.traceWater && CurrentPsIsSmoke()) ExplainSmoke(dev, from);
@@ -1509,6 +1619,7 @@ HRESULT WINAPI H_DrawP(void* dev, DWORD prim, UINT start, UINT count) __attribut
 HRESULT WINAPI H_DrawP(void* dev, DWORD prim, UINT start, UINT count) {
     const u32 from = Caller();
     g_drawFirstVertex = start;
+    g_drawStartIndex = 0;
     g_capDev = dev;
     if (g_cap.on) CapDraw(dev, from, "DP ", prim, count);
     if (g_cfg.traceWater && CurrentPsIsSmoke()) ExplainSmoke(dev, from);
