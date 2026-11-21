@@ -136,6 +136,16 @@ test-schedule: $(OUT)/test_schedule
 
 test: test-schedule
 
+# FarShadowFilter's token patch (src/farshadow.h) on the 24 sun shadow shaders of the DP.exe given as DPEXE, part of "make test".
+$(OUT)/test_farshadow: tests/test_farshadow.cpp src/farshadow.h
+	@mkdir -p $(OUT)
+	$(HOSTCXX) -std=c++17 -Wall -Wextra -Isrc -o $@ tests/test_farshadow.cpp
+
+test-farshadow: $(OUT)/test_farshadow
+	$(OUT)/test_farshadow "$(DPEXE)"
+
+test: test-farshadow
+
 clean:
 	rm -rf $(OUT)
 

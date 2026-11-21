@@ -1,7 +1,10 @@
 // Ambient occlusion hook: the final composite of the game draws one quad (FUN_006E9F60, a single DrawPrimitive through
 // the device vtable). The call is redirected to a function with the same signature that first lets the overlay module
 // darken the HDR scene, then makes the game's own draw call. The Xbox 360 look (ui/xbox_look.cpp) uses the same place:
-// for this one draw it swaps the game's tone-map pixel shader for the mod's copy with the colour grading.
+// for this one draw it swaps the game's tone-map pixel shader for the mod's copy with the colour grading. The game's own
+// 4-tap filter (GameAliasFilter) too: with the grading it is in the mod's copy, without it the game's variant 31 draws.
+// The smooth upscaling of the bloom and the depth of field (SmoothBloom) and the dither against banding (Dither) are the
+// same copy, ungraded when XboxLook is off.
 #include "../base.h"
 #include "../sites.h"
 #include "../ui/ui.h"
@@ -44,11 +47,16 @@ HRESULT WINAPI CompositeDrawHook(void* dev, DWORD type, UINT start, UINT count) 
     const bool tune = TuneComposite(dev, tuned);
     if (g_cfg.ambientOcclusion > 0 && world) ui::AmbientOcclusionPass(dev, g_cfg.ambientOcclusion, g_cfg.aoRadius);
     ui::LookSaved look;
-    const bool graded = g_cfg.xboxLook && ui::XboxLookBegin(dev, &look);
+    // the mod's copy of the composite: for the grading, or (with neutral constants) only for the smooth bloom or the dither
+    const bool copied = (g_cfg.xboxLook || g_cfg.smoothBloom || g_cfg.dither) && ui::XboxLookBegin(dev, &look);
+    const bool aliased = !copied && g_cfg.gameAlias > 0 && ui::GameAliasBegin(dev, &look);
     void** vtable = *(void***)dev;
     HRESULT hr = ((HRESULT(WINAPI*)(void*, DWORD, UINT, UINT))vtable[81])(dev, type, start, count);
-    if (graded) ui::XboxLookEnd(dev, &look);
+    if (copied) ui::XboxLookEnd(dev, &look);
+    if (aliased) ui::GameAliasEnd(dev, &look);
     if (tune) ((SetPsConstFn)vtable[109])(dev, 9, tuned, 2);
+    // after the game's own state is back: the passes save and restore all of it around themselves
+    if (SUCCEEDED(hr)) ui::PostFiltersAfterComposite(dev);
     return hr;
 }
 
@@ -65,8 +73,9 @@ bool InstallAmbientOcclusion() {
         return false;
     }
     Log("ssao: hooked the final composite (strength %d%%, radius %d px)", g_cfg.ambientOcclusion, g_cfg.aoRadius);
-    Log("xboxlook: uses the same hook (now %s; scene grading %d%%, TV gamma %d%%, soft highlights %d%%)", g_cfg.xboxLook ? "on" : "off",
-        g_cfg.xboxGrade, g_cfg.xboxGamma, g_cfg.xboxShoulder);
+    Log("xboxlook: uses the same hook (now %s; scene grading %d%%, TV gamma %d%%, soft highlights %d%%; smooth bloom %s, dither %s)",
+        g_cfg.xboxLook ? "on" : "off", g_cfg.xboxGrade, g_cfg.xboxGamma, g_cfg.xboxShoulder, g_cfg.smoothBloom ? "on" : "off",
+        g_cfg.dither ? "on" : "off");
     return true;
 }
 

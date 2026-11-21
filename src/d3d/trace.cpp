@@ -8,6 +8,7 @@
 #include "../base.h"
 #include "../sites.h"
 #include "../stubs.h"
+#include "../farshadow.h"
 
 namespace ufx {
 bool g_usingDxvk = false;
@@ -304,6 +305,67 @@ bool CurrentPsWritesOC1() {
     return false;
 }
 
+// ---- far sun shadow filter ([Graphics] FarShadowFilter=1) ----
+// The patched copies (src/farshadow.h has the patch and why). The game always gets its own shader object; H_SetPs binds the
+// copy while the option is on, so the toggle works at once and off means exactly the game's shader.
+void* g_farOrig[64];
+void* g_farCopy[64];      // nullptr: kept as the game's
+int g_farCount = 0;       // entries used (some may be free again after the game released a shader)
+int g_farLive = 0, g_farPatched = 0;  // sun shadow shaders the game holds now, and how many of them have a copy
+bool g_farChanged = false;  // the table changed since the summary line was written
+u32 g_farCode[kFarShadowMaxWords];  // the patched bytecode, only while CreatePixelShader copies it
+
+// At creation of any game pixel shader. An address still in the table belongs to a shader the game has released, so that entry
+// goes first (or the copy would be bound in place of an unrelated shader). A sun shadow receiver then gets its filtered copy,
+// made whether the option is on or not, so the menu row changes at once.
+void NoteFarShadowShader(void* dev, const DWORD* code, void* ps) {
+    typedef ULONG(WINAPI * RelFn)(void*);
+    int slot = -1;
+    for (int i = 0; i < g_farCount; ++i) {
+        if (g_farOrig[i] == ps) {
+            if (g_farCopy[i]) {
+                ((RelFn)(*(void***)g_farCopy[i])[2])(g_farCopy[i]);
+                --g_farPatched;
+            }
+            g_farOrig[i] = g_farCopy[i] = nullptr;
+            --g_farLive;
+        }
+        if (!g_farOrig[i] && slot < 0) slot = i;  // a free entry
+    }
+    if (!NamesConstant(code, "g_vCascade") || !NamesConstant(code, "g_tDepth2")) return;
+    if (slot < 0) {
+        if (g_farCount >= 64) return;
+        slot = g_farCount++;
+    }
+    const char* why = "";
+    void* copy = nullptr;
+    const int n = PatchFarCascade((const u32*)code, g_farCode, &why);
+    if (n && FAILED(r_CreatePs(dev, (const DWORD*)g_farCode, &copy))) {
+        copy = nullptr;
+        why = "CreatePixelShader refused the copy";
+    }
+    if (!copy) Log("shadow: sun shadow shader at %08X kept as the game's (%s)", (u32)(uintptr_t)code, why);
+    g_farCopy[slot] = copy;
+    g_farPatched += copy ? 1 : 0;
+    ++g_farLive;
+    g_farOrig[slot] = ps;
+    g_farChanged = true;
+}
+
+// At SetPixelShader: the filtered copy of a sun shadow receiver while the option is on.
+void* FarShadowSwap(void* ps) {
+    for (int i = 0; i < g_farCount; ++i) {
+        if (g_farOrig[i] != ps) continue;
+        if (g_farChanged) {  // the first use after the shaders were created (they all come at load)
+            g_farChanged = false;
+            Log("shadow: far cascade filtered in %d of %d sun shadow shaders (%d kept as the game's), FarShadowFilter %s", g_farPatched,
+                g_farLive, g_farLive - g_farPatched, g_cfg.farShadowFilter ? "on" : "off for now");
+        }
+        return g_cfg.farShadowFilter && g_farCopy[i] ? g_farCopy[i] : ps;
+    }
+    return ps;
+}
+
 HRESULT WINAPI H_CreatePs(void* dev, const DWORD* code, void** out) {
     HRESULT hr = r_CreatePs(dev, code, out);
     if (SUCCEEDED(hr) && out && *out && g_psCount < 2048) {
@@ -312,6 +374,7 @@ HRESULT WINAPI H_CreatePs(void* dev, const DWORD* code, void** out) {
         g_psSmoke[g_psCount] = NamesConstant(code, "g_vDensity") && NamesConstant(code, "g_tShadow");
         g_psOC1[g_psCount++] = WritesOC1(code);
     }
+    if (SUCCEEDED(hr) && out && *out) NoteFarShadowShader(dev, code, *out);
     if (SUCCEEDED(hr) && out && *out && NamesMirror(code) && g_waterShaderCount < 512) {
         g_waterShaders[g_waterShaderCount++] = *out;
         if (g_waterShaderCount == 1) Log("water: water pixel shaders recognised (g_vMirror); the first is from %08X", (u32)(uintptr_t)code);
@@ -320,7 +383,8 @@ HRESULT WINAPI H_CreatePs(void* dev, const DWORD* code, void** out) {
 }
 
 HRESULT WINAPI H_SetPs(void* dev, void* ps) {
-    g_curPs = ps;
+    g_curPs = ps;  // always the game's own object: the draw diagnostics and the smoke look it up
+    if (g_farCount && ps) ps = FarShadowSwap(ps);
     return r_SetPs(dev, ps);
 }
 
@@ -1919,6 +1983,14 @@ void PatchDevice(void* dev) {
     if (g_cfg.glyphTheme) {
         bool t = PatchSlot(vt, kSetTexture, (void*)H_SetTexture, (void**)&r_SetTexture);
         Log("d3d: icon atlas swap hooked (%d)", t);
+    }
+    // The far shadow filter: the filtered copies are made as the game creates its shaders (at load) and bound in their place.
+    // Hooked whenever the device layer is in, not only when the filter is on at start: H_SetPs reads the setting on every call,
+    // so switching it in the menu works at once in both directions (with the option off both hooks only pass the calls on).
+    {
+        const bool d = PatchSlot(vt, kCreatePixelShader, (void*)H_CreatePs, (void**)&r_CreatePs);
+        const bool e = PatchSlot(vt, kSetPixelShader, (void*)H_SetPs, (void**)&r_SetPs);
+        Log("d3d: far shadow filter hooked (%d%d), %s", d, e, g_cfg.farShadowFilter ? "on" : "off for now");
     }
     if (g_cfg.traceWater || g_cfg.waterTest || g_cfg.fogFix || g_cfg.smokeFix || g_cfg.frameCapture) {
         const bool a = PatchSlot(vt, kSetPixelShaderConstantF, (void*)H_SetPsConstF, (void**)&r_SetPsConstF);

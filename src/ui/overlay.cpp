@@ -759,7 +759,9 @@ struct GpuTimer {
     double ms;  // the last finished measurement
 };
 // Zero-initialised aggregates: no constructor, so nothing has to run before DllEntry (this DLL has no C runtime to run one).
-GpuTimer g_timerAo = {}, g_timerPost = {};
+// g_timerUnder: the passes that ran after the game's composite (FiltersUnderHud); the panels show it added to g_timerPost.
+GpuTimer g_timerAo = {}, g_timerPost = {}, g_timerUnder = {};
+bool g_underTimed = false;  // g_timerUnder was issued since the last Present (otherwise its last value is dropped there)
 unsigned long long g_gpuFreq = 0;
 
 typedef HRESULT(WINAPI* CreateQueryFn)(void*, DWORD, void**);
@@ -824,6 +826,8 @@ void PerfPostBegin(void* dev) {
 void PerfPostEnd(void* dev) {
     if (!g_cfg.perfOverlay && !g_cfg.frameStats) return;
     TimerEnd(dev, g_timerPost);
+    if (!g_underTimed) g_timerUnder.ms = 0;  // a frame with everything at Present: no old time of the composite side in the sum
+    g_underTimed = false;
 }
 
 void PerfOverlayFrame(void* dev, double fps, double frameMs, double presentMs, double physicsMs) {
@@ -836,18 +840,19 @@ void PerfOverlayFrame(void* dev, double fps, double frameMs, double presentMs, d
     if (!lastUpdate || (u64)(now.QuadPart - (long long)lastUpdate) > (u64)freq.QuadPart / 2) {  // the text changes twice a second
         lastUpdate = (u64)now.QuadPart;
         const int f10 = (int)(frameMs * 10.0) % 10, p10 = (int)(physicsMs * 10.0) % 10, w10 = (int)(presentMs * 10.0) % 10;
-        const int a10 = (int)(g_timerAo.ms * 10.0) % 10, g10 = (int)(g_timerPost.ms * 10.0) % 10;
+        const double post = g_timerPost.ms + g_timerUnder.ms;  // the final-image passes at Present and under the interface
+        const int a10 = (int)(g_timerAo.ms * 10.0) % 10, g10 = (int)(post * 10.0) % 10;
         static int logTick = 0;
         if (++logTick % 10 == 0 || g_cfg.language == 1) {  // the log is always in English
             wsprintfW(line1, L"%d FPS   %d.%d ms", (int)(fps + 0.5), (int)frameMs, f10);
             wsprintfW(line2, L"physics %d.%d ms  Present wait %d.%d ms  mod GPU: SSAO %d.%d, post %d.%d ms", (int)physicsMs, p10,
-                      (int)presentMs, w10, (int)g_timerAo.ms, a10, (int)g_timerPost.ms, g10);
+                      (int)presentMs, w10, (int)g_timerAo.ms, a10, (int)post, g10);
             if (logTick % 10 == 0) Log("perf: %S | %S", line1, line2);
         }
         if (g_cfg.language != 1) {
             wsprintfW(line1, L"%d FPS   %d,%d мс", (int)(fps + 0.5), (int)frameMs, f10);
             wsprintfW(line2, L"фізика %d,%d мс  очікування Present %d,%d мс  GPU мода: SSAO %d,%d, пост %d,%d мс", (int)physicsMs, p10,
-                      (int)presentMs, w10, (int)g_timerAo.ms, a10, (int)g_timerPost.ms, g10);
+                      (int)presentMs, w10, (int)g_timerAo.ms, a10, (int)post, g10);
         }
     }
     if (!OverlayBegin(dev)) return;
@@ -896,7 +901,7 @@ void FrameStatsPanel(void* dev, double totalMs, double gameMs, double physicsMs,
         FmtMs(t[2], physicsMs);
         FmtMs(t[3], presentMs);
         FmtMs(t[4], worstMs);
-        FmtMs(t[5], g_timerAo.ms + g_timerPost.ms);
+        FmtMs(t[5], g_timerAo.ms + g_timerPost.ms + g_timerUnder.ms);
         FmtMs(t[6], busyMs);
         hz = DisplayRefreshHz();  // the monitor the game window is on, cached by the frame pacer
     }
@@ -1080,6 +1085,97 @@ void AntialiasFrame(void* dev, int percent) {
     }
     ReleaseSmaaTargets();  // two textures of the back buffer's size are not kept while the other method works
     RunPass(dev, &g_fxaaShader, &g_fxaaFailed, "antialias", kFxaaSource, sizeof(kFxaaSource) - 1, kProfilesFxaa, percent);
+}
+
+// ---- Filters under the interface ([Graphics] FiltersUnderHud) ----------------------------------------------------
+// The game's final composite (the hook in ssao.cpp) writes the finished 3D picture into the back buffer, and only then
+// does the game draw its 2D layer over it: subtitles, icons, the map, its menus. Run there, smoothing, sharpening and the
+// in-game look change the 3D picture alone: SMAA/FXAA no longer soften the letters, sharpening puts no halo around them,
+// a vignette or grain does not land on the interface (the console never filtered it either). Present then leaves out
+// what already ran. A frame without such a composite (the title, loading screens, videos), or one whose composite drew
+// into another target, keeps all of it at Present as before. The TV gamma stands for the screen and stays at Present,
+// and so do the photo mode's own sliders (the HUD is hidden in photo mode, and its look stays as it was). The passes take the same
+// way as the occlusion pass inside the game's frame: BeginScene fails there, so no EndScene is sent, and the whole
+// device state goes back through the state block of OverlayBegin (SMAA also puts the depth buffer back).
+namespace {
+bool g_underFilters = false;  // smoothing and sharpening ran after a composite since the last Present
+bool g_underLook = false;     // the in-game look too (not in photo mode)
+int g_underCount = 0;         // composites into the back buffer since the last Present
+int g_underMiss = 0;          // why a composite since the last Present did not take them: 1 another target, 2 another thread
+UINT g_underMissW = 0, g_underMissH = 0;  // that target's size
+UINT g_underBackW = 0, g_underBackH = 0;  // the back buffer the passes last ran on
+}  // namespace
+
+void PostFiltersAfterComposite(void* dev) {
+    if (!g_cfg.filtersUnderHud) return;
+    // Present runs the passes on the window thread only; a composite drawn elsewhere leaves them there
+    HWND window = GameWindowHandle();
+    if (!window || GetWindowThreadProcessId(window, nullptr) != GetCurrentThreadId()) {
+        g_underMiss = 2;
+        return;
+    }
+    typedef HRESULT(WINAPI * GetRtFn3)(void*, DWORD, void**);
+    void* target = nullptr;
+    Method<GetRtFn3>(dev, kGetRenderTarget)(dev, 0, &target);
+    UINT bw = 0, bh = 0, bf = 0;
+    void* back = BackBufferInfo(dev, &bw, &bh, &bf);
+    const bool onBack = target && back && target == back;
+    if (!onBack && target) {
+        u32 d[8] = {};  // Format, Type, Usage, Pool, MultiSampleType, MultiSampleQuality, Width, Height
+        Method<GetDescFn>(target, 12)(target, d);
+        g_underMissW = d[6];
+        g_underMissH = d[7];
+    }
+    if (target) Method<ReleaseFn>(target, kRelease)(target);
+    if (back) Method<ReleaseFn>(back, kRelease)(back);
+    if (!onBack) {  // a composite into a smaller buffer (or no back buffer this frame): nothing for the passes here
+        if (!target) g_underMissW = g_underMissH = 0;
+        g_underMiss = 1;
+        return;
+    }
+    const bool timed = g_cfg.perfOverlay || g_cfg.frameStats;
+    if (timed) {
+        EnsureFreq(dev);
+        TimerBegin(dev, g_timerUnder);
+    }
+    const bool photo = g_cfg.photoActive || PhotoPageOpen();  // the photo sliders stay at Present (ColorFrame picks them there)
+    if (g_cfg.antialias > 0) AntialiasFrame(dev, g_cfg.antialias);
+    if (!photo) ColorFrame(dev);
+    if (g_cfg.sharpen > 0) SharpenFrame(dev, g_cfg.sharpen);
+    if (timed) {
+        TimerEnd(dev, g_timerUnder);
+        g_underTimed = true;
+    }
+    g_underFilters = true;
+    g_underLook = !photo;
+    g_underBackW = bw;
+    g_underBackH = bh;
+    ++g_underCount;
+}
+
+bool TakePostFiltersUnderHud(bool* lookDone) {
+    const bool filters = g_underFilters;
+    *lookDone = g_underLook;
+    // where the passes ran, in the log whenever it changes (title, loading screens and play take turns, so it is capped)
+    const int path = !g_cfg.filtersUnderHud ? 0 : filters ? 1 : g_underMiss == 1 ? 3 : g_underMiss == 2 ? 4 : 2;
+    static int lastPath = -1, lines = 0;
+    if (path != lastPath && lines < 40) {
+        ++lines;
+        if (path == 0) Log("post filters: at Present on the whole frame (FiltersUnderHud=0)");
+        else if (path == 1) Log("post filters: drawn under the interface (after the composite, back buffer %ux%u)", g_underBackW, g_underBackH);
+        else if (path == 2) Log("post filters: at Present (no composite this frame)");
+        else if (path == 3) Log("post filters: at Present (the composite target is not the back buffer: %ux%u)", g_underMissW, g_underMissH);
+        else Log("post filters: at Present (the composite was drawn on another thread than the window's)");
+    }
+    lastPath = path;
+    static bool twiceLogged = false;
+    if (g_underCount > 1 && !twiceLogged) {
+        twiceLogged = true;
+        Log("post filters: %d composites into the back buffer in one frame, the passes ran after each", g_underCount);
+    }
+    g_underFilters = g_underLook = false;
+    g_underCount = g_underMiss = 0;
+    return filters;
 }
 
 // ---- The same building blocks for a final-image pass that lives in its own file (smaa.cpp) ------------------------

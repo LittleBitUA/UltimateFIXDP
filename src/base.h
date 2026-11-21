@@ -93,6 +93,8 @@ struct Config {
     int antialiasMode;       // how the edges are smoothed: 0 the FXAA-like pass, 1 SMAA 1x (falls back to 0 when it cannot run)
     int smaaQuality;         // SMAA: 0 low, 1 medium, 2 high (how far along an edge its end is looked for)
     int sharpen;             // sharpening of the final picture in percent (0 = off)
+    int filtersUnderHud;     // smoothing, sharpening and the in-game look run after the game's composite, under its 2D layer
+    int gameAlias;           // the game's own unused 4-tap filter in the composite: 0 off (as on PC), 1 the game's offset, 2 a quarter of an output pixel
     int screenshotKey;       // virtual key code for a PNG screenshot, 0 = off
     int glyphTheme;          // interface icons for the pad: 0 off, 1 auto (PlayStation for a DualSense), 2 Xbox, 3 PlayStation
     int dumpTextures;        // write the original textures to UltimateFix\\textures\\dump (diagnostic)
@@ -104,11 +106,14 @@ struct Config {
     int anisotropy;          // maximum anisotropic filtering, 1..16 (the game uses 8)
     int nearPlane;           // near plane of the play camera in tenths (game 10 = 1.0), 10..60: depth precision far away
     int bloomStrength;       // percent of the game's own bloom (100 = as the game)
+    int smoothBloom;         // bloom and depth of field blur read with a cubic B-spline in the composite (the mod's copy of it)
+    int dither;              // fixed +-0.5/255 noise before the 8-bit write of the composite and the TV gamma pass (banding)
     int exposureComp;        // exposure compensation in tenths of a stop (-30..30)
     int fullscreenEdgeFix;   // full-screen 2D quads (fades, item notice) cover the last pixel row and column above 720p
     int gameLook;            // a photo filter applied all the time (0 = none), [Graphics] GameLook
     int generateMips;        // build the mipmaps of world textures stored without them (far shimmer), at load
     int shadowBiasFix;       // more depth bias on the two far sun shadow cascades (crawling stripes far away)
+    int farShadowFilter;     // the far sun shadow cascade gets the game's own 4-tap filter of the near two (patched shader copies)
     int gameFov;             // field of view in play, percent of the game's own (100 = unchanged), 70..150
     int xboxExposure;        // no 0.85 / 0.75 exposure factors, as on the console
     int xboxLook;            // master switch of the Xbox 360 look: scene grading in the final composite and the display gamma
@@ -429,6 +434,10 @@ bool ScreenshotHidesHud();  // a shot without the HUD is being prepared (freecam
 void OpenPhotoPage();
 void PerfPostBegin(void* device);
 void PerfPostEnd(void* device);
+// FiltersUnderHud: right after the game's final composite (ssao.cpp) the smoothing, sharpening and in-game look go onto the
+// 3D picture before the game draws its 2D layer; at Present the second says what already ran this frame (and forgets it).
+void PostFiltersAfterComposite(void* device);
+bool TakePostFiltersUnderHud(bool* lookDone);
 void PerfOverlayFrame(void* device, double fps, double frameMs, double presentMs, double physicsMs);
 void FrameStatsPush(double frameMs);  // one finished frame for the graph
 void FrameStatsPanel(void* device, double totalMs, double gameMs, double physicsMs, double presentMs, double worstMs, double busyMs);

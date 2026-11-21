@@ -170,6 +170,17 @@ static const char kDefaultIni[] =
     "SmaaQuality=2\r\n"
     "; Sharpen the final picture (unsharp mask), percent 0..100. 0 = off, 50 by default. Changes at once.\r\n"
     "Sharpen=50\r\n"
+    "; 1 = smoothing, sharpening and GameLook go onto the 3D picture only, before the game draws its interface: subtitles,\r\n"
+    "; icons, the map and the game's menus stay sharp (the console never filtered them either). The TV gamma and the photo\r\n"
+    "; mode sliders still cover the whole frame. Frames without the game's 3D picture (title, loading screens, videos) are\r\n"
+    "; filtered as a whole as before. 0 = everything on the finished frame with the interface. Changes at once.\r\n"
+    "FiltersUnderHud=1\r\n"
+    "; The game's own 4-tap filter in its final composite (g_vAlias): the PC version has the shader and still sets its\r\n"
+    "; offset every frame, but never selects it. Whether the Xbox 360 used it is not confirmed. 0 = off, as on PC;\r\n"
+    "; 1 = the game's own filter with the game's offset (a slightly softer picture); 2 = the same four taps a quarter of an\r\n"
+    "; output pixel apart, which with RenderScale above 100 takes more of the scene's pixels into each screen pixel (less\r\n"
+    "; shimmer on wires, fences and roof edges). Changes at once.\r\n"
+    "GameAliasFilter=0\r\n"
     "; PNG screenshot of the picture without the menu into UltimateFix\\screenshots. Virtual key code, 122 = F11, 0 = off.\r\n"
     "ScreenshotKey=122\r\n"
     "; Interface icons. The game loads ONE icon atlas at start and only switches the coordinates between keyboard and\r\n"
@@ -200,6 +211,9 @@ static const char kDefaultIni[] =
     "NearPlane=200\r\n"
     "; 1 = more depth bias on the two far sun shadow cascades: no crawling shadow stripes in the distance. Changes at once.\r\n"
     "ShadowBiasFix=1\r\n"
+    "; 1 = the far sun shadow cascade (from about 200 units out) is filtered with the same four taps the game uses for the\r\n"
+    "; two near ones: no hard, stair-stepped shadow edges crawling in the distance. Not a console feature. Changes at once.\r\n"
+    "FarShadowFilter=0\r\n"
     "; 1 = world textures stored without mipmaps get them built when they load: far textures stop shimmering. Restart needed.\r\n"
     "GenerateMips=1\r\n"
     "; A photo mode filter applied all the time: 0 none, 1 warm, 2 cold, 3 B&W, 4 cinema, 5 vintage, 6 sepia, 7 noir, 8 film,\r\n"
@@ -212,6 +226,17 @@ static const char kDefaultIni[] =
     "; 0 = as the game; 10 = one stop brighter). The game keeps adapting to the light as before. Changes at once.\r\n"
     "BloomStrength=100\r\n"
     "ExposureComp=0\r\n"
+    "; 1 = the game's bloom and the blur of its depth of field are read from their small buffers with a smooth (bicubic\r\n"
+    "; B-spline) filter instead of one bilinear tap: at 1440p and 4K the halos of lamps and headlights and the out-of-focus\r\n"
+    "; edges lose their square steps. The same brightness, a slightly wider glow. Helps most with ScalePostBuffers=0 (with 1\r\n"
+    "; the buffers are already larger). The final picture is then drawn with the mod's copy of the game's shader, with the\r\n"
+    "; PC colours unless XboxLook is on; if that copy cannot be built, the game's own shader draws. Changes at once.\r\n"
+    "SmoothBloom=1\r\n"
+    "; 1 = a fixed, very fine noise of half a brightness level is added to the final picture just before it is stored with\r\n"
+    "; 8 bits per colour (and again after the TV gamma of XboxLook): smooth gradients in night skies, fog, dark rooms and\r\n"
+    "; around halos lose their contour bands. It does not move and is not visible as grain. Drawn by the same copy of the\r\n"
+    "; game's shader as SmoothBloom, with the PC colours unless XboxLook is on. Not a console feature. Changes at once.\r\n"
+    "Dither=1\r\n"
     "; The PC port darkens the picture by 0.85 (and 0.75 more in one cutscene state); the console did not.\r\n"
     "; 1 = remove the factors (about 15% brighter). Changes at once.\r\n"
     "XboxExposure=0\r\n"
@@ -754,6 +779,9 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.sharpen = (int)GetPrivateProfileIntW(L"Graphics", L"Sharpen", 50, ini);
     if (g_cfg.sharpen < 0) g_cfg.sharpen = 0;
     if (g_cfg.sharpen > 100) g_cfg.sharpen = 100;
+    g_cfg.filtersUnderHud = GetPrivateProfileIntW(L"Graphics", L"FiltersUnderHud", 1, ini) != 0 ? 1 : 0;
+    g_cfg.gameAlias = (int)GetPrivateProfileIntW(L"Graphics", L"GameAliasFilter", 0, ini);
+    if (g_cfg.gameAlias < 0 || g_cfg.gameAlias > 2) g_cfg.gameAlias = 0;
     g_cfg.screenshotKey = (int)GetPrivateProfileIntW(L"Graphics", L"ScreenshotKey", 122, ini);
     g_cfg.glyphTheme = (int)GetPrivateProfileIntW(L"Graphics", L"GlyphTheme", 1, ini);
     if (g_cfg.glyphTheme < 0 || g_cfg.glyphTheme > 3) g_cfg.glyphTheme = 1;
@@ -774,12 +802,15 @@ void LoadConfig(const wchar_t* ini) {
     if (g_cfg.nearPlane < 10) g_cfg.nearPlane = 10;
     if (g_cfg.nearPlane > 200) g_cfg.nearPlane = 200;
     g_cfg.shadowBiasFix = GetPrivateProfileIntW(L"Graphics", L"ShadowBiasFix", 1, ini) ? 1 : 0;
+    g_cfg.farShadowFilter = GetPrivateProfileIntW(L"Graphics", L"FarShadowFilter", 0, ini) ? 1 : 0;
     g_cfg.generateMips = GetPrivateProfileIntW(L"Graphics", L"GenerateMips", 1, ini) ? 1 : 0;
     g_cfg.gameLook = (int)GetPrivateProfileIntW(L"Graphics", L"GameLook", 0, ini);
     g_cfg.fullscreenEdgeFix = GetPrivateProfileIntW(L"Graphics", L"FullscreenEdgeFix", 1, ini) ? 1 : 0;
     g_cfg.bloomStrength = (int)GetPrivateProfileIntW(L"Graphics", L"BloomStrength", 100, ini);
     if (g_cfg.bloomStrength < 0) g_cfg.bloomStrength = 0;
     if (g_cfg.bloomStrength > 300) g_cfg.bloomStrength = 300;
+    g_cfg.smoothBloom = GetPrivateProfileIntW(L"Graphics", L"SmoothBloom", 1, ini) ? 1 : 0;
+    g_cfg.dither = GetPrivateProfileIntW(L"Graphics", L"Dither", 1, ini) ? 1 : 0;
     g_cfg.exposureComp = (int)GetPrivateProfileIntW(L"Graphics", L"ExposureComp", 0, ini);
     if (g_cfg.exposureComp < -30) g_cfg.exposureComp = -30;
     if (g_cfg.exposureComp > 30) g_cfg.exposureComp = 30;
@@ -841,6 +872,8 @@ void LoadConfig(const wchar_t* ini) {
         g_cfg.antialias = 0;
         g_cfg.ambientOcclusion = 0;
         g_cfg.xboxLook = 0;  // its composite hook (the SSAO one) and its world test are not installed in this mode
+        g_cfg.smoothBloom = 0;  // the same composite hook
+        g_cfg.dither = 0;       // the same composite hook
         g_cfg.sharpen = 0;
         g_cfg.frameStats = 0;
         g_cfg.perfOverlay = 0;
