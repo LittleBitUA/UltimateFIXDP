@@ -15,7 +15,7 @@ bool g_d3dWrapper = false;  // a d3d9.dll that is neither DXVK nor the Windows o
 namespace {
 
 enum { kSetTexture = 65, kSetVertexShaderConstantF = 94, kSetPixelShaderConstantF = 109, kCreateDevice = 16, kCreateTexture = 23, kCreateRenderTarget = 28, kCreateDepthStencil = 29,
-       kStretchRect = 34, kSetViewport = 47, kDrawPrimitive = 81, kDrawIndexedPrimitive = 82, kCreatePixelShader = 106, kSetPixelShader = 107 };
+       kStretchRect = 34, kSetViewport = 47, kDrawPrimitive = 81, kDrawIndexedPrimitive = 82, kCreatePixelShader = 106, kSetPixelShader = 107, kSetRenderTarget = 37 };
 
 typedef void*(WINAPI* CreateD3dFn)(UINT);
 typedef HRESULT(WINAPI* CreateDeviceFn)(void*, UINT, DWORD, HWND, DWORD, void*, void**);
@@ -607,6 +607,43 @@ void ExplainCloudReader(void* dev, u32 from) {
     }
 }
 
+// With TraceWater: the draws that write into a 256x256 A8R8G8B8 render target (where the cloud is made), once per caller and
+// pixel shader, in UltimateFix\cloudw_<caller>_<shader>.txt with the textures they read saved as PNG
+typedef HRESULT(WINAPI* SetRtFn)(void*, DWORD, void*);
+SetRtFn r_SetRt = nullptr;
+void* g_rt0 = nullptr;
+HRESULT WINAPI H_SetRt(void* dev, DWORD index, void* surface) {
+    if (index == 0) g_rt0 = surface;
+    return r_SetRt(dev, index, surface);
+}
+void ExplainCloudWriter(void* dev, u32 from) {
+    if (!g_rt0) return;
+    typedef HRESULT(WINAPI * SurfDescFn)(void*, u32*);
+    u32 d[8] = {};
+    if (FAILED(((SurfDescFn)(*(void***)g_rt0)[12])(g_rt0, d)) || d[6] != 256 || d[7] != 256 || d[0] != 21 /*A8R8G8B8*/) return;
+    static u32 done[16];
+    static int count = 0;
+    const u32 key = from * 31u + (u32)(uintptr_t)g_curPs;
+    for (int i = 0; i < count; ++i) if (done[i] == key) return;
+    if (count >= 16) return;
+    done[count++] = key;
+    wchar_t path[MAX_PATH + 64];
+    wsprintfW(path, L"%sUltimateFix\\cloudw_%08X_%08X.txt", g_paths.gameDir, from, (u32)(uintptr_t)g_curPs);
+    WriteDrawFile(dev, from, path);
+    char t[4][48];
+    for (int st = 0; st < 4; ++st) DescribeTexture(g_stageTex[st], t[st]);
+    Log("cloud: a draw from %08X (shader %08X) writes a 256x256 target (%08X): s0 %s | s1 %s | s2 %s | s3 %s", from, (u32)(uintptr_t)g_curPs,
+        (u32)(uintptr_t)g_rt0, t[0], t[1], t[2], t[3]);
+    typedef HRESULT(WINAPI * SaveFn)(const wchar_t*, DWORD, void*, const void*);
+    HMODULE d3dx = GetModuleHandleW(L"d3dx9_43.dll");
+    SaveFn save = d3dx ? (SaveFn)(void*)GetProcAddress(d3dx, "D3DXSaveTextureToFileW") : nullptr;
+    for (int st = 0; st < 4 && save; ++st) {
+        if (!g_stageTex[st]) continue;
+        wsprintfW(path, L"%sUltimateFix\\cloudw_%08X_%08X_s%d.png", g_paths.gameDir, from, (u32)(uintptr_t)g_curPs, st);
+        save(path, 3 /*PNG*/, g_stageTex[st], nullptr);
+    }
+}
+
 void ExplainSmoke(void* dev, u32 from) {
     // the smoke particles only: blended (ALPHABLENDENABLE 1), no depth writes, a DXT3 texture; the same shader family also draws
     // opaque characters, which filled the first list
@@ -1101,7 +1138,10 @@ HRESULT WINAPI H_DrawIp(void* dev, DWORD prim, INT base, UINT minIdx, UINT verts
     }
     g_drawFirstVertex = (UINT)(base + (INT)minIdx);
     if (g_cfg.traceWater && CurrentPsIsSmoke()) ExplainSmoke(dev, from);
-    if (g_cfg.traceWater) ExplainCloudReader(dev, from);
+    if (g_cfg.traceWater) {
+        ExplainCloudReader(dev, from);
+        ExplainCloudWriter(dev, from);
+    }
     if (g_cfg.traceWater && HuntSkips(dev, from, count)) return 0;
     if (void* grey = SmokeTextureFor(dev)) {
         void* own = g_stageTex[0];
@@ -1118,7 +1158,10 @@ HRESULT WINAPI H_DrawP(void* dev, DWORD prim, UINT start, UINT count) {
     const u32 from = Caller();
     g_drawFirstVertex = start;
     if (g_cfg.traceWater && CurrentPsIsSmoke()) ExplainSmoke(dev, from);
-    if (g_cfg.traceWater) ExplainCloudReader(dev, from);
+    if (g_cfg.traceWater) {
+        ExplainCloudReader(dev, from);
+        ExplainCloudWriter(dev, from);
+    }
     if (g_cfg.traceWater && HuntSkips(dev, from, count)) return 0;
     if (void* grey = SmokeTextureFor(dev)) {
         void* own = g_stageTex[0];
@@ -1216,6 +1259,7 @@ void PatchDevice(void* dev) {
         const bool e = PatchSlot(vt, kSetPixelShader, (void*)H_SetPs, (void**)&r_SetPs);
         const bool f = PatchSlot(vt, kDrawIndexedPrimitive, (void*)H_DrawIp, (void**)&r_DrawIp);
         const bool g = PatchSlot(vt, kDrawPrimitive, (void*)H_DrawP, (void**)&r_DrawP);
+        if (g_cfg.traceWater) PatchSlot(vt, kSetRenderTarget, (void*)H_SetRt, (void**)&r_SetRt);
         g_waterHooked = a && f && g;
         if (g_cfg.traceWater || g_cfg.waterTest)
             Log("water: diagnostic hooked (%d%d%d%d%d%d%d): each distinct water draw goes to the log once; Numpad 1 switches WaterTest", a, b,
