@@ -26,8 +26,8 @@ _Універсальний фікс для_ **Deadly Premonition: The Director'
 One DLL in the game folder instead of DPfix, a stability fix, a map fix and a crash fix.
 No installer: press **F10** in game and everything is there. The mod also gives the game 4 GB of memory by itself (from the second start).
 
-> **Version 0.7.7.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
-> <br>New in 0.7.7: **an Xbox pad without Steam Input**, and the log says why a pad is not seen — see [What's new](#whats-new-in-077). In 0.7.6: **PlayStation icons on a DualSense (Edge too)**. In 0.7.5: texture replacements in mod folders work. In 0.7.4: **York can fly** (cheats, F3), the lock-on aims at the chest instead of the hips. In 0.7.3: a mod's name, author and version in a plain `mod.txt`. In 0.7.2: **updates itself** (F9 on the start card), a much smaller archive — see [What's new](#whats-new-in-072). In 0.7.1: fixes for the **thread races** behind the crashes and hangs on entering buildings, the **QTE at high FPS**, **4 GB of memory by itself**, checked and compressed save backups, the game's own Xbox icons — see [What's new](#whats-new-in-071).
+> **Version 0.7.8.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
+> <br>New in 0.7.8: **a redesigned F10 menu** (crisp text, the website's palette, quiet motion, changed settings marked) and **five graphics options** (filters under the interface, smoother far shadows, smooth glow, dither against banding, the game's own edge filter) — see [What's new](#whats-new-in-078). In 0.7.7: **an Xbox pad without Steam Input**. In 0.7.6: **PlayStation icons on a DualSense (Edge too)**. In 0.7.5: texture replacements in mod folders work. In 0.7.4: **York can fly** (cheats, F3), the lock-on aims at the chest instead of the hips. In 0.7.3: a mod's name, author and version in a plain `mod.txt`. In 0.7.2: **updates itself** (F9 on the start card), a much smaller archive — see [What's new](#whats-new-in-072). In 0.7.1: fixes for the **thread races** behind the crashes and hangs on entering buildings, the **QTE at high FPS**, **4 GB of memory by itself**, checked and compressed save backups, the game's own Xbox icons — see [What's new](#whats-new-in-071).
 
 ### Features
 
@@ -100,6 +100,26 @@ port with the Xbox 360 original:
   next start, the original kept as `DP.exe.bak`).
 - 🧍 **Residents walking into nowhere** — a failed route lookup moved the
   resident to (0, 0, 0); now the resident stays where it stood.
+
+### What's new in 0.7.8
+
+**A redesigned F10 menu:**
+- **Crisp text at any resolution.** Text and lines sit on whole pixels, so the menu is as sharp as Windows text at 1080p and 1440p, also after dragging the panel. Titles and headings are set in Segoe UI Semibold.
+- **One calm palette, the same as the website.** No green any more. Switches are red or grey pills with a round knob, and buttons and cards have rounded corners.
+- **Quiet motion.** The menu fades in, the selection glides between rows, and a switch knob slides. Closing stays instant. You can turn it off with the row "Menu animation" (`[Menu] Animations`).
+- **You can see what you changed.** A changed setting gets a grey dot, the sidebar shows how many settings changed in each section, and a slider marks its default. Backspace puts the selected setting back to its default.
+- **Notices.** A notice is coloured by what it means (grey for information, amber for a warning, coral for an error). Up to three wait their turn, and with the menu open they appear inside the panel instead of over its title.
+
+**Graphics (F10 → Screen and graphics; each can be switched off):**
+- **Filters under the interface** (`FiltersUnderHud=1`): smoothing (SMAA/FXAA), sharpening and the game look apply to the 3D picture only, so subtitles and icons stay sharp.
+- **Smoother far shadows** (`FarShadowFilter=1`): the far sun shadow cascade is filtered with the same four taps the game uses for the near ones. Distant shadow edges no longer step and crawl.
+- **Smooth glow and depth of field** (`SmoothBloom=1`): the bloom and the blur are upscaled with a cubic filter. Halos around lamps and the out-of-focus background have no square steps at 1440p/4K.
+- **Dither against banding** (`Dither=1`): a fixed, invisible noise removes the colour bands in skies, fog and dark gradients.
+- **The game's own edge filter** (`GameAliasFilter`, off by default): a 4-tap filter the game has in its final shader but never uses. 1 = as written in the game, 2 = adjusted to the render scale. It is not known whether the Xbox used it.
+
+**Also:**
+- `DumpTextures` writes every texture, cube maps included, with no size limit.
+- For testers: `[Debug] FrameCapture=1` + Numpad 0 writes one frame draw by draw (shaders, states and textures), a RenderDoc-like capture for this Direct3D 9 game.
 
 ### What's new in 0.7.7
 
@@ -290,8 +310,8 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 Одна DLL у теці гри замість DPfix, фіксу стабільності, фіксу мапи й фіксу вильотів.
 Без інсталятора: натисніть **F10** у грі, і все там. Мод також сам дає грі 4 ГБ пам'яті (з другого запуску).
 
-> **Версія 0.7.7.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
-> <br>Нове в 0.7.7: **Xbox-пад без Steam Input**, і журнал каже, чому пад не видно — див. [Що нового](#що-нового-в-077). У 0.7.6: **іконки PlayStation на DualSense (і Edge)**. У 0.7.5: заміни текстур у теках модів працюють. У 0.7.4: **Йорк літає** (читкоди, F3), автоприціл цілиться в груди, а не в стегна. У 0.7.3: назва, автор і версія мода у звичайному `mod.txt`. У 0.7.2: **оновлюється сам** (F9 на стартовій плашці), значно менший архів — див. [Що нового](#що-нового-в-072). У 0.7.1: виправлено **гонки потоків**, через які гра падала й зависала при вході в будівлі, **QTE на високому FPS**, **4 ГБ пам'яті самі собою**, перевірені й стиснені копії збережень, оригінальні іконки Xbox — див. [Що нового](#що-нового-в-071).
+> **Версія 0.7.8.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
+> <br>Нове в 0.7.8: **оновлене меню F10** (чіткий текст, палітра сайту, тихий рух, позначки змінених налаштувань) і **п'ять графічних опцій** (фільтри під інтерфейсом, згладжені далекі тіні, плавне світіння, дизеринг проти смуг, власний фільтр країв гри) — див. [Що нового](#що-нового-в-078). У 0.7.7: **Xbox-пад без Steam Input**. У 0.7.6: **іконки PlayStation на DualSense (і Edge)**. У 0.7.5: заміни текстур у теках модів працюють. У 0.7.4: **Йорк літає** (читкоди, F3), автоприціл цілиться в груди, а не в стегна. У 0.7.3: назва, автор і версія мода у звичайному `mod.txt`. У 0.7.2: **оновлюється сам** (F9 на стартовій плашці), значно менший архів — див. [Що нового](#що-нового-в-072). У 0.7.1: виправлено **гонки потоків**, через які гра падала й зависала при вході в будівлі, **QTE на високому FPS**, **4 ГБ пам'яті самі собою**, перевірені й стиснені копії збережень, оригінальні іконки Xbox — див. [Що нового](#що-нового-в-071).
 
 ### Можливості
 
@@ -363,6 +383,26 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
   запуску, оригінал лишається як `DP.exe.bak`).
 - 🧍 **Жителі, що йдуть «в нікуди»** — невдалий пошук маршруту переносив жителя
   в (0, 0, 0); тепер він лишається там, де стояв.
+
+### Що нового в 0.7.8
+
+**Оновлене меню F10:**
+- **Чіткий текст за будь-якої роздільності.** Текст і лінії стоять на цілих пікселях, тож меню таке ж різке, як текст Windows, на 1080p і 1440p, і після перетягування панелі. Назви й заголовки набрано Segoe UI Semibold.
+- **Одна спокійна палітра, як на сайті.** Зеленого більше немає. Перемикачі стали червоними або сірими «пілюлями» з круглою кнопкою, кнопки й картки мають заокруглені кути.
+- **Тихий рух.** Меню плавно з'являється, виділення ковзає між рядками, кнопка перемикача з'їжджає. Закривається меню, як і раніше, миттєво. Вимикається рядком «Анімація меню» (`[Menu] Animations`).
+- **Видно, що ви змінили.** Біля зміненого налаштування стоїть сіра крапка, у бічній панелі видно, скільки змін у кожному розділі, а повзунок позначає своє типове значення. Backspace повертає вибраному налаштуванню типове значення.
+- **Сповіщення.** Колір сповіщення залежить від змісту: сірий для інформації, бурштиновий для попередження, кораловий для помилки. Сповіщення стають у чергу (до трьох), а при відкритому меню показуються всередині панелі, а не поверх заголовка.
+
+**Графіка (F10 → Екран і графіка; кожне можна вимкнути):**
+- **Фільтри під інтерфейсом** (`FiltersUnderHud=1`): згладжування (SMAA/FXAA), різкість і вигляд гри накладаються лише на 3D-картинку, тож субтитри й іконки лишаються різкими.
+- **Згладжені далекі тіні** (`FarShadowFilter=1`): далекий каскад сонячних тіней фільтрується тими самими чотирма вибірками, що й ближні. Краї тіней удалині більше не «сходинками» й не повзуть.
+- **Плавне світіння й розфокус** (`SmoothBloom=1`): світіння й розмиття збільшуються кубічним фільтром. Ореоли ліхтарів і розмитий фон без квадратних сходинок на 1440p/4K.
+- **Дизеринг проти смуг** (`Dither=1`): нерухомий непомітний шум прибирає смуги на небі, у тумані й темних переходах.
+- **Власний фільтр країв гри** (`GameAliasFilter`, вимкнено за замовчуванням): 4-точковий фільтр, який є у фінальному шейдері гри, але гра його ніколи не вмикає. 1 = як записано в грі, 2 = під масштаб рендерингу. Чи вмикав його Xbox, невідомо.
+
+**Також:**
+- `DumpTextures` записує всі текстури, кубічні теж, без обмеження розміру.
+- Для тестувальників: `[Debug] FrameCapture=1` + Numpad 0 записує один кадр по малюваннях (шейдери, стани, текстури), щось на кшталт RenderDoc для цієї гри на Direct3D 9.
 
 ### Що нового в 0.7.7
 

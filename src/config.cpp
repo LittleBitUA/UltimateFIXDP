@@ -84,10 +84,6 @@ static const char kDefaultIni[] =
     "AutoLargeAddress=1\r\n"
     "; 1 = the stick-waggle QTE (alternate A/D) counts every swap as at 60 FPS; above 60 the game counted each swap less. Restart needed.\r\n"
     "QteFix=1\r\n"
-    "; 1 = the prologue's smoke is drawn as on the Xbox 360 (read from a capture of the Xbox build): each smoke sheet's alpha is\r\n"
-    "; multiplied by a 128x64 mask at the model's second UV, which the PC port left out (one solid black patch). The Xbox also has a\r\n"
-    "; second, grey smoke layer whose texture the PC data lack: it comes with the mod as UltimateFix\\glyphs\\fix\\cloud.png. Changes at once.\r\n"
-    "SmokeFix=1\r\n"
     "; Experiment, no visible change yet: 1 = smoke volumes (the doorways of the prologue) are not drawn into the G-buffer.\r\n"
     "FogFix=0\r\n"
     "; 1 = the lock-on aims at the chest. The game aims at the waist bone and lowers the point by a tenth of the distance\r\n"
@@ -471,6 +467,8 @@ static const char kDefaultIni[] =
     "; render target, states and textures; every shader disassembled once; every texture up to 1024 as PNG once; the picture).\r\n"
     "; A tool like RenderDoc for this Direct3D 9 game. A capture takes some seconds.\r\n"
     "FrameCapture=0\r\n"
+    "; Unfinished, off: the prologue smoke drawn the Xbox 360 way (work in progress, not yet like the console). Changes at once.\r\n"
+    "SmokeFix=0\r\n"
     "; 1 = log the player state changes, the game's camera mode changes, scripted camera requests and sudden camera (eye) jumps, each\r\n"
     "; with the cutscene flag, and the car input once a second while driving; at most 600 lines per start. Play to the place where the\r\n"
     "; camera should change, then send UltimateFix\\ufx.log. Off by default (every line is written on the game thread).\r\n"
@@ -948,7 +946,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.compressBackups = GetPrivateProfileIntW(L"Save", L"CompressBackups", 1, ini) ? 1 : 0;
     g_cfg.fasterLoading = GetPrivateProfileIntW(L"Fixes", L"FasterLoading", 1, ini) ? 1 : 0;
     g_cfg.qteFix = GetPrivateProfileIntW(L"Fixes", L"QteFix", 1, ini) ? 1 : 0;
-    g_cfg.smokeFix = GetPrivateProfileIntW(L"Fixes", L"SmokeFix", 1, ini) ? 1 : 0;
+    g_cfg.smokeFix = GetPrivateProfileIntW(L"Debug", L"SmokeFix", 0, ini) ? 1 : 0;  // [Fixes] SmokeFix of the 0.7.8 test builds is not read: unfinished
     g_cfg.fogFix = GetPrivateProfileIntW(L"Fixes", L"FogFix", 0, ini) ? 1 : 0;
     g_cfg.lockOnAim = GetPrivateProfileIntW(L"Fixes", L"LockOnAim", 1, ini) ? 1 : 0;
     g_cfg.lockOnHeight = (int)GetPrivateProfileIntW(L"Fixes", L"LockOnHeight", 40, ini);
