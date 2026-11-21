@@ -309,7 +309,7 @@ void NoteLoad(int kind, u64 started, const void* data, UINT size) {
     const u64 now = TickNow();
     const u32 us = TickMicros(started, now);
     u32 width = 0, height = 0;
-    if (data && size >= 128 && ((const u32*)data)[0] == 0x20534444u /*"DDS "*/) {
+    if (data && size >= 128 && size != 0x7FFFFFFFu && ((const u32*)data)[0] == 0x20534444u /*"DDS "*/) {  // the size marker: no header
         width = ((const u32*)data)[4];
         height = ((const u32*)data)[3];
     }

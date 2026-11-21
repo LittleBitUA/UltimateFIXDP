@@ -1426,7 +1426,8 @@ void ColorFrame(void* dev) {
 }
 
 void SharpenFrame(void* dev, int percent) {
-    if (g_cfg.sharpenMode == 1 && !g_rcasFailed && percent > 0) {
+    if (g_cfg.sharpenMode == 1 && g_rcasFailed) g_cfg.sharpenMode = 0;  // RCAS cannot run this session: the row shows what sharpens
+    if (g_cfg.sharpenMode == 1 && percent > 0) {
         // AMD's sharpness is in stops (0 = strongest, each stop halves the lobe): 100 % = 0 stops, 50 % = 1 stop. The
         // default 50 then lifts a soft, low-contrast edge by about as much as the unsharp mask at 50 did.
         const float extra[4] = {Pow2Tenths(-(100 - (percent > 100 ? 100 : percent)) / 5), 0.f, 0.f, 0.f};
