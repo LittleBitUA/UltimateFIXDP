@@ -110,6 +110,7 @@ port with the Xbox 360 original:
 - **You can see what you changed.** A changed setting gets a grey dot, the sidebar shows how many settings changed in each section, and a slider marks its default. Backspace puts the selected setting back to its default.
 - **You can see what waits for a restart.** The "restart" tag turns amber only on a setting whose value differs from what runs now, and its description says what runs. The sidebar counts these settings and offers "Restart the game" (a click, R, or X / Square on a pad). It asks first, because progress since the last save is lost, and it refuses while the game is writing its save (seen with the save protection on).
 - **Long descriptions in full.** A description too long for its box ends with "… F1 / R3: in full". F1, R3 on a pad or a click on the box opens it on a card over the list, scrolled with ↑ ↓ or the wheel, with the default, the value now and when a change applies. Esc, F1, B or a click outside closes it. A setting without a description (the photo sliders) gets one from its range and default.
+- **An honest photo preview.** The photo mode page no longer darkens the whole picture, so brightness, contrast and the filters are judged on the real image; the list keeps enough opacity to stay readable. Hold the right mouse button (L3 on a pad) to fade the panel away and look at the picture; the game still sees no input, and a small note says to let go. "Picture" is now the second row, under the free camera. With the menu closed, a quiet strip at the bottom names the flying keys and F11 / F4 / F10 / F6 for 6 seconds (again after any F key). It is drawn after the screenshot is taken, so it is never in a picture.
 - **Notices.** A notice is coloured by what it means (grey for information, amber for a warning, coral for an error). Up to three wait their turn, and with the menu open they appear inside the panel instead of over its title.
 
 **Graphics (F10 → Screen and graphics; each can be switched off):**
@@ -280,7 +281,7 @@ To uninstall, delete `X3DAudio1_7.dll` (and, for the 4 GB flag, put `DP.exe.bak`
 | Key | Action |
 |---|---|
 | **F10** | Settings menu |
-| **View + Menu** (DualSense: **Create + Options**) | Settings menu on a gamepad: the D-pad or left stick moves, A / Cross picks, B / Circle closes, LB / RB the section, LT / RT a screen of rows, Y / Triangle the default, R3 the whole description, X / Square a mod's folder on the Mods page, elsewhere the restart while settings wait for one (`[Menu] PadControl`) |
+| **View + Menu** (DualSense: **Create + Options**) | Settings menu on a gamepad: the D-pad or left stick moves, A / Cross picks, B / Circle closes, LB / RB the section, LT / RT a screen of rows, Y / Triangle the default, R3 the whole description, X / Square a mod's folder on the Mods page, elsewhere the restart while settings wait for one, L3 held on the photo mode page the picture without the menu (`[Menu] PadControl`) |
 | **F7** | Set a waypoint (on the pause map or in the world) · **Shift+F7** removes it · **Ctrl+F7** to the game's objective |
 | **Shift+S** | Quick turn (on a pad: the Xbox 360 combination) |
 | **F6** | Photo mode |
@@ -420,6 +421,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 - **Тихий рух.** Меню плавно з'являється, виділення ковзає між рядками, кнопка перемикача з'їжджає. Закривається меню, як і раніше, миттєво. Вимикається рядком «Анімація меню» (`[Menu] Animations`).
 - **Видно, що ви змінили.** Біля зміненого налаштування стоїть сіра крапка, у бічній панелі видно, скільки змін у кожному розділі, а повзунок позначає своє типове значення. Backspace повертає вибраному налаштуванню типове значення.
 - **Довгий опис повністю.** Опис, що не влазить у своє поле, закінчується «… F1 / R3: повністю». F1, R3 на ґеймпаді або клік по полю відкриває його на картці над списком: гортається ↑ ↓ або колесом, унизу типове значення, поточне й коли зміна діє. Закриває Esc, F1, B або клік поза карткою. Налаштування без опису (повзунки фоторежиму) отримують опис із діапазону й типового значення.
+- **Чесний перегляд у фоторежимі.** Сторінка фоторежиму більше не затемнює весь кадр, тож яскравість, контраст і фільтри видно на справжній картинці; список лишається достатньо непрозорим, щоб його було легко читати. Затисніть праву кнопку миші (L3 на ґеймпаді), і панель зникне, щоб роздивитися кадр; гра при цьому не бачить натискань, а невеличкий напис просить відпустити кнопку. «Знімок» тепер другий рядок, під вільною камерою. Коли меню закрите, внизу на 6 секунд з'являється тиха смужка з клавішами польоту й F11 / F4 / F10 / F6 (знову після будь-якої F-клавіші). Вона малюється вже після знімка, тож на знімок не потрапляє.
 - **Сповіщення.** Колір сповіщення залежить від змісту: сірий для інформації, бурштиновий для попередження, кораловий для помилки. Сповіщення стають у чергу (до трьох), а при відкритому меню показуються всередині панелі, а не поверх заголовка.
 
 **Графіка (F10 → Екран і графіка; кожне можна вимкнути):**
@@ -577,7 +579,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 | Клавіша | Дія |
 |---|---|
 | **F10** | Меню налаштувань |
-| **View + Menu** (DualSense: **Create + Options**) | Меню налаштувань на ґеймпаді: хрестовина або лівий стік ходять, A / хрестик вибирає, B / коло закриває, LB / RB розділ, LT / RT на екран рядків, Y / трикутник типове, R3 увесь опис, X / квадрат теку мода на сторінці «Моди» (`[Menu] PadControl`) |
+| **View + Menu** (DualSense: **Create + Options**) | Меню налаштувань на ґеймпаді: хрестовина або лівий стік ходять, A / хрестик вибирає, B / коло закриває, LB / RB розділ, LT / RT на екран рядків, Y / трикутник типове, R3 увесь опис, X / квадрат теку мода на сторінці «Моди», затиснутий L3 на сторінці фоторежиму кадр без меню (`[Menu] PadControl`) |
 | **F7** | Поставити мітку (на мапі паузи або у світі) · **Shift+F7** прибирає · **Ctrl+F7** на ціль гри |
 | **Shift+S** | Швидкий розворот (на ґеймпаді: комбінація Xbox 360) |
 | **F6** | Фоторежим |

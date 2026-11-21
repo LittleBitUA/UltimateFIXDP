@@ -177,9 +177,15 @@ int main() {
         CHECK(f.pressed == kPadDetails, "R3 (%x)", f.pressed);
         f = MenuPadUpdate(p, r, 6000);
         CHECK(f.pressed == 0, "R3 does not repeat (%x)", f.pressed);
-        r.buttons = 1u << 8;  // L3 is not the menu's
+        // L3 is held to peek at the photo (the menu reads `down`): one press, then held without repeats until let go
+        r.buttons = kXbLS;
         f = MenuPadUpdate(p, r, 6016);
-        CHECK(f.pressed == 0 && f.down == 0, "L3 does nothing (%x)", f.down);
+        CHECK(f.pressed == kPadPeek && f.down == kPadPeek, "L3 (%x %x)", f.pressed, f.down);
+        f = MenuPadUpdate(p, r, 8000);
+        CHECK(f.pressed == 0 && f.down == kPadPeek, "L3 held, no repeat (%x %x)", f.pressed, f.down);
+        r.buttons = 0;
+        f = MenuPadUpdate(p, r, 8016);
+        CHECK(f.down == 0, "L3 let go (%x)", f.down);
     }
     // The menu opened with the pair: it is still held on the first frame of the open menu and must not close it again.
     {

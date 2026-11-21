@@ -10,7 +10,7 @@
 // A gamepad ([Menu] PadControl) does the same: View + Menu (Create + Options) held together opens and closes, the D-pad or the
 // left stick moves and changes (held, it repeats, and a slider speeds up), A / Cross is Enter, B / Circle is Esc, Y / Triangle
 // is Backspace, R3 is F1, LB / RB the section, LT / RT a screen of rows. The hints at the bottom name the pad's buttons while
-// it is used.
+// it is used. On the photo page the right mouse button or L3, held, fades the panel away to show the picture (a peek).
 // A change of a setting that has an ini key is written to UltimateFix.ini at once (a slider when the drag ends). Rows
 // without a key (most of the photo mode and the cheats) last for the session only.
 #include "ui.h"
@@ -213,8 +213,8 @@ Item g_pageDisplay[] = {
      {L"Панель з'являється плавно, виділення ковзає до вибраного рядка й розділу, повзунок перемикача пересувається. Вимкнено: усе змінюється миттєво. Закривається меню завжди одразу.",
       L"The panel fades in, the selection glides to the chosen row and section, the knob of a switch slides across. Off: everything changes at once. The menu always closes at once."}, NOTR},
     {{L"Керування меню ґеймпадом", L"Gamepad control of the menu"}, &g_cfg.menuPadControl, kBool, 0, 1, 1, false, L"Menu", L"PadControl", nullptr, nullptr,
-     {L"Меню F10 працює й на ґеймпаді: View + Menu разом (на DualSense Create + Options) відкриває і закриває його, хрестовина або лівий стік ходять, A / хрестик вибирає, B / коло закриває, LB / RB (L1 / R1) перемикають розділ, LT / RT гортають на екран, Y / трикутник повертає типове, R3 показує весь опис, X / квадрат на сторінці «Моди» відкриває теку мода, на інших перезапускає гру, коли налаштування чекають перезапуску (спершу запитає). Гра в цей час ґеймпада не бачить. Діє з наступного відкриття меню.",
-      L"The F10 menu also works on a gamepad: View + Menu together (Create + Options on a DualSense) opens and closes it, the D-pad or the left stick moves, A / Cross picks, B / Circle closes, LB / RB (L1 / R1) switch the section, LT / RT scroll a screen, Y / Triangle restores the default, R3 shows the whole description, X / Square opens a mod's folder on the Mods page and, on the others, restarts the game while settings wait for a restart (it asks first). The game does not see the pad meanwhile. Takes effect the next time the menu opens."}, NOTR},
+     {L"Меню F10 працює й на ґеймпаді: View + Menu разом (на DualSense Create + Options) відкриває і закриває його, хрестовина або лівий стік ходять, A / хрестик вибирає, B / коло закриває, LB / RB (L1 / R1) перемикають розділ, LT / RT гортають на екран, Y / трикутник повертає типове, R3 показує весь опис, X / квадрат на сторінці «Моди» відкриває теку мода, на інших перезапускає гру, коли налаштування чекають перезапуску (спершу запитає), затиснутий L3 на сторінці фоторежиму ховає меню, щоб побачити кадр. Гра в цей час ґеймпада не бачить. Діє з наступного відкриття меню.",
+      L"The F10 menu also works on a gamepad: View + Menu together (Create + Options on a DualSense) opens and closes it, the D-pad or the left stick moves, A / Cross picks, B / Circle closes, LB / RB (L1 / R1) switch the section, LT / RT scroll a screen, Y / Triangle restores the default, R3 shows the whole description, X / Square opens a mod's folder on the Mods page and, on the others, restarts the game while settings wait for a restart (it asks first), and L3 held on the photo mode page hides the menu to show the picture. The game does not see the pad meanwhile. Takes effect the next time the menu opens."}, NOTR},
     {{L"Перевіряти оновлення", L"Check for updates"}, &g_cfg.checkUpdates, kBool, 0, 1, 1, true, L"Menu", L"CheckUpdates", nullptr, nullptr,
      {L"На старті один анонімний запит до GitHub: чи вийшла нова версія. Якщо так, плашка на старті й сторінка «Про мод» пропонують F9: мод сам завантажить її, замінить X3DAudio1_7.dll та іконки й перезапустить гру. Налаштування, моди й копії збережень лишаються.",
       L"One anonymous request to GitHub at the start: is a new version out. If so, the start card and the About page offer F9: the mod downloads it, replaces X3DAudio1_7.dll and the icons and restarts the game. Settings, mods and save backups stay."}, NOTR},
@@ -770,9 +770,14 @@ void BatchTick() {
 
 Item g_pagePhoto[] = {
     {{L"Вільна камера", L"Free camera"}, &g_cfg.photoActive, kBool, 0, 1, 1, false, nullptr, nullptr, nullptr, nullptr,
-     {L"Камера летить за мишею й WASD (Space/C вгору й вниз, Shift швидше, Ctrl повільніше). Закрийте меню (F10 чи Esc), щоб керувати нею; F10 відкриває його знову. F6 вмикає й вимикає весь фоторежим.",
-      L"The camera flies with the mouse and WASD (Space/C up and down, Shift faster, Ctrl slower). Close the menu (F10 or Esc) to steer it; F10 opens it again. F6 switches the whole photo mode on and off."},
+     {L"Камера летить за мишею й WASD (Space/C вгору й вниз, Shift швидше, Ctrl повільніше). Закрийте меню (F10 чи Esc), щоб керувати нею; F10 відкриває його знову. Затисніть праву кнопку миші (L3 на ґеймпаді), щоб побачити кадр без меню. F6 вмикає й вимикає весь фоторежим.",
+      L"The camera flies with the mouse and WASD (Space/C up and down, Shift faster, Ctrl slower). Close the menu (F10 or Esc) to steer it; F10 opens it again. Hold the right mouse button (L3 on a gamepad) to see the picture without the menu. F6 switches the whole photo mode on and off."},
      {L"Камера", L"Camera"}},
+    // The most used action, right under the camera: it was the last of 30 rows, below the costumes and the poses.
+    {{L"Знімок", L"Picture"}, &g_shotPick, kInt, 0, 2, 1, false, nullptr, nullptr, ApplyShot, nullptr,
+     {L"Зберігає PNG кадру без меню в UltimateFix\\screenshots (клавіша F11 теж; Shift+F11 — без інтерфейсу гри). «З кожним фільтром» знімає ту саму сцену з усіма фільтрами й вашими пресетами, по файлу на кожен; заморозьте час, щоб сцена не змінювалась.",
+      L"Saves a PNG of the frame without the menu to UltimateFix\\screenshots (the F11 key too; Shift+F11 without the game's HUD). \"With every filter\" shoots the same scene with all filters and your presets, a file each; freeze time so that the scene stays."},
+     NOTR, kShotValues, 2, kShotNames, nullptr, false},
     {{L"Заморозити час гри", L"Freeze game time"}, &g_cfg.photoFreeze, kBool, 0, 1, 1, false, nullptr, nullptr, nullptr, nullptr,
      {L"Усе в грі завмирає: персонажі, машини, вода. Камера літає далі.", L"Everything in the game stands still: characters, cars, water. The camera keeps flying."}, NOTR},
     {{L"Сховати інтерфейс", L"Hide the interface"}, &g_cfg.photoHud, kBool, 0, 1, 1, false, nullptr, nullptr, nullptr, nullptr,
@@ -827,10 +832,6 @@ Item g_pagePhoto[] = {
      NOTR},
     {{L"Застосувати позу", L"Apply the pose"}, &g_applyPick, kInt, 0, 1, 1, false, nullptr, nullptr, ApplyPoseNow, nullptr, {nullptr, nullptr}, NOTR,
      kApplyValues, 1, kApplyNames, nullptr, false},
-    {{L"Знімок", L"Picture"}, &g_shotPick, kInt, 0, 2, 1, false, nullptr, nullptr, ApplyShot, nullptr,
-     {L"Зберігає PNG кадру без меню в UltimateFix\\screenshots (клавіша F11 теж; Shift+F11 — без інтерфейсу гри). «З кожним фільтром» знімає ту саму сцену з усіма фільтрами й вашими пресетами, по файлу на кожен; заморозьте час, щоб сцена не змінювалась.",
-      L"Saves a PNG of the frame without the menu to UltimateFix\\screenshots (the F11 key too; Shift+F11 without the game's HUD). \"With every filter\" shoots the same scene with all filters and your presets, a file each; freeze time so that the scene stays."},
-     {L"Знімок", L"Picture"}, kShotValues, 2, kShotNames, nullptr, false},
 };
 
 // ---- Cheats and world control. Each button is a one-shot action: the pick variable is put back to 0 at once.
@@ -1053,6 +1054,11 @@ int g_chipRow = -1;         // the item that highlight belongs to
 int g_hoverRow = -1;        // the item whose button the mouse is over this frame, -1 = none
 int g_hoverChip = 0;        // that button
 bool g_swallowEsc = false;  // the Esc that closed the menu is still held: the game must not see it as a new press
+bool g_swallowRmb = false;  // the same for the right mouse button that held a peek at the photo (the game's aim)
+// Hold to peek on the photo page: while the right mouse button or L3 is held, the panel fades away and the picture shows
+// clean (the game still sees no input: the menu stays open). g_peekAmount is how far the panel has faded (0 shown, 1 gone).
+bool g_peeking = false;
+float g_peekAmount = 0.f;
 
 // ---- the gamepad ([Menu] PadControl) ------------------------------------------------------------------------
 // The menu reads pad 0 itself once per frame (ReadMenuPad, from the sources the game's read uses) while the game is shown a
@@ -1063,6 +1069,7 @@ MenuPad g_pad;
 bool g_padOn = false;             // this opening of the menu is driven by the pad too (PadControl when it opened)
 bool g_padMode = false;           // the last input came from the pad: the hints name its buttons and the mouse cursor is hidden
 unsigned g_padRepeat = 0;         // the part of this frame's pad presses that are repeats of a held button
+unsigned g_padHeld = 0;           // the logical buttons held now (not those still held from the opening): L3 peeks while held
 DWORD g_padGameButtons = 0;       // the buttons of the menu's last read, in the layout the game gets them
 int g_padSource = kPadNone;       // where the menu's last read came from
 volatile LONG g_padOpenWanted = 0;  // the hook saw the open pair while the menu was closed: OnFrame opens it
@@ -1211,7 +1218,7 @@ bool Pressed(int vk) {
 }
 
 const int kMenuKeys[] = {VK_F10, VK_ESCAPE, VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT, VK_RETURN, VK_SPACE, VK_TAB,
-                         VK_PRIOR, VK_NEXT, VK_LBUTTON, VK_BACK, 'Y', 'N', 'R', VK_F9, VK_F1};
+                         VK_PRIOR, VK_NEXT, VK_LBUTTON, VK_RBUTTON, VK_BACK, 'Y', 'N', 'R', VK_F9, VK_F1};
 
 void RememberKeys() {
     for (int vk : kMenuKeys) g_prev[vk] = Down(vk) ? 1 : 0;
@@ -1239,7 +1246,7 @@ long long g_motionNow = 0;    // the tick of this drawn frame
 float g_motionDt = 0.f;       // seconds since the drawn frame before, at most 0.1
 unsigned g_motionFrame = 16;  // counts drawn frames; jumps by two at every opening, so nothing glides from where it was at the closing
 long long g_openedAt = 0;     // the tick the menu opened at: the fade-in runs from it (closing stays instant)
-float g_openAlpha = 1.f, g_openRise = 0.f;  // this frame's fade-in: the alpha and how far below its place the panel is
+float g_openAlpha = 1.f, g_openRise = 0.f;  // this frame's fade-in (and peek): the alpha and how far below its place the panel is
 Item* g_flipItem = nullptr;   // the switch flipped last and when: its knob slides over
 long long g_flipAt = 0;
 constexpr float kFadeSeconds = 0.14f, kRiseUnits = 6.f;  // the switch's time is ui.h's kSwitchSeconds
@@ -1748,6 +1755,7 @@ int PageRows() {
 // This frame's pad: the menu's buttons that went down or repeated (0 without pad control or without a pad).
 unsigned PadFrame() {
     g_padRepeat = 0;
+    g_padHeld = 0;
     if (!g_padOn) return 0;
     MenuPadRaw raw = {};
     int source = kPadNone;
@@ -1764,6 +1772,7 @@ unsigned PadFrame() {
     if (source) g_padSource = source;
     const MenuPadFrame f = MenuPadUpdate(g_pad, raw, GetTickCount());
     g_padRepeat = f.repeat;
+    g_padHeld = f.down;
     if (f.down | f.pressed) g_padMode = true;
     return f.pressed;
 }
@@ -1785,6 +1794,7 @@ void HandleInput(bool foreground) {
     if (!foreground) {
         MenuPadRestart(g_pad);  // what is held when the focus comes back is not a press
         g_mouseKnown = false;
+        g_peeking = false;      // the panel comes back behind another window; a button still held there peeks again
         return;
     }
     // The mouse wheel: the game keeps its movement in a 16-bit word (it never reaches our window hook); take it.
@@ -1803,6 +1813,22 @@ void HandleInput(bool foreground) {
     if (g_mouseMoved || g_wheel || AnyKeyPressed()) g_padMode = false;
     if (pad & kPadOpen) {  // the pair that opened the menu closes it from anywhere, a question or a typed number too
         g_open = false;
+        g_wheel = 0;
+        return;
+    }
+    // The photo page previews the filters on the live picture, and the panel covers most of it: held, the right mouse button
+    // or L3 fades the panel away (OnFrame) and nothing else of the menu reacts meanwhile (a click or a key would act on rows
+    // nobody can see). Not over a question: its answer must stay in sight.
+    const bool peeking = g_page == kPhotoPage && !g_confirm && (Down(VK_RBUTTON) || (g_padHeld & kPadPeek));
+    if (peeking != g_peeking) {
+        g_peeking = peeking;
+        static bool logged = false;
+        if (peeking && !logged) {
+            logged = true;
+            Log("menu: photo page peek (the panel hidden while the right mouse button or L3 is held)");
+        }
+    }
+    if (peeking) {
         g_wheel = 0;
         return;
     }
@@ -2162,7 +2188,7 @@ float PadCap(const wchar_t* label, bool disc, float x, float y, int px, bool dra
     return w;
 }
 
-// The cap(s) of a token: {A} {B} {X} {Y} {LB} {RB} {LT} {RT} {R3} {OPEN}. Returns the width, 0 for an unknown token.
+// The cap(s) of a token: {A} {B} {X} {Y} {LB} {RB} {LT} {RT} {R3} {L3} {OPEN}. Returns the width, 0 for an unknown token.
 float PadToken(const wchar_t* t, int n, float x, float y, int px, bool draw) {
     auto is = [t, n](const wchar_t* s) {
         int i = 0;
@@ -2179,6 +2205,7 @@ float PadToken(const wchar_t* t, int n, float x, float y, int px, bool draw) {
     if (is(L"LT")) return PadCap(ps ? L"L2" : L"LT", false, x, y, px, draw);
     if (is(L"RT")) return PadCap(ps ? L"R2" : L"RT", false, x, y, px, draw);
     if (is(L"R3")) return PadCap(L"R3", false, x, y, px, draw);  // the description box says "R3" on both families
+    if (is(L"L3")) return PadCap(L"L3", false, x, y, px, draw);
     if (is(L"OPEN")) {
         float w = PadCap(ps ? L"Create" : L"View", false, x, y, px, draw);
         const float plus = TextWidth(L"+", px);
@@ -2703,6 +2730,22 @@ void DrawHelpCard(const Item& it) {
     if (right - fx > 24) DrawFitted(when, fx, factsY, pending ? kWarn : kMuted, 14, right - fx);
 }
 
+// A key's name for a hint (the photo page's key line, the strip of the flying camera): F1..F24, a letter or a digit. Anything
+// else is left out of the hint (false, `out` empty).
+bool KeyLabel(int vk, wchar_t* out) {
+    if (vk >= VK_F1 && vk <= VK_F24) {
+        wsprintfW(out, L"F%d", vk - VK_F1 + 1);
+        return true;
+    }
+    if ((vk >= 'A' && vk <= 'Z') || (vk >= '0' && vk <= '9')) {
+        out[0] = (wchar_t)vk;
+        out[1] = 0;
+        return true;
+    }
+    out[0] = 0;
+    return false;
+}
+
 // A background colour with its alpha scaled by the menu opacity setting.
 u32 Fade(u32 c) {
     u32 a = (c >> 24) * (u32)g_cfg.menuOpacity / 100;
@@ -2711,10 +2754,24 @@ u32 Fade(u32 c) {
 
 void Draw() {
     if (g_rowCount == 0) BuildRows();  // never an empty page
-    SetOverlayFade(g_openAlpha, 0.f);  // the dimming fades in with the panel but does not rise: it covers the whole picture
-    FillRect(0, 0, 1280, 720, Fade(0x50000000));  // the same light dimming on every page, so the picture does not change when you switch pages
+    // A light dimming on every page, so the picture does not change when you switch pages; but not on the photo page, whose
+    // filters are judged on this very picture (a quarter darker, Brightness and Contrast were tuned on a wrong image).
+    const bool photo = g_page == kPhotoPage;
+    if (!photo) {
+        SetOverlayFade(g_openAlpha, 0.f);  // the dimming fades in with the panel but does not rise: it covers the whole picture
+        FillRect(0, 0, 1280, 720, Fade(0x50000000));
+    }
     SetOverlayFade(g_openAlpha, g_openRise);
     FillRect(kPx, kPy, kPw, kPh, Fade(kPanelBg));
+    // Without the dimming a bright scene shows through a see-through panel and the rows get hard to read: the list and the
+    // description box keep at least kPhotoListAlpha. A second layer of the panel's own colour tops its alpha up to that
+    // (1 - (1 - a)(1 - b) = target), so the colour stays the panel's and only the scene behind it shows less.
+    constexpr u32 kPhotoListAlpha = 0xE0;
+    const u32 panelA = Fade(kPanelBg) >> 24;
+    if (photo && panelA < kPhotoListAlpha) {
+        const u32 b = 255 - (255 - kPhotoListAlpha) * 255 / (255 - panelA);
+        FillRound(kCx - 20, kListTop - 8, kCr + 28 - (kCx - 20), kListBottom + kHintBoxBottom + 8 - (kListTop - 8), 12, Alpha(kPanel, b));
+    }
     FillRect(kPx, kPy, kPw, 3, kAccent);
     FillRect(kPx + kPw - 15, kPy + kPh - 5, 11, 2, kFaint);  // the grip in the corner: drag to resize
     FillRect(kPx + kPw - 5, kPy + kPh - 15, 2, 11, kFaint);
@@ -2883,14 +2940,33 @@ void Draw() {
         DrawPadLineImpl(en ? L"↑ ↓ select     ← → change / pick a button     {A} toggle / press / set a number     {B} close     {LB} {RB} section"
                            : L"↑ ↓ вибір     ← → змінити / вибрати кнопку     {A} вибрати / натиснути / число     {B} закрити     {LB} {RB} розділ",
                         kCx, kPy + kPh - 36, kFaint, 13, kCr + 24 - kCx);
-        DrawPadLineImpl(en ? L"{Y} default     {R3} whole description     {LT} {RT} a screen up / down     {OPEN} open / close the menu"
-                           : L"{Y} типове     {R3} увесь опис     {LT} {RT} на екран вище / нижче     {OPEN} відкрити / закрити меню",
-                        kCx, kPy + kPh - 20, kFaint, 12, kCr + 24 - kCx);
+        // the photo page names the peek right after the description (a narrow panel cuts the end of the line)
+        if (photo)
+            DrawPadLineImpl(en ? L"{Y} default     {R3} whole description     {L3} hold: the picture without the menu     {LT} {RT} a screen up / down     {OPEN} open / close the menu"
+                               : L"{Y} типове     {R3} увесь опис     {L3} тримати: кадр без меню     {LT} {RT} на екран вище / нижче     {OPEN} відкрити / закрити меню",
+                            kCx, kPy + kPh - 20, kFaint, 12, kCr + 24 - kCx);
+        else
+            DrawPadLineImpl(en ? L"{Y} default     {R3} whole description     {LT} {RT} a screen up / down     {OPEN} open / close the menu"
+                               : L"{Y} типове     {R3} увесь опис     {LT} {RT} на екран вище / нижче     {OPEN} відкрити / закрити меню",
+                            kCx, kPy + kPh - 20, kFaint, 12, kCr + 24 - kCx);
         return;
     }
     DrawFitted(en ? L"↑ ↓ select     ← → change / pick a button     Enter type a number / press     Tab section     wheel / click     F10 or Esc close"
                   : L"↑ ↓ вибір     ← → змінити / вибрати кнопку     Enter ввести число / натиснути     Tab розділ     колесо / клік     F10 або Esc закрити",
                kCx, kPy + kPh - 36, kFaint, 13, kCr + 24 - kCx);
+    // the photo page: the peek and the picture key take the place of moving and resizing the panel
+    if (photo) {
+        wchar_t line[200], shot[8] = L"";
+        KeyLabel(g_cfg.screenshotKey, shot);
+        if (shot[0])
+            wsprintfW(line, en ? L"Backspace default     F1 whole description     hold the right mouse button: the picture without the menu     %s picture"
+                               : L"Backspace типове     F1 увесь опис     затисніть праву кнопку миші: кадр без меню     %s знімок", shot);
+        else
+            lstrcpyW(line, en ? L"Backspace default     F1 whole description     hold the right mouse button: the picture without the menu"
+                              : L"Backspace типове     F1 увесь опис     затисніть праву кнопку миші: кадр без меню");
+        DrawFitted(line, kCx, kPy + kPh - 20, kFaint, 12, kCr + 24 - kCx);
+        return;
+    }
     DrawFitted(en ? L"Backspace default     F1 whole description     drag the header: move     drag the corner: resize     double-click the corner: reset"
                   : L"Backspace типове     F1 увесь опис     заголовок: перенести     куточок: розмір     подвійний клік по куточку: скинути",
                kCx, kPy + kPh - 20, kFaint, 12, kCr + 24 - kCx);
@@ -2910,12 +2986,21 @@ bool SwallowEsc() {
     if (g_swallowEsc && (r_GetAsyncKeyState(VK_ESCAPE) & 0x8000) == 0) g_swallowEsc = false;
     return g_swallowEsc;
 }
+// The right mouse button of a peek, when F10 or the pad's pair closed the menu while it was still held: the game would aim.
+bool SwallowRmb() {
+    if (g_swallowRmb && (r_GetAsyncKeyState(VK_RBUTTON) & 0x8000) == 0) g_swallowRmb = false;
+    return g_swallowRmb;
+}
 
 SHORT WINAPI H_GetAsyncKeyState(int vk) {
     if (g_open || FreeCamBlocksInput()) return 0;
     if (vk == VK_ESCAPE && g_swallowEsc) {
         SwallowEsc();
         return 0;  // also the first call after the release: its "pressed since the last call" bit belongs to the old press
+    }
+    if (vk == VK_RBUTTON && g_swallowRmb) {
+        SwallowRmb();
+        return 0;
     }
     return r_GetAsyncKeyState(vk);
 }
@@ -2924,6 +3009,7 @@ BOOL WINAPI H_GetKeyboardState(PBYTE state) {
     if (!g_open && !FreeCamBlocksInput()) {
         BOOL ok = r_GetKeyboardState(state);
         if (ok && SwallowEsc()) state[VK_ESCAPE] = 0;
+        if (ok && SwallowRmb()) state[VK_RBUTTON] = 0;
         return ok;
     }
     for (int i = 0; i < 256; ++i) state[i] = 0;
@@ -3351,11 +3437,14 @@ void OpenChanged(bool foreground) {
     g_confirm = 0;
     g_helpOpen = false;
     g_dragging = false;
+    g_peeking = false;  // every opening starts with the panel in sight
+    g_peekAmount = 0.f;
     FlushUnsaved();
     Log("menu: %s", g_open ? "opened" : "closed");
     if (g_open) {
         LoadDefaults();  // once, at the first opening: the ini and the pages are ready by now
         g_swallowEsc = false;
+        g_swallowRmb = false;
         g_openedAt = MotionStamp();  // the fade-in starts now; the highlights start on their rows (GlideTo)
         g_motionFrame += 2;
         g_flipItem = nullptr;
@@ -3368,6 +3457,7 @@ void OpenChanged(bool foreground) {
     }
     if (g_cfg.hideCursor) SetCursor(nullptr);
     if (Down(VK_ESCAPE)) g_swallowEsc = true;
+    if (Down(VK_RBUTTON)) g_swallowRmb = true;
     // The pad buttons held now (B or the pair that closed the menu) would reach the game as new presses: B is its cancel, Start
     // its pause. They stay the game's once let go (PadForGame). A request to open the menu seen meanwhile is stale.
     if (g_padOn) InterlockedExchange(&g_padSwallow, (LONG)g_padGameButtons);
@@ -3472,6 +3562,129 @@ void StartHint(void* device) {
     OverlayEnd();
 }
 
+namespace {
+// ---- The photo page's peek and the keys of the flying camera ---------------------------------------------------------
+// The peek moves at the opening's pace: kFadeSeconds there and back with Animations on, at once with them off.
+void PeekFrame() {
+    const float target = g_peeking ? 1.f : 0.f;
+    if (!MotionOn()) {
+        g_peekAmount = target;
+        return;
+    }
+    const float step = g_motionDt / kFadeSeconds;
+    if (g_peekAmount < target) g_peekAmount = g_peekAmount + step > target ? target : g_peekAmount + step;
+    else if (g_peekAmount > target) g_peekAmount = g_peekAmount - step < target ? target : g_peekAmount - step;
+}
+float PeekEased() { return g_peekAmount * g_peekAmount * (3.f - 2.f * g_peekAmount); }  // smoothstep: soft at both ends
+
+// While the panel is away, one small pill at the bottom centre says how to get it back, so a held button never looks as if
+// the menu had closed. It fades in as the panel fades out.
+void PeekChip(float amount) {
+    SetOverlayFade(amount, 0.f);
+    const wchar_t* text = g_cfg.language == 1 ? L"Release to bring the menu back" : L"Відпустіть, щоб повернути меню";
+    const float tw = TextWidth(text, 13), w = tw + 36, h = 30, x = SnapWhole((1280 - w) / 2), y = 720 - 28 - h;
+    FillRoundFramed(x, y, w, h, h / 2, kRaised, kLine2);
+    DrawText(text, x + 18, y + 7, kText, 13);
+}
+
+// One hint of the strip: up to two keys as caps (and the pad's pair), then what they do.
+struct StripHint {
+    wchar_t key1[8], key2[8];
+    bool padPair;  // the pad's open pair after the keys (the only pad buttons that work while the camera flies)
+    const wchar_t* label;
+};
+
+// Draws (or with draw false only measures) the hints in a row from x, with a hairline before hint `split` (the flying keys
+// first, then the actions). Returns the width.
+float StripRow(const StripHint* hints, int count, int split, float x, float y, int px, bool draw) {
+    const float x0 = x;
+    for (int i = 0; i < count; ++i) {
+        const StripHint& h = hints[i];
+        if (i == split && i > 0) {
+            if (draw) FillRect(x - 3, y - 1, 1, (float)px + 3, kLine2);
+            x += 16;
+        }
+        if (h.key1[0]) x += PadCap(h.key1, false, x, y, px, draw) + 4;
+        if (h.key2[0]) x += PadCap(h.key2, false, x, y, px, draw) + 4;
+        if (h.padPair) x += PadToken(L"OPEN", 4, x, y, px, draw) + 4;
+        x += 2;
+        x += draw ? DrawText(h.label, x, y, kMuted, px) : TextWidth(h.label, px);
+        if (i + 1 < count) x += 18;
+    }
+    return x - x0;
+}
+
+// With the menu closed and the free camera on, a quiet strip at the bottom centre names the keys for 6 s: nothing on screen
+// said WASD, F11 or how to get back. It comes back for 6 s whenever the menu closes over the flying camera, the camera is
+// switched on, or an F key is pressed (F4 showing the interface again, F11 ...). Not while the interface is hidden: that is
+// a picture being composed. It is drawn in OnFrame, after this frame's screenshot was taken (display.cpp runs ScreenshotFrame
+// first), so it never lands in a picture.
+DWORD g_stripFrom = 0;  // GetTickCount when it was (re)started, 0 = not shown
+
+void PhotoKeysStrip(void* device, bool foreground, bool menuJustClosed) {
+    static bool wasActive = false;
+    static unsigned heldF = 0;  // F1..F12 held in the last frame
+    const bool active = g_cfg.photoActive != 0;
+    unsigned f = 0;
+    for (int i = 0; foreground && i < 12; ++i)
+        if (Down(VK_F1 + i)) f |= 1u << i;
+    const bool fPressed = (f & ~heldF) != 0;
+    heldF = f;
+    const DWORD now = GetTickCount();
+    if (active && (!wasActive || menuJustClosed || fPressed)) g_stripFrom = now ? now : 1;
+    wasActive = active;
+    if (!active || g_cfg.photoHud || !g_stripFrom) return;
+    constexpr DWORD kShow = 6000, kFadeIn = 200, kFadeOut = 600;
+    const DWORD t = now - g_stripFrom;
+    if (t >= kShow) {
+        g_stripFrom = 0;
+        return;
+    }
+    const float a = t < kFadeIn ? (float)t / (float)kFadeIn : t > kShow - kFadeOut ? (float)(kShow - t) / (float)kFadeOut : 1.f;
+    const bool en = g_cfg.language == 1;
+    StripHint hints[8];
+    int n = 0;
+    auto add = [&](const wchar_t* k1, const wchar_t* k2, bool pair, const wchar_t* label) {
+        StripHint& h = hints[n++];
+        lstrcpynW(h.key1, k1 ? k1 : L"", 8);
+        lstrcpynW(h.key2, k2 ? k2 : L"", 8);
+        h.padPair = pair;
+        h.label = label;
+    };
+    add(L"WASD", nullptr, false, en ? L"fly" : L"летіти");
+    add(L"Space", L"C", false, en ? L"up / down" : L"вгору / вниз");
+    add(L"Shift", nullptr, false, en ? L"faster" : L"швидше");
+    add(L"Ctrl", nullptr, false, en ? L"slower" : L"повільніше");
+    int split = n;
+    wchar_t key[8];
+    if (g_cfg.screenshotKey && KeyLabel(g_cfg.screenshotKey, key)) add(key, nullptr, false, en ? L"picture" : L"знімок");
+    if (g_cfg.freeCam && g_cfg.freeCamHudKey && KeyLabel(g_cfg.freeCamHudKey, key)) add(key, nullptr, false, en ? L"interface" : L"інтерфейс");
+    // the pad's pair too while a pad is in use (the game read one in the last 3 seconds), as the start card does
+    const DWORD seen = g_padSeenAt;
+    const bool pad = g_cfg.menuPadControl && r_joyGetPosEx && seen && now - seen < 3000;
+    add(L"F10", nullptr, pad, en ? L"menu" : L"меню");
+    add(L"F6", nullptr, false, en ? L"leave" : L"вийти");
+    // 13 px when it fits the screen, else 12, else the slower and faster keys go first
+    int px = 13;
+    const float maxW = 1280 - 2 * 24 - 2 * 18;
+    float w = StripRow(hints, n, split, 0, 0, px, false);
+    if (w > maxW) w = StripRow(hints, n, split, 0, 0, px = 12, false);
+    while (w > maxW && split > 2) {  // keep WASD and Space / C
+        for (int i = split - 1; i + 1 < n; ++i) hints[i] = hints[i + 1];
+        --split;
+        --n;
+        w = StripRow(hints, n, split, 0, 0, px, false);
+    }
+    if (!OverlayBegin(device)) return;
+    SetOverlayFade(a, 0.f);
+    const float h = (float)px + 21, x = SnapWhole((1280 - w) / 2 - 18), y = 720 - 24 - h;
+    FillRoundFramed(x, y, w + 36, h, 10, Alpha(kRaised, 0xC0), kLine2);
+    StripRow(hints, n, split, x + 18, y + 10, px, true);
+    SetOverlayFade(1.f, 0.f);
+    OverlayEnd();
+}
+}  // namespace
+
 void OnFrame(void* device) {
     MergePages();
     static bool geometryLoaded = false;
@@ -3510,15 +3723,17 @@ void OnFrame(void* device) {
     // F9: the update, only while the start card shows it or the About page is open (never a stray key in the middle of a game)
     if (foreground && Pressed(VK_F9) && (g_hintVisible || (g_open && GetTickCount() - g_aboutDrawnAt < 500))) UpdateStart();
     if (g_open) SyncDifficultyFromGame();
-    if (g_open) EnsureCursorVisible(!g_padMode);
+    if (g_open) EnsureCursorVisible(!g_padMode && !g_peeking);  // no arrow over the picture of a peek
     if (g_open) HandleInput(foreground);
     if (g_open != wasOpen) OpenChanged(foreground);  // F10, Esc or the photo mode key
     if (g_swallowEsc && !Down(VK_ESCAPE)) g_swallowEsc = false;  // a later Esc press is the game's again
+    if (g_swallowRmb && !Down(VK_RBUTTON)) g_swallowRmb = false;
     RememberKeys();
     BatchTick();
     if (g_open) g_everOpened = true;
     if (!g_open) {
         StartHint(device);
+        PhotoKeysStrip(device, foreground, wasOpen);
         return;
     }
 
@@ -3529,10 +3744,16 @@ void OnFrame(void* device) {
         return;
     }
     MotionFrame();
-    g_openAlpha = MotionProgress(g_openedAt, kFadeSeconds);
-    g_openRise = (1.f - g_openAlpha) * kRiseUnits;
-    SetOverlayFade(g_openAlpha, g_openRise);
-    Draw();
+    PeekFrame();
+    // The peek fades the panel with the same alpha as the opening, so the two never fight (an opening peek just stays hidden).
+    const float peek = PeekEased();
+    g_openAlpha = MotionProgress(g_openedAt, kFadeSeconds) * (1.f - peek);
+    g_openRise = (1.f - MotionProgress(g_openedAt, kFadeSeconds)) * kRiseUnits;
+    if (peek < 1.f) {  // fully faded it is not drawn at all
+        SetOverlayFade(g_openAlpha, g_openRise);
+        Draw();
+    }
+    if (peek > 0.f) PeekChip(peek);
     SetOverlayFade(1.f, 0.f);  // the notice and the performance panels are drawn after the menu in the same frame
     OverlayEnd();
 }
