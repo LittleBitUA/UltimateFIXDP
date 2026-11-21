@@ -37,14 +37,16 @@ enum {
     RS_BLENDOP = 171, RS_SCISSORTESTENABLE = 174, RS_SRGBWRITEENABLE = 194, RS_SEPARATEALPHABLEND = 206,
 };
 // texture stage states and operations
-enum { TSS_COLOROP = 1, TSS_COLORARG1 = 2, TSS_COLORARG2 = 3, TSS_ALPHAOP = 4, TSS_ALPHAARG1 = 5, TSS_ALPHAARG2 = 6 };
+enum { TSS_COLOROP = 1, TSS_COLORARG1 = 2, TSS_COLORARG2 = 3, TSS_ALPHAOP = 4, TSS_ALPHAARG1 = 5, TSS_ALPHAARG2 = 6,
+       TSS_TEXCOORDINDEX = 11, TSS_TEXTURETRANSFORMFLAGS = 24 };
 enum { TOP_DISABLE = 1, TOP_SELECTARG1 = 2, TOP_SELECTARG2 = 3, TOP_MODULATE = 4 };
-enum { TA_DIFFUSE = 0, TA_TEXTURE = 2 };
+enum { TA_DIFFUSE = 0, TA_CURRENT = 1, TA_TEXTURE = 2 };
 // sampler states
 enum { SAMP_ADDRESSU = 1, SAMP_ADDRESSV = 2, SAMP_MAGFILTER = 5, SAMP_MINFILTER = 6, SAMP_MIPFILTER = 7,
        SAMP_MIPMAPLODBIAS = 8, SAMP_MAXMIPLEVEL = 9, SAMP_SRGBTEXTURE = 11 };
 
 constexpr u32 kFvfXyzrhwDiffuseTex1 = 0x4 | 0x40 | 0x100;
+constexpr u32 kFvfXyzrhwDiffuseTex2 = 0x4 | 0x40 | 0x200;  // two sets of texture coordinates (a picture with rounded corners)
 
 struct LockedRect {
     INT pitch;

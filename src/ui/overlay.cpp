@@ -44,6 +44,8 @@ void* g_sbCache = nullptr;     // the reused D3DSBT_ALL block (captured again at
 void* g_sbDevice = nullptr;
 void* g_oldTarget = nullptr;
 bool g_inScene = false;
+int g_imageLoads = 0;  // pictures read from files in this overlay pass (ImageTexture): one at most, so a page full of covers
+                       // spreads its loading over frames instead of stalling one
 
 typedef ULONG(WINAPI* ReleaseFn)(void*);
 typedef HRESULT(WINAPI* DwordDwordFn)(void*, DWORD, DWORD);
@@ -302,6 +304,7 @@ bool BeginOverlay(void* dev, bool keepStateBlock) {
     typedef HRESULT(WINAPI * SetViewportFn)(void*, const Viewport*);
 
     if (!SaveState(dev, keepStateBlock)) return false;
+    g_imageLoads = 0;
 
     g_oldTarget = nullptr;
     Method<GetRtFn>(dev, kGetRenderTarget)(dev, 0, &g_oldTarget);
@@ -562,6 +565,106 @@ void FillRoundFramed(float x, float y, float w, float h, float r, u32 fill, u32 
     RoundPixels(x0, y0, x1, y1, rp, frame);
     RoundPixels(x0 + b, y0 + b, x1 - b, y1 - b, rp > b ? rp - b : 0.f, fill);
     EndRound();
+}
+
+// A picture as a textured quad, on whole pixels like FillRect. With a radius its corners are rounded by the disk of the
+// rounded shapes in the second texture stage (its coverage multiplies the picture's alpha), so the corners are anti-aliased
+// and show whatever lies under them, a panel of any opacity too. Everything this changes is put back for the primitives
+// above (the vertex format, stage 1, the mip filter, the bound textures); the rest the overlay's state block restores.
+namespace {
+struct ImageVertex {
+    float x, y, z, rhw;
+    u32 color;
+    float u, v;    // the picture
+    float u2, v2;  // the disk
+};
+void SetStage(DWORD stage, u32 type, u32 value) { Method<Dword3Fn>(g_dev, kSetTextureStageState)(g_dev, stage, type, value); }
+void SetStageSampler(DWORD stage, u32 type, u32 value) { Method<Dword3Fn>(g_dev, kSetSamplerState)(g_dev, stage, type, value); }
+}  // namespace
+
+void DrawImage(void* texture, float x, float y, float w, float h, float u0, float v0, float u1, float v1, u32 tint, float radius) {
+    if (!texture || w == 0.f || h == 0.f) return;
+    typedef HRESULT(WINAPI * SetTexFn)(void*, DWORD, void*);
+    typedef HRESULT(WINAPI * SetFvfFn)(void*, DWORD);
+    typedef HRESULT(WINAPI * DrawUpFn)(void*, DWORD, UINT, const void*, UINT);
+    float x0, x1, y0, y1;
+    SnapSpan(x, w, ScaleX(), &x0, &x1);
+    SnapSpan(y, h, ScaleY(), &y0, &y1);
+    const float o = FadeOffsetPixels();
+    y0 += o;
+    y1 += o;
+    tint = Faded(tint);
+    bool round = radius > 0.f;
+    if (round && !g_disk && (g_diskFailed || !MakeDisk())) {
+        g_diskFailed = true;
+        round = false;
+    }
+    Method<SetTexFn>(g_dev, kSetTexture)(g_dev, 0, texture);
+    SetTSS(TSS_COLOROP, TOP_MODULATE);  // the picture's colour and alpha times the tint
+    SetTSS(TSS_COLORARG1, TA_TEXTURE);
+    SetTSS(TSS_COLORARG2, TA_DIFFUSE);
+    SetTSS(TSS_ALPHAOP, TOP_MODULATE);
+    SetTSS(TSS_ALPHAARG1, TA_TEXTURE);
+    SetTSS(TSS_ALPHAARG2, TA_DIFFUSE);
+    SetSampler(SAMP_MIPFILTER, 2);  // a cover drawn as a thumbnail takes its small levels
+    SetSampler(SAMP_MIPMAPLODBIAS, 0);
+    SetSampler(SAMP_MAXMIPLEVEL, 0);
+    if (!round) {
+        Quad(x0, y0, x1, y1, tint, u0, v0, u1, v1);
+    } else {
+        float r = SnapWhole(radius * ScaleY());
+        const float half = (x1 - x0 < y1 - y0 ? x1 - x0 : y1 - y0) * 0.5f;
+        if (r > half) r = half;
+        const float xs[4] = {x0, x0 + r, x1 - r, x1}, ys[4] = {y0, y0 + r, y1 - r, y1};
+        const float disk[4] = {0.f, 0.5f, 0.5f, 1.f};
+        float us[4], vs[4];
+        for (int i = 0; i < 4; ++i) {
+            us[i] = u0 + (u1 - u0) * (xs[i] - x0) / (x1 - x0);
+            vs[i] = v0 + (v1 - v0) * (ys[i] - y0) / (y1 - y0);
+        }
+        ImageVertex v[54];
+        UINT count = 0;
+        for (int j = 0; j < 3; ++j)
+            for (int i = 0; i < 3; ++i) {
+                if (xs[i + 1] <= xs[i] || ys[j + 1] <= ys[j]) continue;
+                const float a = xs[i] - 0.5f, b = xs[i + 1] - 0.5f, c = ys[j] - 0.5f, d = ys[j + 1] - 0.5f;  // as in Quad
+                ImageVertex* q = &v[count];
+                q[0] = {a, c, 0.f, 1.f, tint, us[i], vs[j], disk[i], disk[j]};
+                q[1] = {b, c, 0.f, 1.f, tint, us[i + 1], vs[j], disk[i + 1], disk[j]};
+                q[2] = {a, d, 0.f, 1.f, tint, us[i], vs[j + 1], disk[i], disk[j + 1]};
+                q[3] = q[1];
+                q[4] = {b, d, 0.f, 1.f, tint, us[i + 1], vs[j + 1], disk[i + 1], disk[j + 1]};
+                q[5] = q[2];
+                count += 6;
+            }
+        // stage 1: the colour as it is, the alpha times the disk's coverage; stage 2 ends the cascade
+        Method<SetTexFn>(g_dev, kSetTexture)(g_dev, 1, g_disk);
+        SetStage(1, TSS_COLOROP, TOP_SELECTARG2);
+        SetStage(1, TSS_COLORARG2, TA_CURRENT);
+        SetStage(1, TSS_ALPHAOP, TOP_MODULATE);
+        SetStage(1, TSS_ALPHAARG1, TA_TEXTURE);
+        SetStage(1, TSS_ALPHAARG2, TA_CURRENT);
+        SetStage(1, TSS_TEXCOORDINDEX, 1);
+        SetStage(1, TSS_TEXTURETRANSFORMFLAGS, 0);
+        SetStage(2, TSS_COLOROP, TOP_DISABLE);
+        SetStage(2, TSS_ALPHAOP, TOP_DISABLE);
+        SetStageSampler(1, SAMP_MINFILTER, 2);
+        SetStageSampler(1, SAMP_MAGFILTER, 2);
+        SetStageSampler(1, SAMP_MIPFILTER, 2);
+        SetStageSampler(1, SAMP_ADDRESSU, 3);
+        SetStageSampler(1, SAMP_ADDRESSV, 3);
+        SetStageSampler(1, SAMP_MIPMAPLODBIAS, 0);
+        SetStageSampler(1, SAMP_MAXMIPLEVEL, 0);
+        SetStageSampler(1, SAMP_SRGBTEXTURE, 0);
+        Method<SetFvfFn>(g_dev, kSetFVF)(g_dev, kFvfXyzrhwDiffuseTex2);
+        if (count) Method<DrawUpFn>(g_dev, kDrawPrimitiveUP)(g_dev, 4 /*TRIANGLELIST*/, count / 3, v, sizeof(ImageVertex));
+        Method<SetFvfFn>(g_dev, kSetFVF)(g_dev, kFvfXyzrhwDiffuseTex1);
+        SetStage(1, TSS_COLOROP, TOP_DISABLE);
+        SetStage(1, TSS_ALPHAOP, TOP_DISABLE);
+        Method<SetTexFn>(g_dev, kSetTexture)(g_dev, 1, nullptr);
+    }
+    Method<SetTexFn>(g_dev, kSetTexture)(g_dev, 0, nullptr);
+    SetSampler(SAMP_MIPFILTER, 0);
 }
 
 namespace {
@@ -938,9 +1041,186 @@ void FrameStatsPanel(void* dev, double totalMs, double gameMs, double physicsMs,
     OverlayEnd();
 }
 
+// Moved here from menu.cpp so the mods page wraps its descriptions the same way; `weight` lets a heading wrap too.
+float DrawFitted(const wchar_t* text, float x, float y, u32 color, int px, float maxW, int weight) {
+    int len = lstrlenW(text);
+    int n = TextFit(text, len, maxW, px, weight);
+    if (n >= len && len < 256) return DrawText(text, x, y, color, px, weight);
+    n = TextFit(text, len, maxW - TextWidth(L"…", px, weight), px, weight);
+    if (n > 250) n = 250;
+    while (n > 0 && text[n - 1] == L' ') --n;
+    wchar_t cut[256];
+    for (int i = 0; i < n; ++i) cut[i] = text[i];
+    cut[n] = L'…';
+    cut[n + 1] = 0;
+    return DrawText(cut, x, y, color, px, weight);
+}
+
+int DrawLines(const wchar_t* text, float x, float y, u32 color, int px, float lineH, float maxW, int maxLines, bool draw, int weight) {
+    int lines = 0;
+    const wchar_t* p = text;
+    for (;;) {
+        const wchar_t* end = p;
+        while (*end && *end != L'\n') ++end;
+        do {
+            int len = (int)(end - p);
+            int n = TextFit(p, len > 250 ? 250 : len, maxW, px, weight);
+            if (n < len) {
+                int b = n;
+                while (b > 0 && p[b] != L' ') --b;
+                if (b > 0) n = b;
+                else if (n == 0) n = 1;  // one word wider than the line: cut it
+            }
+            const wchar_t* next = p + n;
+            while (next < end && *next == L' ') ++next;
+            bool more = next < end || *end != 0;
+            if (lines == maxLines - 1 && more) {  // the last line there is room for, and text is left: end it with "…"
+                if (draw) {
+                    int m = TextFit(p, len > 250 ? 250 : len, maxW - TextWidth(L"…", px, weight), px, weight);
+                    if (m < len) {  // cut inside the paragraph: end at a word break
+                        int b = m;
+                        while (b > 0 && p[b] != L' ') --b;
+                        if (b > 0) m = b;
+                    }
+                    while (m > 0 && p[m - 1] == L' ') --m;
+                    wchar_t line[256];
+                    for (int i = 0; i < m; ++i) line[i] = p[i];
+                    line[m] = L'…';
+                    line[m + 1] = 0;
+                    DrawText(line, x, y + lineH * (float)lines, color, px, weight);
+                }
+                return lines + 1;
+            }
+            if (draw && n > 0) {
+                wchar_t line[256];
+                for (int i = 0; i < n; ++i) line[i] = p[i];
+                line[n] = 0;
+                DrawText(line, x, y + lineH * (float)lines, color, px, weight);
+            }
+            ++lines;
+            p = next;
+        } while (p < end);
+        if (*end == 0) break;
+        p = end + 1;
+    }
+    return lines;
+}
+
+// ---- Pictures from files ----------------------------------------------------------------------------------------
+// The covers of the mods page. d3dx9_43 reads the file (PNG, JPG, BMP, DDS) into a MANAGED texture with its whole mip
+// chain, so a 36-unit thumbnail of a 350-pixel cover is as smooth as the cover itself. A picture bigger than needed is
+// scaled on load to 512 texels on its shorter side (a 4000-pixel photo would take 120 MB with its copy in system memory);
+// the proportions stay, the page crops it to a square by its texture coordinates. Cached by path for the session; a file
+// that cannot be read is tried once and logged once. Released before a Reset like the disk, read again at the next use.
+namespace {
+struct ImageEntry {
+    wchar_t path[MAX_PATH];
+    void* texture;
+    void* device;   // the device it was made on: another device (the game made a new one) means load again
+    u32 width, height;  // of the file
+    bool failed;
+    bool logged;    // the first load is logged, a load after a Reset is not
+};
+constexpr int kMaxImages = 40;  // a cover per mod (32 at most) and some room
+ImageEntry g_images[kMaxImages];
+int g_imageCount = 0;
+
+struct ImageInfo {  // D3DXIMAGE_INFO
+    UINT width, height, depth, mipLevels;
+    DWORD format, resourceType, fileFormat;
+};
+
+void PathUtf8(const wchar_t* path, char* out, int capacity) {
+    if (WideCharToMultiByte(CP_UTF8, 0, path, -1, out, capacity, nullptr, nullptr) <= 0) out[0] = 0;
+}
+
+bool ReadPicture(ImageEntry& e) {
+    typedef HRESULT(WINAPI * InfoFn)(const wchar_t*, ImageInfo*);
+    typedef HRESULT(WINAPI * FromFileFn)(void*, const wchar_t*, UINT, UINT, UINT, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, void*,
+                                         void*, void**);
+    HMODULE d3dx = GetModuleHandleW(L"d3dx9_43.dll");
+    if (!d3dx) d3dx = LoadLibraryW(L"d3dx9_43.dll");
+    InfoFn info = d3dx ? (InfoFn)(void*)GetProcAddress(d3dx, "D3DXGetImageInfoFromFileW") : nullptr;
+    FromFileFn load = d3dx ? (FromFileFn)(void*)GetProcAddress(d3dx, "D3DXCreateTextureFromFileExW") : nullptr;
+    char name[MAX_PATH * 3];
+    PathUtf8(e.path, name, sizeof name);
+    if (!info || !load) {
+        Log("overlay: picture %s not loaded: d3dx9_43.dll has no D3DXCreateTextureFromFileExW", name);
+        return false;
+    }
+    ImageInfo ii = {};
+    HRESULT hr = info(e.path, &ii);
+    if (FAILED(hr) || !ii.width || !ii.height) {
+        Log("overlay: picture %s could not be read (%08X): not a PNG, JPG, BMP or DDS?", name, (u32)hr);
+        return false;
+    }
+    UINT w = ii.width, h = ii.height;
+    const UINT shorter = w < h ? w : h, kMost = 512;
+    if (shorter > kMost) {
+        w = (UINT)((unsigned long long)w * kMost / shorter);
+        h = (UINT)((unsigned long long)h * kMost / shorter);
+        if (w > 4096) w = 4096;  // a panorama: its middle is all the page shows
+        if (h > 4096) h = 4096;
+    }
+    void* tex = nullptr;
+    hr = load(g_dev, e.path, w, h, 0 /*the whole mip chain*/, 0, 21 /*A8R8G8B8*/, 1 /*MANAGED*/, 0xFFFFFFFFu /*D3DX_DEFAULT*/,
+              5 /*D3DX_FILTER_BOX for the levels*/, 0, nullptr, nullptr, &tex);
+    if (FAILED(hr) || !tex) {
+        Log("overlay: picture %s could not be loaded (%08X)", name, (u32)hr);
+        return false;
+    }
+    e.texture = tex;
+    e.device = g_dev;
+    e.width = ii.width;
+    e.height = ii.height;
+    if (!e.logged) {
+        e.logged = true;
+        Log("overlay: picture %s loaded (%ux%u, a %ux%u texture)", name, ii.width, ii.height, w, h);
+    }
+    return true;
+}
+
+void ReleaseImages() {
+    for (int i = 0; i < g_imageCount; ++i) {
+        if (g_images[i].texture) Method<ReleaseFn>(g_images[i].texture, kRelease)(g_images[i].texture);
+        g_images[i].texture = nullptr;
+    }
+}
+}  // namespace
+
+void* ImageTexture(const wchar_t* path, u32* width, u32* height) {
+    if (!path || !path[0] || lstrlenW(path) >= MAX_PATH || !g_dev) return nullptr;
+    ImageEntry* e = nullptr;
+    for (int i = 0; i < g_imageCount && !e; ++i)
+        if (lstrcmpiW(g_images[i].path, path) == 0) e = &g_images[i];
+    if (!e) {
+        if (g_imageCount >= kMaxImages) return nullptr;
+        e = &g_images[g_imageCount++];
+        lstrcpyW(e->path, path);
+        e->texture = e->device = nullptr;
+        e->width = e->height = 0;
+        e->failed = e->logged = false;
+    }
+    if (e->failed) return nullptr;
+    if (e->texture && e->device != g_dev) {  // made on a device that is gone: never released through it, just forgotten
+        e->texture = nullptr;
+    }
+    if (!e->texture) {
+        if (g_imageLoads >= 1) return nullptr;  // the next frame
+        ++g_imageLoads;
+        if (!ReadPicture(*e)) {
+            e->failed = true;
+            return nullptr;
+        }
+    }
+    if (width) *width = e->width;
+    if (height) *height = e->height;
+    return e->texture;
+}
+
 // Before a Reset: the copy is a default-pool texture, and the reused state block holds references to the game's
-// textures, so both must go (they are made again on the next frame). The disk of the rounded shapes goes too, though a
-// managed texture would survive: it is made again at the next rounded shape.
+// textures, so both must go (they are made again on the next frame). The disk of the rounded shapes and the pictures go too,
+// though managed textures would survive: they are made again at their next use.
 namespace {
 void ReleaseAoTargets();  // the horizon-based occlusion's two targets (below)
 }  // namespace
@@ -951,6 +1231,7 @@ void ReleasePostResources() {
     ReleaseSmaaTargets();
     ReleaseStateBlockCache();
     ReleaseDisk();
+    ReleaseImages();
 }
 
 namespace {

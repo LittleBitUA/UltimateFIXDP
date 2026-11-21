@@ -47,6 +47,22 @@ float DrawText(const wchar_t* text, float x, float y, u32 argb, int pixelHeight,
 float TextWidth(const wchar_t* text, int pixelHeight, int weight = kRegular);
 // How many of the first `length` characters fit in `maxWidth` layout units (measured only, nothing is drawn or cached).
 int TextFit(const wchar_t* text, int length, float maxWidth, int pixelHeight, int weight = kRegular);
+// Draws `text` cut with "…" when it is wider than maxW. Returns the width drawn.
+float DrawFitted(const wchar_t* text, float x, float y, u32 color, int px, float maxW, int weight = kRegular);
+// Word wrap: '\n' starts a new line, and a line that would be wider than maxW breaks at the last space that fits. At most
+// maxLines lines; when the text needs more, the last one ends with "…". Returns the number of lines; with draw = false
+// it only counts them.
+int DrawLines(const wchar_t* text, float x, float y, u32 color, int px, float lineH, float maxW, int maxLines, bool draw,
+              int weight = kRegular);
+
+// A picture read from a file (PNG, JPG, BMP, DDS through d3dx9_43), cached by its path; `width` and `height` get the size
+// of the file, for cropping. Null when it cannot be read (tried once, logged once) and, for a frame, while another picture
+// was read in the same overlay pass. The texture belongs to the overlay: no Release.
+void* ImageTexture(const wchar_t* path, u32* width, u32* height);
+// Draws a texture over x,y,w,h (layout units, on whole pixels like FillRect) with the texture coordinates u0,v0..u1,v1 and
+// the colour and alpha of `tint`; `radius` rounds its corners (anti-aliased, over any background).
+void DrawImage(void* texture, float x, float y, float w, float h, float u0, float v0, float u1, float v1, u32 tint = 0xFFFFFFFF,
+               float radius = 0.f);
 
 // Quiet motion of the menu ([Menu] Animations; the clock lives in menu.cpp and advances once per drawn menu frame).
 bool MotionOn();                                // the setting is on

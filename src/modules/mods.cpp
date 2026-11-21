@@ -1,7 +1,11 @@
 // Mod manager: UltimateFix\mods\<folder>\ holds one mod each.
 //
 //   mod.ini      optional, UTF-8: Name=, Author=, Version=, Description= (any [section], first value wins); the same text may be
-//                mod.txt or info.txt instead, with Назва / Автор / Версія / Опис as keys too and ':' in place of '='
+//                mod.txt or info.txt instead, with Назва / Автор / Версія / Опис as keys too and ':' in place of '='; \n in the
+//                description is a line break
+//   description.txt  optional (or опис.txt), any encoding Notepad saves: its whole text is the description, lines kept
+//   cover.png    optional, the picture of the mod on the F10 page (350x350 recommended; or cover.jpg, preview.png,
+//                preview.jpg, image.png; the first one there is used)
 //   text\        a translation or text fix: mes_all.json and glyphmap.json of the SWERY Localization Tool, *.txt corrections
 //                (the text overlay reads them, text_overlay.cpp)
 //   textures\    replacement textures, <hash>.dds or <hash>.png (texture_override.cpp)
@@ -17,10 +21,23 @@
 
 namespace ufx {
 
-// The files of a mod folder that describe it and are never game files (readme.txt too: mods often bring one).
+namespace {
+// The pictures of a mod for the F10 page, in the order they are looked for, and the files with a long description.
+const wchar_t* const kCovers[] = {L"cover.png", L"cover.jpg", L"preview.png", L"preview.jpg", L"image.png"};
+const wchar_t* const kDescriptionFiles[] = {L"description.txt", L"опис.txt"};
+}  // namespace
+
+// The files of a mod folder that describe it and are never game files (readme.txt too: mods often bring one). The cover is
+// one of them: game_files.cpp would otherwise take cover.png for the picture inside a COVER.XPC and log it as unknown.
 bool IsModDescription(const wchar_t* name) {
-    return lstrcmpiW(name, L"mod.ini") == 0 || lstrcmpiW(name, L"mod.txt") == 0 || lstrcmpiW(name, L"info.txt") == 0 ||
-           lstrcmpiW(name, L"readme.txt") == 0;
+    if (lstrcmpiW(name, L"mod.ini") == 0 || lstrcmpiW(name, L"mod.txt") == 0 || lstrcmpiW(name, L"info.txt") == 0 ||
+        lstrcmpiW(name, L"readme.txt") == 0)
+        return true;
+    for (const wchar_t* cover : kCovers)
+        if (lstrcmpiW(name, cover) == 0) return true;
+    for (const wchar_t* file : kDescriptionFiles)
+        if (lstrcmpiW(name, file) == 0) return true;
+    return false;
 }
 
 namespace {
@@ -53,10 +70,38 @@ char* ReadSmall(const wchar_t* path, DWORD cap, DWORD* size) {
     return data;
 }
 
+// A text longer than `capacity` is cut at a whole character: MultiByteToWideChar converts nothing at all when the buffer is too
+// small, and a long description used to come out empty.
 void Utf8ToWide(const char* from, int length, wchar_t* to, int capacity) {
-    int n = length > 0 ? MultiByteToWideChar(CP_UTF8, 0, from, length, to, capacity - 1) : 0;
+    int need = length > 0 ? MultiByteToWideChar(CP_UTF8, 0, from, length, nullptr, 0) : 0;
+    while (need > capacity - 1 && length > 0) {
+        length -= need - (capacity - 1);  // every UTF-16 unit takes at least one byte, so this never cuts too little twice
+        while (length > 0 && ((u8)from[length] & 0xC0) == 0x80) --length;  // not inside a character
+        need = length > 0 ? MultiByteToWideChar(CP_UTF8, 0, from, length, nullptr, 0) : 0;
+    }
+    int n = need > 0 ? MultiByteToWideChar(CP_UTF8, 0, from, length, to, capacity - 1) : 0;
     if (n < 0) n = 0;
     to[n] = 0;
+}
+
+// The description as the page draws it: the two characters \n of a one-line value become a line break, '\r' is dropped and
+// the text is trimmed.
+void TidyDescription(wchar_t* d) {
+    int w = 0;
+    for (int r = 0; d[r]; ++r) {
+        if (d[r] == L'\\' && d[r + 1] == L'n') {
+            d[w++] = L'\n';
+            ++r;
+        } else if (d[r] != L'\r') {
+            d[w++] = d[r] == L'\t' ? L' ' : d[r];
+        }
+    }
+    while (w > 0 && (d[w - 1] == L' ' || d[w - 1] == L'\n')) --w;
+    d[w] = 0;
+    int lead = 0;
+    while (d[lead] == L' ' || d[lead] == L'\n') ++lead;
+    if (lead)
+        for (int i = 0; i <= w - lead; ++i) d[i] = d[i + lead];
 }
 
 // A description file as UTF-8, whatever Notepad saved it as: UTF-16 (with its mark) or the ANSI code page (Windows-1251 on a
@@ -186,7 +231,7 @@ void Describe(ModInfo& m) {
     lstrcatW(base, m.folder);
     lstrcatW(base, L"\\");
     lstrcpyW(m.name, m.folder);
-    m.author[0] = m.version[0] = m.description[0] = 0;
+    m.author[0] = m.version[0] = m.description[0] = m.cover[0] = 0;
     static const wchar_t* const kDescriptions[] = {L"mod.ini", L"mod.txt", L"info.txt"};  // the first one there is read
     for (const wchar_t* file : kDescriptions) {
         lstrcpyW(path, base);
@@ -197,11 +242,11 @@ void Describe(ModInfo& m) {
         const char* encoding;
         ini = AsUtf8(ini, size, &encoding);
         if (!ini) continue;
-        wchar_t v[200];
+        wchar_t v[64];
         if (Value(ini, "Name", "Назва", v, 64) && v[0]) lstrcpynW(m.name, v, 64);
         if (Value(ini, "Author", "Автор", v, 48)) lstrcpynW(m.author, v, 48);
         if (Value(ini, "Version", "Версія", v, 24)) lstrcpynW(m.version, v, 24);
-        if (Value(ini, "Description", "Опис", v, 200)) lstrcpynW(m.description, v, 200);
+        if (Value(ini, "Description", "Опис", m.description, 1024)) TidyDescription(m.description);
         VirtualFree(ini, 0, MEM_RELEASE);
         char a[160], f[64], d[160];
         WideCharToMultiByte(CP_UTF8, 0, m.name, -1, a, sizeof a, nullptr, nullptr);
@@ -210,6 +255,39 @@ void Describe(ModInfo& m) {
         Log("mods: %s\\%s (%s): name \"%s\"%s%s%s", d, f, encoding, a,
             m.author[0] ? ", author set" : ", no author", m.version[0] ? ", version set" : ", no version",
             m.description[0] ? ", description set" : ", no description");
+        break;
+    }
+    // A description file holds a text too long for one line of mod.txt: when there is one, it wins.
+    char folderUtf8[200];
+    WideCharToMultiByte(CP_UTF8, 0, m.folder, -1, folderUtf8, sizeof folderUtf8, nullptr, nullptr);
+    for (const wchar_t* file : kDescriptionFiles) {
+        lstrcpyW(path, base);
+        lstrcatW(path, file);
+        DWORD size = 0;
+        char* text = ReadSmall(path, 64 * 1024, &size);
+        if (!text) continue;
+        const char* encoding;
+        text = AsUtf8(text, size, &encoding);
+        if (!text) continue;
+        const char* p = text;
+        if ((u8)p[0] == 0xEF && (u8)p[1] == 0xBB && (u8)p[2] == 0xBF) p += 3;
+        Utf8ToWide(p, lstrlenA(p), m.description, 1024);
+        VirtualFree(text, 0, MEM_RELEASE);
+        TidyDescription(m.description);
+        char f[64];
+        WideCharToMultiByte(CP_UTF8, 0, file, -1, f, sizeof f, nullptr, nullptr);
+        Log("mods: %s\\%s (%s): description of %d characters", folderUtf8, f, encoding, lstrlenW(m.description));
+        break;
+    }
+    for (const wchar_t* file : kCovers) {
+        if (lstrlenW(base) + lstrlenW(file) >= MAX_PATH) break;
+        lstrcpyW(path, base);
+        lstrcatW(path, file);
+        if (!Exists(path)) continue;
+        lstrcpyW(m.cover, path);
+        char f[64];
+        WideCharToMultiByte(CP_UTF8, 0, file, -1, f, sizeof f, nullptr, nullptr);
+        Log("mods: %s: cover %s found", folderUtf8, f);
         break;
     }
     lstrcpyW(path, base);
@@ -375,6 +453,9 @@ void ModMove(int i, int dir) {
     ModInfo t = g_mods[i];
     g_mods[i] = g_mods[j];
     g_mods[j] = t;
+    // the text source of this run moves with its mod: the page tells by it which mod the text comes from now
+    if (g_textMod == i) g_textMod = j;
+    else if (g_textMod == j) g_textMod = i;
     Save();
 }
 
@@ -419,14 +500,14 @@ int ModFileDirs(wchar_t (*out)[MAX_PATH], int max) {
     return n;
 }
 
-void OpenModsFolder() {
-    wchar_t explorer[MAX_PATH + 16], command[3 * MAX_PATH], folder[MAX_PATH + 16];
+namespace {
+// `folder` ends with a backslash and is changed (the backslash goes).
+bool OpenInExplorer(wchar_t* folder) {
+    wchar_t explorer[MAX_PATH + 16], command[3 * MAX_PATH];
     const UINT n = GetWindowsDirectoryW(explorer, MAX_PATH);
     bool ok = n > 0 && n < MAX_PATH;
     if (ok) {
         lstrcatW(explorer, L"\\explorer.exe");
-        ModsDir(folder);
-        CreateDirectoryW(folder, nullptr);
         folder[lstrlenW(folder) - 1] = 0;  // a backslash in front of the closing quote would swallow it
         wsprintfW(command, L"\"%s\" \"%s\"", explorer, folder);
         STARTUPINFOW si;
@@ -439,7 +520,28 @@ void OpenModsFolder() {
             CloseHandle(pi.hProcess);
         }
     }
+    return ok;
+}
+}  // namespace
+
+void OpenModsFolder() {
+    wchar_t folder[MAX_PATH + 16];
+    ModsDir(folder);
+    CreateDirectoryW(folder, nullptr);
+    const bool ok = OpenInExplorer(folder);
     Log("mods: the mods folder %s", ok ? "was opened in Explorer" : "could not be opened (Explorer did not start)");
+}
+
+void ModOpenFolder(int i) {
+    if (i < 0 || i >= g_count) return;
+    wchar_t folder[MAX_PATH + 80];
+    ModsDir(folder);
+    lstrcatW(folder, g_mods[i].folder);
+    lstrcatW(folder, L"\\");
+    const bool ok = OpenInExplorer(folder);
+    char name[200];
+    WideCharToMultiByte(CP_UTF8, 0, g_mods[i].folder, -1, name, sizeof name, nullptr, nullptr);
+    Log("mods: the folder of %s %s", name, ok ? "was opened in Explorer" : "could not be opened (Explorer did not start)");
 }
 
 }  // namespace ufx

@@ -325,14 +325,15 @@ void EnsureLauncherStub(const wchar_t* gameDir);  // in the game: put the quick-
 void InstallCpuTweaks();
 bool InstallWaypoint();
 // mods.cpp: the mod manager (UltimateFix\mods\<folder>\ with mod.ini or mod.txt, text\ and textures\; order and switches in mods.txt)
-bool IsModDescription(const wchar_t* name);  // mod.ini, mod.txt, info.txt, readme.txt: never game files
+bool IsModDescription(const wchar_t* name);  // mod.ini, mod.txt, info.txt, readme.txt, description.txt, the cover: never game files
 constexpr int kMaxMods = 32;
 struct ModInfo {
     wchar_t folder[64];
     wchar_t name[64];
     wchar_t author[48];
     wchar_t version[24];
-    wchar_t description[200];
+    wchar_t description[1024];  // '\n' breaks a line (written as \n in mod.txt, or the lines of description.txt)
+    wchar_t cover[MAX_PATH];    // the full path of cover.png (or .jpg, preview.*, image.png) in the mod folder, empty = none
     bool enabled;
     bool textJson;   // text\mes_all.json
     int textFiles;   // text\*.txt
@@ -349,6 +350,7 @@ bool ModsChanged();                  // differs from what this run started with:
 void ModTextDir(wchar_t* out);       // the text folder the overlay reads, with a trailing backslash (MAX_PATH)
 int ModTextureDirs(wchar_t (*out)[MAX_PATH], int max);  // texture folders of the mods that are on, first wins
 void OpenModsFolder();
+void ModOpenFolder(int index);       // that mod's own folder in Explorer
 int ModFileDirs(wchar_t (*out)[MAX_PATH], int max);     // files\ folders of the mods that are on, first wins
 bool InstallGameFiles();                // game_files.cpp: game files from the mods' files\ folders, after ScanMods
 bool GameFileTextures();                // a mod replaces textures of an XPC by name (the texture hook is needed)

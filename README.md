@@ -39,7 +39,7 @@ No installer: press **F10** in game and everything is there. The mod also gives 
 - 📺 **Xbox 360 look** — the console's colour grading and TV gamma on top of the PC picture
 - 🌫️ **No more flickering far textures** — the game's camera wasted depth precision; far roads, roofs and decals no longer fight each other
 - 🏎️ **High FPS physics** — 120–180 FPS with the car, doors, animations and timers at their normal speed; the FPS is unlocked by default
-- 🧩 **Mod manager** — `UltimateFix\mods\<mod>\`: translations (SWERY Localization Tool files), texture packs, or any game file by its name (`fontwide.xpc`, `mes_all.mes`); order and on/off in F10
+- 🧩 **Mod manager** — `UltimateFix\mods\<mod>\`: translations (SWERY Localization Tool files), texture packs, or any game file by its name (`fontwide.xpc`, `mes_all.mes`); order and on/off in F10, each mod with its picture and description — see [Making a mod](#making-a-mod)
 - 🎮 **DualSense** — USB and Bluetooth without Steam Input, **adaptive triggers per weapon**, haptics for driving and shooting, PlayStation button icons
 - 📳 **Rumble that works** — the PC port calculated vibration and never sent it to the gamepad
 - 🔫 **Aim on L2, shoot on R2** — like a modern shooter, on Xbox pads too; prompts switch between keyboard and gamepad by themselves
@@ -285,6 +285,30 @@ To uninstall, delete `X3DAudio1_7.dll` (and, for the 4 GB flag, put `DP.exe.bak`
 | **F11** | Screenshot (PNG, without the menu) |
 | **F9** | Profiler (writes a profile to the log) |
 
+### Making a mod
+
+A mod is a folder in `UltimateFix\mods\` (next to `DP.exe`). F10 → Mods lists every mod with its picture, name, version and author; the selected one gets a card with the picture at 350×350 (at 1080p), what the mod brings and its whole description. What a mod folder can hold:
+
+| File or folder | What it is |
+|---|---|
+| `text\` | a translation: `mes_all.json` and `glyphmap.json` of the SWERY Localization Tool, `*.txt` corrections |
+| `textures\` | texture replacements `<hash>.dds` or `.png` (the hashes come from `[Debug] DumpTextures=1`) |
+| game files | right in the folder by their name (`fontwide.xpc`, `mes_all.mes`, `FONTWIDE.DDS` for the picture inside an XPC) or by the game's path (`UPDATA\...`) |
+| `mod.txt` | `Name: …`, `Author: …`, `Version: …`, `Description: …` (or `mod.ini`, `info.txt`; the Ukrainian keys work too); `\n` in the description starts a new line |
+| `description.txt` | a longer description: the whole text of the file with its line breaks, up to 1023 characters (or `опис.txt`; UTF-8, UTF-16 or ANSI); it wins over `Description:` |
+| `cover.png` | the mod's picture: a square, **350×350** recommended, PNG or JPG (`cover.jpg`, `preview.png`, `preview.jpg`, `image.png` work too); a picture that is not square is cropped to its middle |
+
+None of these files is ever taken for a game file. For example:
+
+```
+UltimateFix\mods\Ukrainian\
+  mod.txt            Name: Ukrainian translation / Author: Little Bit / Version: 1.0
+  description.txt
+  cover.png          350×350
+  text\mes_all.json
+  text\glyphmap.json
+```
+
 ### If something goes wrong
 
 - `UltimateFix\ufx.log` says for every fix whether it is active or skipped, and why
@@ -323,7 +347,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 - 📺 **Вигляд Xbox 360** — кольорокорекція й гамма телевізора консолі поверх картинки PC
 - 🌫️ **Далекі текстури більше не блимають** — камера гри марнувала точність глибини; далекі дороги, дахи й написи більше не «перебивають» одне одного
 - 🏎️ **Фізика на високому FPS** — 120–180 FPS, а машина, двері, анімації й таймери йдуть з нормальною швидкістю; FPS типово розблоковано
-- 🧩 **Менеджер модів** — `UltimateFix\mods\<мод>\`: переклади (файли SWERY Localization Tool), текстурні паки або будь-який файл гри за іменем (`fontwide.xpc`, `mes_all.mes`); порядок і вмикання в F10
+- 🧩 **Менеджер модів** — `UltimateFix\mods\<мод>\`: переклади (файли SWERY Localization Tool), текстурні паки або будь-який файл гри за іменем (`fontwide.xpc`, `mes_all.mes`); порядок і вмикання в F10, кожен мод зі своєю картинкою й описом — див. [Як зробити мод](#як-зробити-мод)
 - 🎮 **DualSense** — USB і Bluetooth без Steam Input, **адаптивні триґери під кожну зброю**, відгук у машині й при пострілах, іконки кнопок PlayStation
 - 📳 **Вібрація, яка працює** — PC-порт рахував її, але не надсилав на ґеймпад
 - 🔫 **Приціл на L2, постріл на R2** — як у сучасних шутерах, і на Xbox-падах; підказки самі перемикаються між клавіатурою й ґеймпадом
@@ -554,6 +578,30 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 | **F5** / **F4** | Лише вільна камера / сховати HUD у фоторежимі |
 | **F11** | Знімок екрана (PNG, без меню) |
 | **F9** | Профайлер (пише профіль у журнал) |
+
+### Як зробити мод
+
+Мод — це тека в `UltimateFix\mods\` (поруч із `DP.exe`). F10 → Моди показує кожен мод із картинкою, назвою, версією й автором; вибраний мод отримує картку з картинкою 350×350 (на 1080p), тим, що він несе, і повним описом. Що може лежати в теці мода:
+
+| Файл або тека | Що це |
+|---|---|
+| `text\` | переклад: `mes_all.json` і `glyphmap.json` із SWERY Localization Tool, виправлення `*.txt` |
+| `textures\` | заміни текстур `<хеш>.dds` або `.png` (хеші дає `[Debug] DumpTextures=1`) |
+| файли гри | просто в теці за іменем (`fontwide.xpc`, `mes_all.mes`, `FONTWIDE.DDS` для картинки всередині XPC) або за шляхом гри (`UPDATA\...`) |
+| `mod.txt` | `Назва: …`, `Автор: …`, `Версія: …`, `Опис: …` (або `mod.ini`, `info.txt`; англійські ключі теж працюють); `\n` в описі починає новий рядок |
+| `description.txt` | довший опис: увесь текст файлу з його рядками, до 1023 символів (або `опис.txt`; UTF-8, UTF-16 чи ANSI); він важливіший за `Опис:` |
+| `cover.png` | картинка мода: квадрат, рекомендовано **350×350**, PNG або JPG (підходять і `cover.jpg`, `preview.png`, `preview.jpg`, `image.png`); неквадратну картинку обрізано до середини |
+
+Жоден із цих файлів не вважається файлом гри. Наприклад:
+
+```
+UltimateFix\mods\Ukrainian\
+  mod.txt            Назва: Українська локалізація / Автор: Little Bit / Версія: 1.0
+  опис.txt
+  cover.png          350×350
+  text\mes_all.json
+  text\glyphmap.json
+```
 
 ### Якщо щось не так
 

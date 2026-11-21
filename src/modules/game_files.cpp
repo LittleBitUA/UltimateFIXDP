@@ -1,4 +1,4 @@
-// Game files from mods, by name: whatever lies in UltimateFix\mods\<mod>\ (besides mod.ini / mod.txt / info.txt / readme.txt, text\ and textures\; files\ counts as
+// Game files from mods, by name: whatever lies in UltimateFix\mods\<mod>\ (besides mod.ini / mod.txt / info.txt / readme.txt, description.txt, the cover, text\ and textures\; files\ counts as
 // the mod folder itself) is a game file, by its name or laid out as the game's paths, for example UPDATA\MESSAGE\FONTWIDE.XPC. Whatever the game loads from its archives (DPSERIAL.001..003) or from the language folders
 // is then read from the mod instead. A file that lies right in the mod folder is found by its name alone when that name is unique among
 // the game's files (FONTWIDE.XPC, MES_ALL.MES); a name used in several folders needs the full path.
@@ -177,6 +177,9 @@ void Walk(const wchar_t* dir, char* key, int keyLen, int depth) {
         if (lstrlenW(dir) + lstrlenW(fd.cFileName) + 2 >= MAX_PATH) continue;
         lstrcpyW(full, dir);
         lstrcatW(full, fd.cFileName);
+        const bool folder = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
+        // the mod's description and its cover, before the name is checked: опис.txt is not a game file with a wrong name
+        if (depth == 0 && !folder && IsModDescription(fd.cFileName)) continue;
         // the key: ASCII in upper case; game paths are ASCII only
         int n = keyLen, i = 0;
         bool ascii = true;
@@ -191,9 +194,8 @@ void Walk(const wchar_t* dir, char* key, int keyLen, int depth) {
             Unknown(full, "game file names are Latin letters only");
             continue;
         }
-        const bool folder = (fd.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) != 0;
-        if (depth == 0 && (folder ? (Compare(key + keyLen, "TEXT") == 0 || Compare(key + keyLen, "TEXTURES") == 0) : IsModDescription(fd.cFileName)))
-            continue;  // the mod's description and the folders of the text and texture overlays
+        if (depth == 0 && folder && (Compare(key + keyLen, "TEXT") == 0 || Compare(key + keyLen, "TEXTURES") == 0))
+            continue;  // the folders of the text and texture overlays
         if (folder && depth == 0 && Compare(key + keyLen, "FILES") == 0) {  // files\ is the same as the mod folder itself
             lstrcatW(full, L"\\");
             key[keyLen] = 0;
