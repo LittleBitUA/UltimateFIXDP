@@ -213,7 +213,7 @@ static const char kDefaultIni[] =
     "ShadowBiasFix=1\r\n"
     "; 1 = the far sun shadow cascade (from about 200 units out) is filtered with the same four taps the game uses for the\r\n"
     "; two near ones: no hard, stair-stepped shadow edges crawling in the distance. Not a console feature. Changes at once.\r\n"
-    "FarShadowFilter=0\r\n"
+    "FarShadowFilter=1\r\n"
     "; 1 = world textures stored without mipmaps get them built when they load: far textures stop shimmering. Restart needed.\r\n"
     "GenerateMips=1\r\n"
     "; A photo mode filter applied all the time: 0 none, 1 warm, 2 cold, 3 B&W, 4 cinema, 5 vintage, 6 sepia, 7 noir, 8 film,\r\n"
@@ -802,7 +802,7 @@ void LoadConfig(const wchar_t* ini) {
     if (g_cfg.nearPlane < 10) g_cfg.nearPlane = 10;
     if (g_cfg.nearPlane > 200) g_cfg.nearPlane = 200;
     g_cfg.shadowBiasFix = GetPrivateProfileIntW(L"Graphics", L"ShadowBiasFix", 1, ini) ? 1 : 0;
-    g_cfg.farShadowFilter = GetPrivateProfileIntW(L"Graphics", L"FarShadowFilter", 0, ini) ? 1 : 0;
+    g_cfg.farShadowFilter = GetPrivateProfileIntW(L"Graphics", L"FarShadowFilter", 1, ini) ? 1 : 0;
     g_cfg.generateMips = GetPrivateProfileIntW(L"Graphics", L"GenerateMips", 1, ini) ? 1 : 0;
     g_cfg.gameLook = (int)GetPrivateProfileIntW(L"Graphics", L"GameLook", 0, ini);
     g_cfg.fullscreenEdgeFix = GetPrivateProfileIntW(L"Graphics", L"FullscreenEdgeFix", 1, ini) ? 1 : 0;
