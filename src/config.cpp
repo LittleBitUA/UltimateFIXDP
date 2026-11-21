@@ -86,7 +86,7 @@ static const char kDefaultIni[] =
     "QteFix=1\r\n"
     "; 1 = the prologue's smoke is drawn as on the Xbox 360 (read from a capture of the Xbox build): each smoke sheet's alpha is\r\n"
     "; multiplied by a 128x64 mask at the model's second UV, which the PC port left out (one solid black patch). The Xbox also has a\r\n"
-    "; second, grey smoke layer whose texture the PC data lack: put it as UltimateFix\\smoke\\cloud.png to have it. Changes at once.\r\n"
+    "; second, grey smoke layer whose texture the PC data lack: it comes with the mod as UltimateFix\\glyphs\\fix\\cloud.png. Changes at once.\r\n"
     "SmokeFix=1\r\n"
     "; Experiment, no visible change yet: 1 = smoke volumes (the doorways of the prologue) are not drawn into the G-buffer.\r\n"
     "FogFix=0\r\n"

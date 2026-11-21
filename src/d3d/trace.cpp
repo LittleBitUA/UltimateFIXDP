@@ -613,16 +613,17 @@ void LoadSmokeCloud(void* dev) {
     HMODULE d3dx = GetModuleHandleW(L"d3dx9_43.dll");
     FromFileFn load = d3dx ? (FromFileFn)(void*)GetProcAddress(d3dx, "D3DXCreateTextureFromFileExW") : nullptr;
     wchar_t path[MAX_PATH + 32];
-    static const wchar_t* const kNames[2] = {L"cloud.dds", L"cloud.png"};
-    for (int i = 0; i < 2 && load && !g_smokeCloud; ++i) {
-        wsprintfW(path, L"%sUltimateFix\\smoke\\%s", g_paths.gameDir, kNames[i]);
+    // shipped as UltimateFix\glyphs\fix\cloud.png; UltimateFix\smoke\ is where the test builds asked for it
+    static const wchar_t* const kNames[4] = {L"glyphs\\fix\\cloud.dds", L"glyphs\\fix\\cloud.png", L"smoke\\cloud.dds", L"smoke\\cloud.png"};
+    for (int i = 0; i < 4 && load && !g_smokeCloud; ++i) {
+        wsprintfW(path, L"%sUltimateFix\\%s", g_paths.gameDir, kNames[i]);
         if (GetFileAttributesW(path) == INVALID_FILE_ATTRIBUTES) continue;
         if (SUCCEEDED(load(dev, path, 0, 0, 0, 0, 0, 1 /*MANAGED*/, 0xFFFFFFFFu, 0xFFFFFFFFu, 0, nullptr, nullptr, &g_smokeCloud)) && g_smokeCloud)
             Log("smoke: layer B texture loaded: %S", path);
         else
             Log("smoke: %S could not be loaded", path);
     }
-    if (!g_smokeCloud) Log("smoke: no UltimateFix\\smoke\\cloud.png (the Xbox texture of the second smoke layer): that layer is left out");
+    if (!g_smokeCloud) Log("smoke: no UltimateFix\\glyphs\\fix\\cloud.png (the Xbox texture of the second smoke layer): the grey layer is drawn with the black sheet");
 }
 
 // A DXT3 texture whose colour is black wherever its pixels look (decoded per block), cached per texture
