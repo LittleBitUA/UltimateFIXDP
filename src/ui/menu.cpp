@@ -56,6 +56,7 @@ struct Item {
     bool resolution = false;                      // typed numbers below 1280 are heights (1080 -> 1920x1080)
     void (*running)(wchar_t* out) = nullptr;      // what actually runs now, when a setting waits for a restart (empty = same)
     int def = kNoDefault;  // the value of the default ini, read once at the first opening (LoadDefaults); kNoDefault = none
+    int boot = kNoDefault;  // a restart row: the value this run started with, which is what runs (SnapshotBoot); kNoDefault = none
 };
 
 const Tr kGlyphTr[4] = {{L"Вимк.", L"Off"}, {L"Авто", L"Auto"}, {L"Xbox", L"Xbox"}, {L"PlayStation", L"PlayStation"}};
@@ -210,8 +211,8 @@ Item g_pageDisplay[] = {
      {L"Панель з'являється плавно, виділення ковзає до вибраного рядка й розділу, повзунок перемикача пересувається. Вимкнено: усе змінюється миттєво. Закривається меню завжди одразу.",
       L"The panel fades in, the selection glides to the chosen row and section, the knob of a switch slides across. Off: everything changes at once. The menu always closes at once."}, NOTR},
     {{L"Керування меню ґеймпадом", L"Gamepad control of the menu"}, &g_cfg.menuPadControl, kBool, 0, 1, 1, false, L"Menu", L"PadControl", nullptr, nullptr,
-     {L"Меню F10 працює й на ґеймпаді: View + Menu разом (на DualSense Create + Options) відкриває і закриває його, хрестовина або лівий стік ходять, A / хрестик вибирає, B / коло закриває, LB / RB (L1 / R1) перемикають розділ, LT / RT гортають на екран, Y / трикутник повертає типове, X / квадрат на сторінці «Моди» відкриває теку мода. Гра в цей час ґеймпада не бачить. Діє з наступного відкриття меню.",
-      L"The F10 menu also works on a gamepad: View + Menu together (Create + Options on a DualSense) opens and closes it, the D-pad or the left stick moves, A / Cross picks, B / Circle closes, LB / RB (L1 / R1) switch the section, LT / RT scroll a screen, Y / Triangle restores the default, X / Square opens a mod's folder on the Mods page. The game does not see the pad meanwhile. Takes effect the next time the menu opens."}, NOTR},
+     {L"Меню F10 працює й на ґеймпаді: View + Menu разом (на DualSense Create + Options) відкриває і закриває його, хрестовина або лівий стік ходять, A / хрестик вибирає, B / коло закриває, LB / RB (L1 / R1) перемикають розділ, LT / RT гортають на екран, Y / трикутник повертає типове, X / квадрат на сторінці «Моди» відкриває теку мода, на інших перезапускає гру, коли налаштування чекають перезапуску (спершу запитає). Гра в цей час ґеймпада не бачить. Діє з наступного відкриття меню.",
+      L"The F10 menu also works on a gamepad: View + Menu together (Create + Options on a DualSense) opens and closes it, the D-pad or the left stick moves, A / Cross picks, B / Circle closes, LB / RB (L1 / R1) switch the section, LT / RT scroll a screen, Y / Triangle restores the default, X / Square opens a mod's folder on the Mods page and, on the others, restarts the game while settings wait for a restart (it asks first). The game does not see the pad meanwhile. Takes effect the next time the menu opens."}, NOTR},
     {{L"Перевіряти оновлення", L"Check for updates"}, &g_cfg.checkUpdates, kBool, 0, 1, 1, true, L"Menu", L"CheckUpdates", nullptr, nullptr,
      {L"На старті один анонімний запит до GitHub: чи вийшла нова версія. Якщо так, плашка на старті й сторінка «Про мод» пропонують F9: мод сам завантажить її, замінить X3DAudio1_7.dll та іконки й перезапустить гру. Налаштування, моди й копії збережень лишаються.",
       L"One anonymous request to GitHub at the start: is a new version out. If so, the start card and the About page offer F9: the mod downloads it, replaces X3DAudio1_7.dll and the icons and restarts the game. Settings, mods and save backups stay."}, NOTR},
@@ -548,9 +549,9 @@ Item g_pageSave[] = {
     {{L"Скільки резервних копій тримати", L"Backups to keep"}, &g_cfg.saveBackups, kInt, 1, 200, 5, false, L"Save", L"Backups", nullptr, nullptr,
      {L"Копії в UltimateFix\\savebackups, кожна підписана датою й місцем у сюжеті (епізод, розділ, час гри). Типово 60.",
       L"Copies in UltimateFix\\savebackups, each named by its date and where the story stood (episode, chapter, play time). Default 60."}, NOTR},
-    {{L"Стискати резервні копії", L"Compress the backups"}, &g_cfg.compressBackups, kBool, 0, 1, 1, true, L"Save", L"CompressBackups", nullptr, nullptr,
-     {L"Тека savebackups стискається засобами Windows (NTFS): 60 копій по 8 МБ займають у рази менше місця. Читаються як звичайні файли.",
-      L"The savebackups folder is compressed by Windows (NTFS): 60 copies of 8 MB take a fraction of the space. They read as plain files."}, NOTR},
+    {{L"Стискати резервні копії", L"Compress the backups"}, &g_cfg.compressBackups, kBool, 0, 1, 1, false, L"Save", L"CompressBackups", nullptr, nullptr,
+     {L"Тека savebackups стискається засобами Windows (NTFS): 60 копій по 8 МБ займають у рази менше місця. Читаються як звичайні файли. Нові копії стискаються одразу, ті, що вже є, під час наступного запуску.",
+      L"The savebackups folder is compressed by Windows (NTFS): 60 copies of 8 MB take a fraction of the space. They read as plain files. New copies are compressed at once, the ones already there at the next start."}, NOTR},
     {{L"Відновлювати пошкоджений файл", L"Restore a damaged file"}, &g_cfg.saveRestoreDamaged, kBool, 0, 1, 1, false, L"Save", L"RestoreDamaged", nullptr, nullptr,
      {L"Якщо dp.sav має неправильний розмір, береться найновіша копія.", L"If dp.sav has the wrong size, the newest backup is used."}, NOTR},
     {{L"Показувати повідомлення про збереження", L"Show save messages"}, &g_cfg.saveWarnings, kBool, 0, 1, 1, false, L"Save", L"Warnings", nullptr, nullptr,
@@ -877,7 +878,7 @@ Item g_pageCheats[] = {
     {{L"Політ Йорка (F3)", L"Fly York (F3)"}, &g_cfg.cheatFly, kBool, 0, 1, 1, false, nullptr, nullptr, nullptr, nullptr,
      {L"Йорк летить, куди ведете: WASD відносно камери, мишка або Q/E повертають, Space вгору, Ctrl (або C) вниз, Shift учетверо швидше. Поки летить, гра не бачить клавіш і пада, не рухає його й не дає впасти. Вимкніть біля землі, бо з висоти він упаде (згодиться невразливість). Не в машині й не в катсцені. Клавіша й швидкість: [Cheats] FlyKey, FlySpeed в UltimateFix.ini.",
       L"York flies where you steer: WASD relative to the camera, the mouse or Q/E turn, Space up, Ctrl (or C) down, Shift four times faster. While he flies the game sees no keys or pad, neither moves him nor lets him fall. Turn it off near the ground, from a height he falls (invulnerability helps). Not in a car or a cutscene. Key and speed: [Cheats] FlyKey, FlySpeed in UltimateFix.ini."}, NOTR},
-    {{L"Швидкість польоту", L"Flying speed"}, &g_cfg.flySpeed, kInt, 10, 500, 10, true, L"Cheats", L"FlySpeed", nullptr, nullptr,
+    {{L"Швидкість польоту", L"Flying speed"}, &g_cfg.flySpeed, kInt, 10, 500, 10, false, L"Cheats", L"FlySpeed", nullptr, nullptr,
      {L"Одиниць гри за секунду (120 за замовчуванням). Shift під час польоту учетверо швидше. Діє одразу.",
       L"Game units per second (120 by default). Shift while flying is four times faster. Changes at once."}, NOTR},
     {{L"Йорк до камери", L"York to the camera"}, &g_cheatPick, kInt, 0, 1, 1, false, nullptr, nullptr, DoCamera, nullptr,
@@ -983,6 +984,41 @@ void MergeInto(Page& page, unsigned char* storage, const PageSource* src, int n)
     page.count = cnt;
 }
 
+// Rows whose module, once it was installed at the start, reads the value on every use: switching them off (the icons: to
+// another set too) works at once, only switching them on from off waits for the restart.
+bool LiveOnceInstalled(const Item& it) {
+    return it.value == &g_cfg.waypoint || it.value == &g_cfg.waypointMinimap || it.value == &g_cfg.waypointBeacon ||
+           it.value == &g_cfg.showMessageId || it.value == &g_cfg.glyphLog || it.value == &g_cfg.glyphTheme;
+}
+
+// What every restart row started this run with. ui::Install merges the pages last of all modules, after LoadConfig clamped
+// the values and the DPfix check overrode its own, so g_cfg holds what runs. Before, every restart row showed its amber tag
+// all the time, so the colour said nothing; now it marks only a row whose value differs from what runs.
+void SnapshotBoot() {
+    for (Page& pg : g_pages) {
+        if (pg.about || !pg.items) continue;
+        for (int i = 0; i < pg.count; ++i) {
+            Item& it = pg.items[i];
+            if (it.restart && it.value) it.boot = LiveOnceInstalled(it) && *it.value ? kNoDefault : *it.value;  // installed: live
+        }
+    }
+}
+
+// A change of the row needs a restart in this run: a restart row, unless its module is installed and reads it live.
+bool RestartRow(const Item& it) { return it.restart && it.value && it.boot != kNoDefault; }
+// The row's value differs from what runs: it waits for a restart.
+bool Pending(const Item& it) { return RestartRow(it) && *it.value != it.boot; }
+
+int PendingCount() {
+    int n = 0;
+    for (const Page& pg : g_pages) {
+        if (pg.about || !pg.items) continue;
+        for (int i = 0; i < pg.count; ++i)
+            if (Pending(pg.items[i])) ++n;
+    }
+    return n;
+}
+
 void MergePages() {
     if (g_pagesMerged) return;
     g_pagesMerged = true;
@@ -1000,6 +1036,7 @@ void MergePages() {
     MergeInto(g_pages[2], g_gameStore, game, 3);
     MergeInto(g_pages[kPhotoPage], g_photoStore, photo, 2);
     MergeInto(g_pages[4], g_fixesStore, fixes, 3);
+    SnapshotBoot();
 }
 
 int g_page = 0;
@@ -1052,6 +1089,11 @@ float kNavTop = 150;
 float kSliderX = 818, kLangY = 612;
 constexpr float kConfirmW = 520, kConfirmH = 170;  // the "restore defaults?" box
 float kConfirmX = 380, kConfirmY = 275;            // centred on the panel, wherever it was moved
+// While settings wait for a restart, the sidebar shows how many over the language buttons, and a button that restarts the
+// game. The section rows make room for them; at the default size they still are 44 units tall.
+constexpr float kRestartRoom = 56, kRestartW = 176, kRestartH = 30;
+bool g_restartShown = false;  // the block is laid out this frame (UpdateLayout)
+float kRestartY = 572;        // the top of the button
 
 void UpdateLayout() {
     if (kPw < kPanelWMin) kPw = kPanelWMin;
@@ -1069,7 +1111,9 @@ void UpdateLayout() {
     kNavTop = kPy + 98;
     kSliderX = kCr - 330;
     kLangY = kPy + kPh - 56;
-    kNavH = (kLangY - 10 - kNavTop) / (float)kPageCount;
+    g_restartShown = PendingCount() > 0;
+    kRestartY = kLangY - 10 - kRestartH;
+    kNavH = (kLangY - 10 - (g_restartShown ? kRestartRoom : 0.f) - kNavTop) / (float)kPageCount;
     if (kNavH > 44) kNavH = 44;
     kConfirmX = SnapWhole(kPx + (kPw - kConfirmW) / 2);  // the panel is at least 820 x 520, so the box is always inside it
     kConfirmY = SnapWhole(kPy + (kPh - kConfirmH) / 2);
@@ -1152,7 +1196,7 @@ bool Pressed(int vk) {
 }
 
 const int kMenuKeys[] = {VK_F10, VK_ESCAPE, VK_UP, VK_DOWN, VK_LEFT, VK_RIGHT, VK_RETURN, VK_SPACE, VK_TAB,
-                         VK_PRIOR, VK_NEXT, VK_LBUTTON, VK_BACK, 'Y', 'N', VK_F9};
+                         VK_PRIOR, VK_NEXT, VK_LBUTTON, VK_BACK, 'Y', 'N', 'R', VK_F9};
 
 void RememberKeys() {
     for (int vk : kMenuKeys) g_prev[vk] = Down(vk) ? 1 : 0;
@@ -1276,7 +1320,8 @@ void SetValue(Item& it, int v) {
     if (it.apply) it.apply();
 }
 
-int g_confirm = 0;  // 0 nothing, 1 asking about this page, 2 asking about everything
+int g_confirm = 0;  // 0 nothing, 1 asking about this page, 2 asking about everything, 3 asking to restart the game
+constexpr int kConfirmRestart = 3;
 
 // Called by the chips: only asks. The work is done by PerformReset after the player confirms.
 void ResetPageDefaults() {
@@ -1327,6 +1372,31 @@ void PerformReset(int scope) {
     Log("menu: defaults restored (%s, %d settings)", scope == 2 ? "everything" : "this page", restored);
 }
 
+// ---- "Restart the game": shown in the sidebar while settings wait for a restart (R, X / Square or a click), asked first.
+void AskRestart() {
+    if (PendingCount() > 0) g_confirm = kConfirmRestart;
+}
+
+// The restart ends the process at once (TerminateProcess, as after an update): never while the game writes dp.sav, which
+// CREATE_ALWAYS has emptied by then, and never while an update writes its files.
+void PerformRestart() {
+    FlushUnsaved();  // every other change is in the ini already
+    if (SaveWriteInFlight()) {
+        Log("menu: restart refused: the game is writing its save right now");
+        ShowNotice(L"Зачекайте", L"Wait a moment", L"Гра саме записує збереження. Спробуйте ще раз за мить.",
+                   L"The game is writing its save right now. Try again in a moment.", 4, kNoticeWarning);
+        return;
+    }
+    if (UpdateState() == 2) {
+        Log("menu: restart refused: an update is being installed");
+        ShowNotice(L"Зачекайте", L"Wait a moment", L"Встановлюється оновлення: після нього гра перезапуститься сама.",
+                   L"An update is being installed: the game restarts by itself after it.", 4, kNoticeWarning);
+        return;
+    }
+    Log("menu: restart from the menu (%d settings waited for it)", PendingCount());
+    RestartGameNow();
+}
+
 // ---- What was changed: every setting with an ini key learns its default once, from the same defaults.tmp as Restore
 // defaults (so the marks, the Backspace reset and the full reset always agree, migrated keys included). A row whose value
 // differs gets a grey dot after its label, a slider a tick at the default, a preset row a line under the default button,
@@ -1371,10 +1441,9 @@ void LoadDefaults() {
     Log("menu: defaults known for %d settings, %d changed (grey dot; Backspace restores one)", known, changed);
 }
 
-// The default of a row as the row shows its values: "Off", the name, the formatted value or the number.
-void FormatDefault(const Item& it, wchar_t* out) {
+// A value of a row as the row shows its values: "Off", the name, the formatted value or the number.
+void FormatValue(const Item& it, int v, wchar_t* out) {
     const bool en = g_cfg.language == 1;
-    const int v = it.def;
     if (it.kind == kBool) {
         lstrcpyW(out, v ? (en ? L"On" : L"Увімк.") : (en ? L"Off" : L"Вимк."));
         return;
@@ -1394,6 +1463,7 @@ void FormatDefault(const Item& it, wchar_t* out) {
         }
     wsprintfW(out, L"%d", v);
 }
+void FormatDefault(const Item& it, wchar_t* out) { FormatValue(it, it.def, out); }
 
 // Stores the place and size of the panel (the ini and g_cfg).
 void SavePanelGeometry() {
@@ -1576,8 +1646,12 @@ bool g_dragScroll = false;
 constexpr float kLangChipW = 84;
 void SetLanguage(int language);
 
-// Clicks in the sidebar: a section or the language. Returns true when the click was used.
+// Clicks in the sidebar: a section, the restart button or the language. Returns true when the click was used.
 bool SidebarClick(float mx, float my) {
+    if (g_restartShown && mx >= kPx + 24 && mx < kPx + 24 + kRestartW && my >= kRestartY && my < kRestartY + kRestartH) {
+        AskRestart();
+        return true;
+    }
     for (int p = 0; p < kPageCount; ++p) {
         float y = kNavTop + p * kNavH;
         if (mx >= kPx && mx < kPx + kSideW && my >= y && my < y + kNavH) {
@@ -1662,7 +1736,7 @@ void HandleInput(bool foreground) {
         g_wheel = 0;
         return;
     }
-    if (g_confirm) {  // the question about restoring defaults: Enter / Y / A confirms, Esc / N / B cancels, or click a button
+    if (g_confirm) {  // the question (restore defaults, restart): Enter / Y / A confirms, Esc / N / B cancels, or click a button
         g_wheel = 0;
         float mx, my;
         bool click = Pressed(VK_LBUTTON) && MousePosition(&mx, &my);
@@ -1673,7 +1747,8 @@ void HandleInput(bool foreground) {
             else if (mx >= kConfirmX + 280 && mx <= kConfirmX + 280 + 200 && my >= kConfirmY + 120 && my <= kConfirmY + 154) no = true;
         }
         if (yes) {
-            PerformReset(g_confirm);
+            if (g_confirm == kConfirmRestart) PerformRestart();  // returns only when it was refused (a notice says why)
+            else PerformReset(g_confirm);
             g_confirm = 0;
         } else if (no) {
             g_confirm = 0;
@@ -1683,6 +1758,7 @@ void HandleInput(bool foreground) {
     const int pageBefore = g_page;
     if (pg.about) {  // nothing to change on this page: keys for the sections, clicks for the sidebar
         if (Pressed(VK_ESCAPE) || (pad & kPadBack)) g_open = false;
+        if (Pressed('R') || (!pg.mods && (pad & kPadAction))) AskRestart();  // X / Square is the mod's folder on the Mods page
         if (Pressed(VK_TAB)) SelectPage(g_page + ((GetAsyncKeyState(VK_SHIFT) & 0x8000) ? -1 : 1));
         if (Pressed(VK_NEXT) || (pad & kPadNextSection)) SelectPage(g_page + 1);
         if (Pressed(VK_PRIOR) || (pad & kPadPrevSection)) SelectPage(g_page - 1);
@@ -1726,6 +1802,7 @@ void HandleInput(bool foreground) {
         return;
     }
     if (Pressed(VK_ESCAPE) || (pad & kPadBack)) g_open = false;
+    if (Pressed('R') || (pad & kPadAction)) AskRestart();
     int prevSel = g_sel;
     if (Pressed(VK_UP)) g_sel = (g_sel + pg.count - 1) % pg.count;
     if (Pressed(VK_DOWN)) g_sel = (g_sel + 1) % pg.count;
@@ -2076,14 +2153,17 @@ void DrawItemRow(Item& it, float y, bool sel) {
         limit = bx[0] - 14;
     }
     const wchar_t* tag = g_cfg.language == 1 ? L"restart" : L"перезапуск";
-    float tagRoom = it.restart ? TextWidth(tag, 12) + 10 : 0.f;
+    const bool restart = RestartRow(it);
+    float tagRoom = restart ? TextWidth(tag, 12) + 10 : 0.f;
     // changed from the default: a small grey dot right after the label (grey, not red: it only says "yours", nothing is wrong)
     const bool changed = Changed(it);
     const float markRoom = changed ? 12.f : 0.f;
     float lw = DrawFitted(Tx(it.label), kCx, y + 10, sel ? kWhite : kText, 18, limit - kCx - tagRoom - markRoom);
     if (changed) FillRound(kCx + lw + 7, y + 22, 5, 5, 2.5f, kMuted);  // on the middle of the lower-case letters
-    if (it.restart) {
-        float tw = DrawText(tag, kCx + lw + markRoom + 10, y + 14, kWarn, 12);
+    if (restart) {
+        // amber only while the row's value differs from what runs (it waits for the restart); faint, it only says when it applies
+        const u32 tagColor = Pending(it) ? kWarn : kFaint;
+        float tw = DrawText(tag, kCx + lw + markRoom + 10, y + 14, tagColor, 12);
         if (it.running) {
             wchar_t t[64];
             it.running(t);
@@ -2101,7 +2181,7 @@ void DrawItemRow(Item& it, float y, bool sel) {
                     }
                     if (TextWidth(shown, 12) > room) shown = L"";  // not even that fits: leave it out
                 }
-                DrawText(shown, x0, y + 14, kWarn, 12);  // it waits for the restart, like the tag
+                DrawText(shown, x0, y + 14, tagColor, 12);  // in the tag's colour
             }
         }
     }
@@ -2424,6 +2504,55 @@ void DrawStory() {
     DrawText(line, kCx, y + 20, kText, 17);
 }
 
+// The question of g_confirm (restore defaults, restart the game) over the whole panel.
+void DrawConfirm() {
+    const bool en = g_cfg.language == 1, restart = g_confirm == kConfirmRestart;
+    FillRect(0, 0, 1280, 720, 0x90000000);
+    FillRoundFramed(kConfirmX, kConfirmY, kConfirmW, kConfirmH, 12, kRaised, kLine2);  // calm: red is only on the yes button
+    const wchar_t* title = restart        ? (en ? L"Restart the game now?" : L"Перезапустити гру зараз?")
+                           : g_confirm == 2 ? (en ? L"Restore the defaults of ALL settings?" : L"Відновити типові значення ВСІХ налаштувань?")
+                                            : (en ? L"Restore the defaults of this page?" : L"Відновити типові значення цієї сторінки?");
+    DrawText(title, kConfirmX + 24, kConfirmY + 24, kText, 20);
+    if (restart)  // two lines of 14 px end above the key line, as the one line of 15 px does
+        DrawLines(en ? L"The game closes and starts again in a few seconds. Progress since the last save is lost: save first."
+                     : L"Гра закриється й за кілька секунд запуститься знову. Незбережений прогрес пропаде: спершу збережіться.",
+                  kConfirmX + 24, kConfirmY + 54, kMuted, 14, 16, kConfirmW - 48, 2, true);
+    else
+        DrawText(en ? L"Your current values will be replaced. This cannot be undone." : L"Ваші поточні значення буде замінено. Скасувати це не вийде.",
+                 kConfirmX + 24, kConfirmY + 60, kMuted, 15);
+    if (g_padMode) DrawPadLineImpl(en ? L"{A} yes      {B} no" : L"{A} так      {B} ні", kConfirmX + 24, kConfirmY + 90, kFaint, 14, kConfirmW - 48);
+    else DrawText(en ? L"Enter or Y: yes      Esc or N: no" : L"Enter або Y: так      Esc або N: ні", kConfirmX + 24, kConfirmY + 88, kFaint, 14);
+    const wchar_t* yes = restart ? (en ? L"Yes, restart" : L"Так, перезапустити") : (en ? L"Yes, restore" : L"Так, відновити");
+    const wchar_t* no = restart ? (en ? L"No, later" : L"Ні, пізніше") : (en ? L"No, keep" : L"Ні, лишити");
+    FillRound(kConfirmX + 40, kConfirmY + 120, 200, 34, 8, kAccent);
+    DrawText(yes, kConfirmX + 40 + 100 - TextWidth(yes, 16) / 2, kConfirmY + 127, kWhite, 16);
+    FillRoundFramed(kConfirmX + 280, kConfirmY + 120, 200, 34, 8, kSelected, kLine2);
+    DrawText(no, kConfirmX + 280 + 100 - TextWidth(no, 16) / 2, kConfirmY + 127, kText, 16);
+}
+
+// Over the language buttons while settings wait for a restart: how many, and the button that restarts the game (it asks
+// first). Its key is shown on it: R, or X / Square with the pad (not on the Mods page, where that opens a mod's folder).
+void DrawRestartBlock() {
+    const bool en = g_cfg.language == 1;
+    wchar_t line[64];
+    wsprintfW(line, en ? L"Waiting for a restart: %d" : L"Чекають перезапуску: %d", PendingCount());
+    DrawFitted(line, kPx + 24, kRestartY - 20, kWarn, 13, kSideW - 48);
+    const float x = kPx + 24;
+    FillRoundFramed(x, kRestartY, kRestartW, kRestartH, 6, kRaised, Alpha(kWarn, 0x80));
+    const wchar_t* label = en ? L"Restart the game" : L"Перезапустити гру";
+    const bool padKey = g_padMode && !g_pages[g_page].mods;
+    float keyW = 0;
+    if (padKey) keyW = PadToken(L"X", 1, 0, 0, 13, false);
+    else if (!g_padMode) keyW = TextWidth(L"R", 13, kSemibold);
+    const float gap = keyW > 0 ? 8.f : 0.f;
+    const float lw = TextWidth(label, 14);
+    float tx = x + (kRestartW - lw - gap - keyW) / 2;
+    if (tx < x + 8) tx = x + 8;
+    tx += DrawFitted(label, tx, kRestartY + 7, kText, 14, x + kRestartW - 8 - keyW - gap - tx) + gap;
+    if (padKey) PadToken(L"X", 1, tx, kRestartY + 8, 13, true);
+    else if (!g_padMode) DrawText(L"R", tx, kRestartY + 8, kFaint, 13, kSemibold);
+}
+
 // A background colour with its alpha scaled by the menu opacity setting.
 u32 Fade(u32 c) {
     u32 a = (c >> 24) * (u32)g_cfg.menuOpacity / 100;
@@ -2465,6 +2594,7 @@ void Draw() {
             else if (kPx + 26 + nameW + 6 <= right - 5) FillRound(right - 5, y + 23, 5, 5, 2.5f, kFaint);
         }
     }
+    if (g_restartShown) DrawRestartBlock();
 
     Page& pg = g_pages[g_page];
     DrawText(Tx(pg.title), kCx, kPy + 24, kText, 26, kSemibold);
@@ -2480,6 +2610,7 @@ void Draw() {
         // These pages have no description box: a notice floats over the top of the content, under the page's title (the
         // floating box of the closed menu would land right on it). It is drawn last, over the page.
         DrawNoticeBelow((kCx + kCr) / 2, kPy + 108, kCr - kCx - 32);
+        if (g_confirm) DrawConfirm();  // the restart is asked on these pages too
         return;
     }
     // The row highlight first, under the rows: it glides from the row before (relative to the top of the list) and jumps
@@ -2545,10 +2676,20 @@ void Draw() {
                       kCx + 4, hintTop + 19.f * (float)used, kFaint, 15, 19, hintW, 4 - used, true);
     } else {
         const wchar_t* hint = Tx(cur.hint);
-        const wchar_t* note = en ? L"Takes effect after the game is restarted." : L"Набуде чинності після перезапуску гри.";
+        // a row that waits names what runs until then; any other restart row only says when a change applies
+        wchar_t note[128];
+        const bool pending = Pending(cur);
+        if (pending) {
+            wchar_t now[64];
+            FormatValue(cur, cur.boot, now);
+            wsprintfW(note, en ? L"Waits for a restart (now: %s)." : L"Чекає перезапуску (зараз: %s).", now);
+        } else {
+            lstrcpyW(note, en ? L"Takes effect after the game is restarted." : L"Набуде чинності після перезапуску гри.");
+        }
         // a changed row ends with its default and the key that brings it back: one more line kept free under the text
         const bool changed = Changed(cur);
-        const int reserved = (cur.restart ? 1 : 0) + (changed ? 1 : 0);
+        const bool restart = RestartRow(cur);
+        const int reserved = (restart ? 1 : 0) + (changed ? 1 : 0);
         int px = 15;
         float lh = 18;
         int room = (int)((hintBottom - hintTop) / lh) - reserved;
@@ -2558,7 +2699,7 @@ void Draw() {
             room = (int)((hintBottom - hintTop) / lh) - reserved;
         }
         int used = hint ? DrawLines(hint, kCx + 4, hintTop, kMuted, px, lh, hintW, room, true) : 0;
-        if (cur.restart) DrawFitted(note, kCx + 4, hintTop + lh * (float)used++ + 2, kWarn, 13, hintW);
+        if (restart) DrawFitted(note, kCx + 4, hintTop + lh * (float)used++ + 2, pending ? kWarn : kFaint, 13, hintW);
         if (changed) {
             wchar_t value[64], line[128];
             FormatDefault(cur, value);
@@ -2569,19 +2710,7 @@ void Draw() {
     }
 
     if (g_confirm) {
-        FillRect(0, 0, 1280, 720, 0x90000000);
-        FillRoundFramed(kConfirmX, kConfirmY, kConfirmW, kConfirmH, 12, kRaised, kLine2);  // calm: red is only on the yes button
-        DrawText(g_confirm == 2 ? (en ? L"Restore the defaults of ALL settings?" : L"Відновити типові значення ВСІХ налаштувань?")
-                                : (en ? L"Restore the defaults of this page?" : L"Відновити типові значення цієї сторінки?"),
-                 kConfirmX + 24, kConfirmY + 24, kText, 20);
-        DrawText(en ? L"Your current values will be replaced. This cannot be undone." : L"Ваші поточні значення буде замінено. Скасувати це не вийде.",
-                 kConfirmX + 24, kConfirmY + 60, kMuted, 15);
-        if (g_padMode) DrawPadLineImpl(en ? L"{A} yes      {B} no" : L"{A} так      {B} ні", kConfirmX + 24, kConfirmY + 90, kFaint, 14, kConfirmW - 48);
-        else DrawText(en ? L"Enter or Y: yes      Esc or N: no" : L"Enter або Y: так      Esc або N: ні", kConfirmX + 24, kConfirmY + 88, kFaint, 14);
-        FillRound(kConfirmX + 40, kConfirmY + 120, 200, 34, 8, kAccent);
-        DrawText(en ? L"Yes, restore" : L"Так, відновити", kConfirmX + 40 + 100 - TextWidth(en ? L"Yes, restore" : L"Так, відновити", 16) / 2, kConfirmY + 127, kWhite, 16);
-        FillRoundFramed(kConfirmX + 280, kConfirmY + 120, 200, 34, 8, kSelected, kLine2);
-        DrawText(en ? L"No, keep" : L"Ні, лишити", kConfirmX + 280 + 100 - TextWidth(en ? L"No, keep" : L"Ні, лишити", 16) / 2, kConfirmY + 127, kText, 16);
+        DrawConfirm();
         return;
     }
     if (g_padMode) {  // the last input came from the pad: its buttons instead of the keys

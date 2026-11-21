@@ -316,14 +316,18 @@ void RestartGame() {
     if (CreateProcessW(nullptr, cmd, nullptr, nullptr, FALSE, CREATE_NO_WINDOW, nullptr, g_paths.gameDir, &si, &pi)) {
         CloseHandle(pi.hThread);
         CloseHandle(pi.hProcess);
-        Log("update: the game starts again in two seconds");
+        Log("restart: the game starts again in two seconds");
     } else {
-        Log("update: the game could not be started again (error %u): start it by hand", GetLastError());
+        Log("restart: the game could not be started again (error %u): start it by hand", GetLastError());
     }
     TerminateProcess(GetCurrentProcess(), 0);  // nothing is being saved now; the game's own shutdown can hang on its sound threads
 }
 
 }  // namespace
+
+// The menu's "Restart the game" (settings that wait for a restart) goes the way an update does, which is tested in the game.
+// The caller makes sure no save is being written (SaveWriteInFlight) and no update is (UpdateState() == 2).
+void RestartGameNow() { RestartGame(); }
 
 void InstallUpdater() {
     wchar_t old[MAX_PATH + 32];

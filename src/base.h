@@ -247,6 +247,7 @@ u32 UserAddressEnd();  // the top of the user address space (large-address aware
 bool InstallQpcTime();
 bool InstallZeroDelta();
 bool InstallSaveGuard();
+bool SaveWriteInFlight();  // saves.cpp: the game is writing dp.sav right now (only seen while [Save] Guard is on)
 bool InstallHouseList();
 bool InstallJoyPoll();
 bool InstallSkipIntro();
@@ -286,6 +287,7 @@ int UpdateState();               // 0 none, 1 a newer release, 2 updating, 3 upd
 const char* UpdateVersion();     // the newest release, "0.7.2"
 void UpdateStart();              // download and install it (a thread)
 void UpdateFrame();              // main thread: its notices and the restart
+void RestartGameNow();           // updater.cpp: start the game again and end this process (the menu's restart button)
 void LargeAddressFrame();        // its one notice, main thread  // stability.cpp: the address space is nearly used up (the once-a-minute check)
 void StabilityFrame();     // once per frame from the Present hook: pins the sound libraries once, keeps the x87 word
 bool InstallAudioGuard();  // proxy.cpp: the X3DAudio guard, and the game's calls go through it from then on

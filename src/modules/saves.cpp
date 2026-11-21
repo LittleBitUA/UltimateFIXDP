@@ -26,6 +26,12 @@ wchar_t g_live[MAX_PATH];
 wchar_t g_tmp[MAX_PATH];
 DWORD g_total = 0;
 bool g_bad = false;
+// dp.sav opened for writing and not yet closed and committed (the menu's "Restart the game" button must never kill the
+// process in between: CREATE_ALWAYS has emptied the file the game writes into). The direct handle is the game's own one,
+// when the redirect could not be set up.
+volatile LONG g_writes = 0;
+volatile DWORD g_writeSince = 0;  // GetTickCount of the last open for writing
+HANDLE volatile g_direct = nullptr;
 
 // ---------------------------------------------------------------------------------------------
 
@@ -383,8 +389,14 @@ HANDLE WINAPI H_CreateFileA(LPCSTR name, DWORD access, DWORD share, LPSECURITY_A
                             DWORD flags, HANDLE tmpl) {
     if (IsSavePath(name)) {
         if ((access & GENERIC_WRITE) && disp == CREATE_ALWAYS) {
+            g_writeSince = GetTickCount();
+            InterlockedIncrement(&g_writes);
             HANDLE h = BeginWrite(name, access, share, sa, flags, tmpl);
             if (h != INVALID_HANDLE_VALUE) return h;
+            h = r_CreateFileA(name, access, share, sa, disp, flags, tmpl);
+            if (h == INVALID_HANDLE_VALUE || InterlockedCompareExchangePointer((void* volatile*)&g_direct, h, nullptr) != nullptr)
+                InterlockedDecrement(&g_writes);  // nothing to wait for, or a second direct write the first one's close does not cover
+            return h;
         } else if ((access & GENERIC_READ) && !(access & GENERIC_WRITE)) {
             PrepareRead(name);
         }
@@ -406,11 +418,24 @@ BOOL WINAPI H_WriteFile(HANDLE h, LPCVOID buf, DWORD n, LPDWORD written, LPOVERL
 }
 
 BOOL WINAPI H_CloseHandle(HANDLE h) {
-    if (h == g_h && h) return EndWrite(h);
+    if (h == g_h && h) {
+        const BOOL closed = EndWrite(h);  // the backup and the replace of dp.sav are done by now
+        InterlockedDecrement(&g_writes);
+        return closed;
+    }
+    if (h && InterlockedCompareExchangePointer((void* volatile*)&g_direct, nullptr, h) == h) {
+        const BOOL closed = r_CloseHandle(h);
+        InterlockedDecrement(&g_writes);
+        return closed;
+    }
     return r_CloseHandle(h);
 }
 
 }  // namespace
+
+// A write of 8 MB takes well under a second: a count still up a minute after the open is a handle the game never closed, and
+// must not keep the menu's restart refused for the rest of the session.
+bool SaveWriteInFlight() { return g_writes > 0 && GetTickCount() - g_writeSince < 60000; }
 
 bool InstallSaveGuard() {
     // From the game's folder, not the current one: WinMain changes to the exe folder only later, and a shortcut or a launcher may
