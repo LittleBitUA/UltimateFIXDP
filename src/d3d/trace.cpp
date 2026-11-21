@@ -394,16 +394,20 @@ template <typename Draw> HRESULT WaterDraw(void* dev, bool water, Draw draw) {
 // One draw explained, once per caller address of interest (the prologue fog at 006D6E1B): the pixel shader disassembled into
 // UltimateFix\draw_<caller>.txt with its constants c0..c31 and the blend, alpha and depth states, to see why it comes out black.
 float g_psCx[32][4];
+void WriteDrawFile(void* dev, u32 from, const wchar_t* path);
 void DumpDraw(void* dev, u32 from) {
     static u32 done[8];
     static int doneCount = 0;
     for (int i = 0; i < doneCount; ++i) if (done[i] == from) return;
     if (doneCount >= 8) return;
     done[doneCount++] = from;
-    const DWORD* code = nullptr;
-    for (int i = 0; i < g_psCount && !code; ++i) if (g_psObj[i] == g_curPs) code = g_psCode[i];
     wchar_t path[MAX_PATH + 64];
     wsprintfW(path, L"%sUltimateFix\\draw_%08X.txt", g_paths.gameDir, from);
+    WriteDrawFile(dev, from, path);
+}
+void WriteDrawFile(void* dev, u32 from, const wchar_t* path) {
+    const DWORD* code = nullptr;
+    for (int i = 0; i < g_psCount && !code; ++i) if (g_psObj[i] == g_curPs) code = g_psCode[i];
     HANDLE f = CreateFileW(path, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (f == INVALID_HANDLE_VALUE) return;
     DWORD put;
@@ -452,6 +456,107 @@ void DumpDraw(void* dev, u32 from) {
     Log("water: the draw from %08X explained in %S", from, path);
 }
 
+// [Debug] TraceWater=1: the draw hunt (Numpad 3..6). The frame's draws by the game are numbered in their order; the hunt leaves out
+// one half of the remaining range and the player says whether the black hole went away with it (Numpad 4) or stayed (Numpad 5), so
+// about a dozen answers single out the one draw that makes it. That draw is explained in UltimateFix\hunt_<caller>_<shader>.txt and
+// its textures saved next to it. Standing still keeps the numbering the same from frame to frame.
+struct DrawHunt {
+    bool on;
+    int lo, hi;            // the draw holding the hole is in [lo, hi)
+    int backLo[32], backHi[32];
+    int depth;
+    bool explained;
+} g_hunt;
+int g_huntIndex = 0;       // the game's draws so far in this frame
+int g_huntLastFrame = 0;   // the game's draws in the previous frame
+
+int HuntMid() { return g_hunt.hi - g_hunt.lo <= 1 ? g_hunt.hi : (g_hunt.lo + g_hunt.hi) / 2; }
+
+void SaveStagePng(void* tex, int stage, u32 from) {
+    typedef HRESULT(WINAPI * SaveFn)(const wchar_t*, DWORD, void*, const void*);
+    HMODULE d3dx = GetModuleHandleW(L"d3dx9_43.dll");
+    SaveFn save = d3dx ? (SaveFn)(void*)GetProcAddress(d3dx, "D3DXSaveTextureToFileW") : nullptr;
+    if (!save || !tex) return;
+    wchar_t path[MAX_PATH + 64];
+    wsprintfW(path, L"%sUltimateFix\\hunt_%08X_%08X_s%d.png", g_paths.gameDir, from, (u32)(uintptr_t)g_curPs, stage);
+    const HRESULT hr = save(path, 3 /*D3DXIFF_PNG*/, tex, nullptr);
+    Log("hunt:   s%d saved as %S (%s)", stage, path, SUCCEEDED(hr) ? "ok" : "failed");
+}
+
+// true: leave this draw out
+bool HuntSkips(void* dev, u32 from, UINT count) {
+    if (from < 0x400000u || from >= 0x800000u) return false;  // the mod's own drawing (menu, filters) is not counted
+    const int i = g_huntIndex++;
+    if (!g_hunt.on || i < g_hunt.lo || i >= HuntMid()) return false;
+    if (g_hunt.hi - g_hunt.lo <= 1 && !g_hunt.explained) {
+        g_hunt.explained = true;
+        char t[4][48];
+        for (int st = 0; st < 4; ++st) DescribeTexture(g_stageTex[st], t[st]);
+        Log("hunt: the draw is no. %d of the frame: %u primitives from %08X, pixel shader %08X: s0 %s | s1 %s | s2 %s | s3 %s", i, count, from,
+            (u32)(uintptr_t)g_curPs, t[0], t[1], t[2], t[3]);
+        wchar_t path[MAX_PATH + 64];
+        wsprintfW(path, L"%sUltimateFix\\hunt_%08X_%08X.txt", g_paths.gameDir, from, (u32)(uintptr_t)g_curPs);
+        WriteDrawFile(dev, from, path);
+        for (int st = 0; st < 4; ++st) SaveStagePng(g_stageTex[st], st, from);
+    }
+    return true;
+}
+
+void HuntNotice() {
+    const int left = g_hunt.hi - g_hunt.lo;
+    int steps = 0;
+    for (int n = left; n > 1; n = (n + 1) / 2) ++steps;
+    wchar_t uk[200], en[200];
+    if (left <= 1) {
+        wsprintfW(uk, L"Знайдено: малювання №%d. Його вимкнено; Numpad 3 вмикає назад. Пришли лог і файли hunt_*.", g_hunt.lo);
+        wsprintfW(en, L"Found: draw no. %d. It is left out; Numpad 3 brings it back. Send the log and the hunt_* files.", g_hunt.lo);
+        ShowNotice(L"Пошук: знайдено", L"Hunt: found", uk, en, 8);
+    } else {
+        wsprintfW(uk, L"Сховано №%d..%d. Діри НЕМАЄ: Numpad 4. Діра Є: Numpad 5. Назад: Numpad 6. Ще кроків: %d.", g_hunt.lo, HuntMid() - 1, steps);
+        wsprintfW(en, L"Hidden no. %d..%d. Hole GONE: Numpad 4. Hole STILL there: Numpad 5. Undo: Numpad 6. Steps left: %d.", g_hunt.lo, HuntMid() - 1, steps);
+        ShowNotice(L"Пошук чорної діри", L"Black hole hunt", uk, en, 30);
+    }
+    Log("hunt: draws %d..%d of %d left out (the hole is in %d..%d)", g_hunt.lo, HuntMid() - 1, g_huntLastFrame, g_hunt.lo, g_hunt.hi - 1);
+}
+
+// Once per frame, from WaterFrame
+void HuntFrame(bool k3, bool k4, bool k5, bool k6) {
+    g_huntLastFrame = g_huntIndex;
+    g_huntIndex = 0;
+    if (k3) {
+        g_hunt.on = !g_hunt.on;
+        if (g_hunt.on) {
+            g_hunt.lo = 0;
+            g_hunt.hi = g_huntLastFrame;
+            g_hunt.depth = 0;
+            g_hunt.explained = false;
+            Log("hunt: started over %d draws of the game in a frame", g_huntLastFrame);
+            HuntNotice();
+        } else {
+            Log("hunt: stopped, every draw back");
+            ShowNotice(L"Пошук: вимкнено", L"Hunt: off", L"Усе малюється як у грі. Numpad 3 починає знову.", L"Everything is drawn as the game does. Numpad 3 starts again.", 4);
+        }
+        return;
+    }
+    if (!g_hunt.on) return;
+    if ((k4 || k5) && g_hunt.hi - g_hunt.lo > 1 && g_hunt.depth < 32) {
+        g_hunt.backLo[g_hunt.depth] = g_hunt.lo;
+        g_hunt.backHi[g_hunt.depth++] = g_hunt.hi;
+        const int mid = HuntMid();
+        if (k4) g_hunt.hi = mid;  // gone with the hidden half: it is there
+        else g_hunt.lo = mid;     // still there: it is in the other half
+        Log("hunt: answer %s", k4 ? "hole gone (Numpad 4)" : "hole still there (Numpad 5)");
+        HuntNotice();
+    } else if (k6 && g_hunt.depth > 0) {
+        --g_hunt.depth;
+        g_hunt.lo = g_hunt.backLo[g_hunt.depth];
+        g_hunt.hi = g_hunt.backHi[g_hunt.depth];
+        g_hunt.explained = false;
+        Log("hunt: one answer undone (Numpad 6)");
+        HuntNotice();
+    }
+}
+
 HRESULT WINAPI H_DrawIp(void* dev, DWORD prim, INT base, UINT minIdx, UINT verts, UINT start, UINT count) __attribute__((noinline));
 HRESULT WINAPI H_DrawIp(void* dev, DWORD prim, INT base, UINT minIdx, UINT verts, UINT start, UINT count) {
     const u32 from = Caller();
@@ -464,12 +569,15 @@ HRESULT WINAPI H_DrawIp(void* dev, DWORD prim, INT base, UINT minIdx, UINT verts
         if (!told++) Log("fog: a smoke volume left out of the G-buffer (it was drawn there as a solid dark wall)");
         return 0;
     }
+    if (g_cfg.traceWater && HuntSkips(dev, from, count)) return 0;
     const bool w = NoteWaterDraw(count, from);
     return WaterDraw(dev, w, [&] { return r_DrawIp(dev, prim, base, minIdx, verts, start, count); });
 }
 HRESULT WINAPI H_DrawP(void* dev, DWORD prim, UINT start, UINT count) __attribute__((noinline));
 HRESULT WINAPI H_DrawP(void* dev, DWORD prim, UINT start, UINT count) {
-    const bool w = NoteWaterDraw(count, Caller());
+    const u32 from = Caller();
+    if (g_cfg.traceWater && HuntSkips(dev, from, count)) return 0;
+    const bool w = NoteWaterDraw(count, from);
     return WaterDraw(dev, w, [&] { return r_DrawP(dev, prim, start, count); });
 }
 
@@ -768,7 +876,18 @@ void WaterFrame() {
     DWORD pid = 0;
     HWND fg = GetForegroundWindow();
     if (fg) GetWindowThreadProcessId(fg, &pid);
-    const bool now = pid == GetCurrentProcessId() && !ui::IsOpen() && (GetAsyncKeyState(VK_NUMPAD1) & 0x8000);  // not while typing a number in F10
+    const bool ours = pid == GetCurrentProcessId() && !ui::IsOpen();  // not while typing a number in F10
+    const bool now = ours && (GetAsyncKeyState(VK_NUMPAD1) & 0x8000);
+    if (g_cfg.traceWater) {
+        static bool held[4];
+        bool hit[4];
+        for (int k = 0; k < 4; ++k) {
+            const bool d = ours && (GetAsyncKeyState(VK_NUMPAD3 + k) & 0x8000);
+            hit[k] = d && !held[k];
+            held[k] = d;
+        }
+        HuntFrame(hit[0], hit[1], hit[2], hit[3]);
+    }
     if (now && !was) {
         g_cfg.waterTest = (g_cfg.waterTest + 1) % 3;
         Log("water: WaterTest %d (Numpad 1): c10.z %s", g_cfg.waterTest, g_cfg.waterTest == 1 ? "-0.75" : g_cfg.waterTest == 2 ? "0" : "as the game sets it");

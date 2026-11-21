@@ -136,6 +136,10 @@ void DumpTexture(u32 hash, const void* data, UINT size) {
 // every pad icon is read from the keyboard atlas at the wrong place. We keep the pad theme in a texture of our own
 // and hand it to the game in place of the keyboard atlas whenever the pad mode is on.
 void* g_keyboardAtlas = nullptr;
+void* g_gamePadAtlas = nullptr;  // the game's own pad atlas, when it started in pad mode
+u8* g_padFile = nullptr;         // the unpacked DDS of the game's BTNWIDE.XPC (ReadGamePadFile), or nullptr
+size_t g_padFileSize = 0;
+bool g_padFileTried = false;
 void* g_padTheme[2] = {nullptr, nullptr};  // 0 Xbox, 1 PlayStation, each loaded the first time it is wanted
 bool g_themeTried[2] = {false, false};
 int g_themeShown = -1;
@@ -161,10 +165,18 @@ HRESULT WINAPI H_FromMemoryEx(void* dev, const void* data, UINT size, UINT w, UI
                               void** out) {
     const bool atlasFile = data && size >= 128 && size != 0x7FFFFFFFu && ((const u32*)data)[0] == 0x20534444u /*"DDS "*/ &&
                            ((const u32*)data)[3] == 1408 && ((const u32*)data)[4] == 1024;
+    // Started in pad mode the game loads its pad atlas (BTNWIDE.XPC from the disk, 256x256) instead, and the keyboard one never
+    // comes: that load is recognised by its bytes, the same as the file next to DP.exe.
+    const size_t padCmp = g_padFile && data && size != 0x7FFFFFFFu ? (size < g_padFileSize ? size : g_padFileSize) : 0;
+    const bool padFile = padCmp >= 4096 && !__builtin_memcmp(data, g_padFile, padCmp);
     const HRESULT hr = FromMemoryInner(dev, data, size, w, h, mips, usage, fmt, pool, filter, mipFilter, colorKey, info, palette, out);
     if (atlasFile && hr >= 0 && out && *out && g_cfg.glyphTheme && !g_keyboardAtlas) {
         g_keyboardAtlas = *out;
         Log("textures: keyboard icon atlas found (the game's 1024x1408 file), pad icons will be swapped in with the pad mode");
+    }
+    if (padFile && hr >= 0 && out && *out && g_cfg.glyphTheme && !g_gamePadAtlas) {
+        g_gamePadAtlas = *out;
+        Log("textures: the game's pad icon atlas found (started in pad mode), PlayStation icons will be swapped in for a DualSense");
     }
     return hr;
 }
@@ -234,54 +246,72 @@ void* GlyphAtlasFor(void* dev, void* tex) { return GlyphAtlasForImpl(dev, tex); 
 
 namespace {
 
-// The game's own pad icons (the Xbox ones): UPDATA\SOURCE\MESSAGE\BTNWIDE.XPC next to DP.exe, which the game itself loads only
-// when it starts in pad mode. An XPC2 with a zlib DDS of 1024x1024, unpacked here and made a texture as the game would.
-void* LoadGamePadAtlas(void* dev) {
+// The game's own pad icons (the Xbox ones): UPDATA\SOURCE\MESSAGE\BTNWIDE.XPC next to DP.exe, which the game itself loads (through
+// CAddon, in place of the 1024x1408 keyboard atlas) only when it starts in pad mode. An XPC2 with a zlib DDS of 256x256 DXT3 (cells of
+// 32 px), unpacked here once: it is made a texture as the game would, and it tells the game's own load of that file apart.
+
+void ReadGamePadFile() {
+    if (g_padFileTried) return;
+    g_padFileTried = true;
     wchar_t path[MAX_PATH + 48];
     wsprintfW(path, L"%sUPDATA\\SOURCE\\MESSAGE\\BTNWIDE.XPC", g_paths.gameDir);
     HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
     if (f == INVALID_HANDLE_VALUE) {
         Log("textures: the game's pad icons %S are not there", path);
-        return nullptr;
+        return;
     }
     DWORD size = GetFileSize(f, nullptr), got = 0;
     u8* xpc = (size > 0x60 && size < (8u << 20)) ? (u8*)VirtualAlloc(nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) : nullptr;
     const bool read = xpc && ReadFile(f, xpc, size, &got, nullptr) && got == size;
     CloseHandle(f);
-    void* tex = nullptr;
     size_t need = 0;
     if (read) XpcFirstPicture(xpc, size, nullptr, 0, &need);
     u8* dds = (need >= 128 && need < (16u << 20)) ? (u8*)VirtualAlloc(nullptr, need, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) : nullptr;
     const size_t n = dds ? XpcFirstPicture(xpc, size, dds, need, nullptr) : 0;
-    if (n && g_real &&
-        SUCCEEDED(g_real(dev, dds, (UINT)n, 0xFFFFFFFEu, 0xFFFFFFFEu, 1, 0, 0 /*the file's format*/, 1 /*MANAGED*/, 1, 1, 0, nullptr, nullptr, &tex)) && tex)
-        Log("textures: the game's own pad icons loaded (%S)", path);
-    else
-        Log("textures: the game's pad icons %S could not be read (%u bytes unpacked)", path, (u32)n);
-    if (dds) VirtualFree(dds, 0, MEM_RELEASE);
     if (xpc) VirtualFree(xpc, 0, MEM_RELEASE);
+    if (n >= 128 && ((const u32*)dds)[0] == 0x20534444u /*"DDS "*/) {
+        g_padFile = dds;
+        g_padFileSize = n;
+        Log("textures: the game's pad icons read (%S, DDS %ux%u, %u bytes)", path, ((const u32*)dds)[4], ((const u32*)dds)[3], (u32)n);
+    } else {
+        if (dds) VirtualFree(dds, 0, MEM_RELEASE);
+        Log("textures: the game's pad icons %S could not be read (%u bytes unpacked)", path, (u32)n);
+    }
+}
+
+void* LoadGamePadAtlas(void* dev) {
+    void* tex = nullptr;
+    if (g_padFile && g_real &&
+        SUCCEEDED(g_real(dev, g_padFile, (UINT)g_padFileSize, 0xFFFFFFFEu, 0xFFFFFFFEu, 1, 0, 0 /*the file's format*/, 1 /*MANAGED*/, 1, 1, 0,
+                         nullptr, nullptr, &tex)) && tex)
+        Log("textures: the game's own pad icons made a texture");
     return tex;
 }
 
 void* GlyphAtlasForImpl(void* dev, void* tex) {
-    if (!g_keyboardAtlas || tex != g_keyboardAtlas || !*(volatile u8*)(uintptr_t)0x014810F0) return tex;
+    static bool s_noAtlas = false;
+    if (!g_keyboardAtlas && !g_gamePadAtlas && !s_noAtlas && *(volatile u8*)(uintptr_t)0x014810F0) {
+        s_noAtlas = true;
+        Log("textures: pad mode, but neither icon atlas of the game was recognised at its load (keyboard 1024x1408, pad BTNWIDE.XPC): "
+            "the icons stay as the game draws them");
+    }
+    if (!tex || (tex != g_keyboardAtlas && tex != g_gamePadAtlas) || !*(volatile u8*)(uintptr_t)0x014810F0) return tex;
     // Asked again on every use: a DualSense over Bluetooth is found up to a few seconds after the start (the reader looks every
     // 2 s), so a choice made once at the first draw kept the Xbox icons for good. Both sets are loaded once and kept.
     const int ps = g_cfg.glyphTheme == 2 ? 0 : g_cfg.glyphTheme == 3 ? 1 : (SonyPadActive() ? 1 : 0);
     if (!g_themeTried[ps]) {
         g_themeTried[ps] = true;
         const wchar_t* name = ps ? L"playstation" : L"xbox";
-        // Xbox icons: the game's own atlas first (the ones the console shows); our drawing only when it is not there
-        if (!ps) g_padTheme[0] = LoadGamePadAtlas(dev);
-        if (!g_padTheme[ps]) {
-            wchar_t path[MAX_PATH + 40];
-            wsprintfW(path, L"%sUltimateFix\\glyphs\\gamepad\\%s.png", g_paths.gameDir, name);
-            if (g_fromFile && SUCCEEDED(g_fromFile(dev, path, 1024, 1024, 1, 0, 21 /*A8R8G8B8*/, 1 /*MANAGED*/, 1, 1, 0, nullptr, nullptr,
-                                                     &g_padTheme[ps])) && g_padTheme[ps])
-                Log("textures: pad icons loaded: %S", path);
-            else
-                Log("textures: pad icons %S could not be loaded, the keyboard atlas stays", path);
-        }
+        // our drawing of both sets (the same look for Xbox and PlayStation); the game's own Xbox atlas only when xbox.png is not there
+        wchar_t path[MAX_PATH + 40];
+        wsprintfW(path, L"%sUltimateFix\\glyphs\\gamepad\\%s.png", g_paths.gameDir, name);
+        if (g_fromFile && SUCCEEDED(g_fromFile(dev, path, 1024, 1024, 1, 0, 21 /*A8R8G8B8*/, 1 /*MANAGED*/, 1, 1, 0, nullptr, nullptr,
+                                                 &g_padTheme[ps])) && g_padTheme[ps])
+            Log("textures: pad icons loaded: %S", path);
+        else if (!ps && (g_padTheme[0] = LoadGamePadAtlas(dev)) != nullptr)
+            Log("textures: %S could not be loaded, the game's own Xbox icons are used", path);
+        else
+            Log("textures: pad icons %S could not be loaded, the game's atlas stays", path);
     }
     if (g_padTheme[ps] && g_themeShown != ps) {
         g_themeShown = ps;
@@ -327,6 +357,7 @@ bool InstallTextureOverride() {
         return false;
     }
     g_real = (FromMemoryExFn)*slot;
+    if (g_cfg.glyphTheme) ReadGamePadFile();
     if (!SwapImport(slot, (void*)H_FromMemoryEx, nullptr)) return false;
     Log("textures: %d replacement files indexed, texture loading hooked", g_count);
     return true;
