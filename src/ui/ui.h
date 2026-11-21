@@ -10,13 +10,26 @@ namespace ui {
 bool OverlayBegin(void* device);
 void OverlayEnd();
 
+// Font weights for DrawText: body text stays Regular; titles and section headings use Segoe UI Semibold, so they read as
+// headings by their weight and not only by their size and colour.
+constexpr int kRegular = 400;   // FW_NORMAL
+constexpr int kSemibold = 600;  // FW_SEMIBOLD
+
+// The nearest whole number (halves go up, negative values too). Without the C runtime there is no roundf; the overlay uses
+// it to put text and edges on whole back buffer pixels, and the menu to keep a dragged panel on whole layout units.
+inline float SnapWhole(float v) {
+    int i = (int)v;              // truncates towards zero
+    if ((float)i > v) --i;       // floor for negative values
+    return (float)(v - (float)i >= 0.5f ? i + 1 : i);
+}
+
 void FillRect(float x, float y, float w, float h, u32 argb);
 // Draws text with its top-left corner at x,y. Returns the width in layout units. One string is at most 255 characters
 // (longer ones are not drawn): long texts are wrapped by the caller.
-float DrawText(const wchar_t* text, float x, float y, u32 argb, int pixelHeight);
-float TextWidth(const wchar_t* text, int pixelHeight);
+float DrawText(const wchar_t* text, float x, float y, u32 argb, int pixelHeight, int weight = kRegular);
+float TextWidth(const wchar_t* text, int pixelHeight, int weight = kRegular);
 // How many of the first `length` characters fit in `maxWidth` layout units (measured only, nothing is drawn or cached).
-int TextFit(const wchar_t* text, int length, float maxWidth, int pixelHeight);
+int TextFit(const wchar_t* text, int length, float maxWidth, int pixelHeight, int weight = kRegular);
 
 // Final-image passes, run on the finished back buffer right before the menu is drawn.
 void SharpenFrame(void* device, int percent);   // unsharp mask, 0 = off

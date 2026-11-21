@@ -22,6 +22,7 @@ struct TextEntry {
     void* texture;
     int width, height;
     int pixelHeight;
+    int weight;  // kRegular or kSemibold: part of the key, the same string is cached once per weight
     int length;
     u32 hash;
     u32 lastUsed;  // the use clock at the last lookup: the least recently used entry is replaced when the cache is full
@@ -51,13 +52,14 @@ void SetRS(u32 state, u32 value) { Method<DwordDwordFn>(g_dev, kSetRenderState)(
 void SetTSS(u32 type, u32 value) { Method<Dword3Fn>(g_dev, kSetTextureStageState)(g_dev, 0, type, value); }
 void SetSampler(u32 type, u32 value) { Method<Dword3Fn>(g_dev, kSetSamplerState)(g_dev, 0, type, value); }
 
-// One memory DC and one font per pixel size, kept for the whole session (a new font for every string was slow).
+// One memory DC and one font per pixel size and weight, kept for the whole session (a new font for every string was slow).
 HDC g_textDc = nullptr;
 struct FontEntry {
     int px;
+    int weight;
     HFONT font;
 };
-constexpr int kMaxFonts = 16;
+constexpr int kMaxFonts = 24;  // the menu uses about a dozen sizes, a few of them in both weights
 FontEntry g_fonts[kMaxFonts];
 int g_fontCount = 0;
 
@@ -66,16 +68,51 @@ HDC TextDc() {
     return g_textDc;
 }
 
+HFONT MakeFont(int px, int weight, const wchar_t* face) {
+    return CreateFontW(-px, 0, 0, 0, weight, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS, CLIP_DEFAULT_PRECIS,
+                       ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, face);
+}
+
+float ScaleY();
+
+// The semibold weight. GDI keeps the old four-style families, so Segoe UI itself has only Regular and Bold, and weight 600
+// on it comes out Bold; the real semibold cut (seguisb.ttf, on every Windows since 7) is the family "Segoe UI Semibold".
+// Where that face is missing (Wine and Proton ship no Segoe UI) GDI would quietly put another font in its place, so the
+// face the DC really got is checked, and without it the heading is Segoe UI (or what stands in for it) at weight 600.
+HFONT MakeSemibold(HDC dc, int px) {
+    static bool logged = false;
+    HFONT font = MakeFont(px, FW_SEMIBOLD, L"Segoe UI Semibold");
+    bool real = false;
+    if (font) {
+        HGDIOBJ old = SelectObject(dc, font);
+        wchar_t face[LF_FACESIZE];
+        real = GetTextFaceW(dc, LF_FACESIZE, face) > 0 && lstrcmpiW(face, L"Segoe UI Semibold") == 0;
+        SelectObject(dc, old);
+        if (!real) {
+            DeleteObject(font);
+            font = MakeFont(px, FW_SEMIBOLD, L"Segoe UI");
+        }
+    }
+    if (font && !logged) {  // the first heading font: the whole feature is on from here
+        logged = true;
+        const int scale = (int)(ScaleY() * 100.f + 0.5f);
+        Log("overlay: text snapped to whole pixels, scale %d.%02d, headings in %s", scale / 100, scale % 100,
+            real ? "Segoe UI Semibold" : "Segoe UI at weight 600 (no Segoe UI Semibold face)");
+    }
+    return font;
+}
+
 // The font is never left selected in the DC, so an old one can be deleted when the table is full.
-HFONT FontFor(int px) {
+HFONT FontFor(int px, int weight) {
     for (int i = 0; i < g_fontCount; ++i)
-        if (g_fonts[i].px == px) return g_fonts[i].font;
-    HFONT font = CreateFontW(-px, 0, 0, 0, FW_NORMAL, FALSE, FALSE, FALSE, DEFAULT_CHARSET, OUT_DEFAULT_PRECIS,
-                             CLIP_DEFAULT_PRECIS, ANTIALIASED_QUALITY, DEFAULT_PITCH | FF_DONTCARE, L"Segoe UI");
+        if (g_fonts[i].px == px && g_fonts[i].weight == weight) return g_fonts[i].font;
+    HDC dc = TextDc();
+    HFONT font = weight == kSemibold && dc ? MakeSemibold(dc, px) : MakeFont(px, FW_NORMAL, L"Segoe UI");
     if (!font) return nullptr;
     int slot = g_fontCount < kMaxFonts ? g_fontCount++ : kMaxFonts - 1;
     if (slot == kMaxFonts - 1 && g_fonts[slot].font) DeleteObject(g_fonts[slot].font);
     g_fonts[slot].px = px;
+    g_fonts[slot].weight = weight;
     g_fonts[slot].font = font;
     return font;
 }
@@ -89,7 +126,7 @@ u32 HashText(const wchar_t* text, int* length) {
 }
 
 // Renders `text` with GDI and uploads it as an A8R8G8B8 texture (white, alpha = coverage).
-TextEntry* MakeText(const wchar_t* text, int len, u32 hash, int px) {
+TextEntry* MakeText(const wchar_t* text, int len, u32 hash, int px, int weight) {
     if (len <= 0 || len >= 256) return nullptr;
     TextEntry* slot = nullptr;
     if (g_textCount < kMaxTexts) {
@@ -105,7 +142,7 @@ TextEntry* MakeText(const wchar_t* text, int len, u32 hash, int px) {
     }
 
     HDC dc = TextDc();
-    HFONT font = dc ? FontFor(px) : nullptr;
+    HFONT font = dc ? FontFor(px, weight) : nullptr;
     if (!font) return nullptr;
     HGDIOBJ oldFont = SelectObject(dc, font);
     SIZE size;
@@ -155,6 +192,7 @@ TextEntry* MakeText(const wchar_t* text, int len, u32 hash, int px) {
                 e.width = w;
                 e.height = h;
                 e.pixelHeight = px;
+                e.weight = weight;
                 e.length = len;
                 e.hash = hash;
                 e.lastUsed = ++g_useClock;
@@ -171,12 +209,12 @@ TextEntry* MakeText(const wchar_t* text, int len, u32 hash, int px) {
     return result;
 }
 
-TextEntry* GetText(const wchar_t* text, int px) {
+TextEntry* GetText(const wchar_t* text, int px, int weight) {
     int len;
     u32 hash = HashText(text, &len);
     for (int i = 0; i < g_textCount; ++i) {
         TextEntry& e = g_texts[i];
-        if (e.hash != hash || e.length != len || e.pixelHeight != px || !e.texture) continue;
+        if (e.hash != hash || e.length != len || e.pixelHeight != px || e.weight != weight || !e.texture) continue;
         int k = 0;
         while (k < len && e.text[k] == text[k]) ++k;
         if (k == len) {
@@ -184,7 +222,7 @@ TextEntry* GetText(const wchar_t* text, int px) {
             return &e;
         }
     }
-    return MakeText(text, len, hash, px);
+    return MakeText(text, len, hash, px, weight);
 }
 
 // Scale of the overlay relative to the 1280x720 layout: the back buffer may be bigger. The output is always 16:9, so both
@@ -315,27 +353,44 @@ void OverlayEnd() {
     }
 }
 
+// One axis of a rectangle in back buffer pixels, on whole pixels. A thin one (a hairline, a bar of a graph) keeps its rounded
+// thickness, at least one pixel, wherever it starts: at scale 1.5 a 1-unit line otherwise came out 1 or 2 pixels thick by
+// its position. A bigger one has both edges rounded, so two rectangles that meet in layout units meet on the screen too.
+void SnapSpan(float from, float size, float scale, float* a, float* b) {
+    if (size < 0.f) {  // a negative size spans back from `from`, as the unsnapped quad did
+        from += size;
+        size = -size;
+    }
+    const float start = SnapWhole(from * scale), length = size * scale;
+    *a = start;
+    if (length < 3.f) *b = start + (length < 1.f ? 1.f : SnapWhole(length));
+    else *b = SnapWhole((from + size) * scale);
+}
+
 void FillRect(float x, float y, float w, float h, u32 argb) {
+    if (w == 0.f || h == 0.f) return;  // an empty rectangle covered no pixel before either
     typedef HRESULT(WINAPI * SetTexFn)(void*, DWORD, void*);
     Method<SetTexFn>(g_dev, kSetTexture)(g_dev, 0, nullptr);
     SetTSS(TSS_COLOROP, TOP_SELECTARG1);
     SetTSS(TSS_COLORARG1, TA_DIFFUSE);
     SetTSS(TSS_ALPHAOP, TOP_SELECTARG1);
     SetTSS(TSS_ALPHAARG1, TA_DIFFUSE);
-    float kx = ScaleX(), ky = ScaleY();
-    Quad(x * kx, y * ky, (x + w) * kx, (y + h) * ky, argb, 0.f, 0.f, 1.f, 1.f);
+    float x0, x1, y0, y1;
+    SnapSpan(x, w, ScaleX(), &x0, &x1);
+    SnapSpan(y, h, ScaleY(), &y0, &y1);
+    Quad(x0, y0, x1, y1, argb, 0.f, 0.f, 1.f, 1.f);
 }
 
-float TextWidth(const wchar_t* text, int px) {
-    TextEntry* e = GetText(text, FontPx(px));
+float TextWidth(const wchar_t* text, int px, int weight) {
+    TextEntry* e = GetText(text, FontPx(px), weight);
     return e ? (float)(e->width - 4) / ScaleX() : 0.f;
 }
 
 // Measured with GDI only (no texture is made), so a long text can be tried at many break points cheaply.
-int TextFit(const wchar_t* text, int length, float maxWidth, int px) {
+int TextFit(const wchar_t* text, int length, float maxWidth, int px, int weight) {
     if (length <= 0) return 0;
     HDC dc = TextDc();
-    HFONT font = dc ? FontFor(FontPx(px)) : nullptr;
+    HFONT font = dc ? FontFor(FontPx(px), weight) : nullptr;
     if (!font) return length;
     HGDIOBJ old = SelectObject(dc, font);
     int fit = 0;
@@ -346,8 +401,8 @@ int TextFit(const wchar_t* text, int length, float maxWidth, int px) {
     return fit;
 }
 
-float DrawText(const wchar_t* text, float x, float y, u32 argb, int px) {
-    TextEntry* e = GetText(text, FontPx(px));  // render the font at the real size
+float DrawText(const wchar_t* text, float x, float y, u32 argb, int px, int weight) {
+    TextEntry* e = GetText(text, FontPx(px), weight);  // render the font at the real size
     if (!e) return 0.f;
     typedef HRESULT(WINAPI * SetTexFn)(void*, DWORD, void*);
     Method<SetTexFn>(g_dev, kSetTexture)(g_dev, 0, e->texture);
@@ -356,7 +411,9 @@ float DrawText(const wchar_t* text, float x, float y, u32 argb, int px) {
     SetTSS(TSS_ALPHAOP, TOP_MODULATE);  // coverage from the texture times the vertex alpha
     SetTSS(TSS_ALPHAARG1, TA_TEXTURE);
     SetTSS(TSS_ALPHAARG2, TA_DIFFUSE);
-    float px0 = x * ScaleX() - 2.f, py0 = y * ScaleY() - 2.f;
+    // On whole pixels: each texel of the GDI bitmap lands on exactly one pixel. A fractional start (every odd layout unit at
+    // scale 1.5, any centred label, a panel dragged by the mouse) made the bilinear sampler smear the glyphs over two pixels.
+    float px0 = SnapWhole(x * ScaleX()) - 2.f, py0 = SnapWhole(y * ScaleY()) - 2.f;
     Quad(px0, py0, px0 + (float)e->width, py0 + (float)e->height, argb, 0.f, 0.f, 1.f, 1.f);
     return (float)(e->width - 4) / ScaleX();
 }

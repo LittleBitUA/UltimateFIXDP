@@ -1474,15 +1474,17 @@ void HandleInput(bool foreground) {
             grabY = my - kPy;
             return;
         }
+        // The dragged place and size are kept on whole layout units: a fractional one stayed for the whole session (only the
+        // ini got whole numbers) and put every edge of the menu between two units.
         if (movingPanel && held) {
-            kPx = mx - grabX;
-            kPy = my - grabY;
+            kPx = SnapWhole(mx - grabX);
+            kPy = SnapWhole(my - grabY);
             UpdateLayout();
             return;
         }
         if (resizingPanel && held) {
-            kPw = mx - kPx + 10;
-            kPh = my - kPy + 10;
+            kPw = SnapWhole(mx - kPx + 10);
+            kPh = SnapWhole(my - kPy + 10);
             // the size stops at the screen edge; otherwise UpdateLayout moved the panel instead and it crept away frame by frame
             if (kPx + kPw > 1280) kPw = 1280 - kPx;
             if (kPy + kPh > 720) kPh = 720 - kPy;
@@ -1798,21 +1800,21 @@ void DrawAbout() {
     if (s > 1.f) s = 1.f;
     const float line = 24 * s < 18 ? 18 : 24 * s;
     float y = top;
-    DrawText(L"UltimateFIXDP", kCx, y, kText, 30);
+    DrawText(L"UltimateFIXDP", kCx, y, kText, 30, kSemibold);
     wchar_t ver[48];
     wsprintfW(ver, en ? L"version %S" : L"версія %S", kVersion);
     const float vw = DrawText(ver, kCx, y + 40 * s, kDim, 15);
     DrawUpdateLine(kCx + vw + 24, y + 40 * s, width - vw - 24, en);
     y += 84 * s;
-    DrawText(en ? L"Author" : L"Автор", kCx, y, kAccent, 13);
+    DrawText(en ? L"Author" : L"Автор", kCx, y, kAccent, 13, kSemibold);
     DrawFitted(en ? L"Dmytro Bydlov, the \"Little Bit\" team" : L"Дмитро Бидлов, команда «Little Bit»", kCx, y + 20, kText, 20, width);
     y += 64 * s;
-    DrawText(en ? L"Licence" : L"Ліцензія", kCx, y, kAccent, 13);
+    DrawText(en ? L"Licence" : L"Ліцензія", kCx, y, kAccent, 13, kSemibold);
     DrawFitted(en ? L"MIT: use and change it freely. All code is our own; other projects gave ideas, facts and addresses."
                   : L"MIT: користуйтесь і змінюйте вільно. Увесь код наш власний; інші проєкти дали ідеї, факти й адреси.",
                kCx, y + 20, kText, 15, width);
     y += 62 * s;
-    DrawText(en ? L"Thanks" : L"Подяки", kCx, y, kAccent, 13);
+    DrawText(en ? L"Thanks" : L"Подяки", kCx, y, kAccent, 13, kSemibold);
     const wchar_t* credits[5] = {
         en ? L"ZachFix (h714je): research of the port and many ideas" : L"ZachFix (h714je): дослідження порту й багато ідей",
         en ? L"DPStabilityFix (Cesario67): saves, timing, DualSense layout" : L"DPStabilityFix (Cesario67): збереження, час, розкладка DualSense",
@@ -1822,7 +1824,7 @@ void DrawAbout() {
     };
     for (int i = 0; i < 5; ++i) DrawFitted(credits[i], kCx, y + 20 + (float)i * line, 0xFFC4C4CE, 15, width);
     y += 20 + 5 * line + 10 * s;
-    DrawText(en ? L"Testers" : L"Тестувальники", kCx, y, kAccent, 13);
+    DrawText(en ? L"Testers" : L"Тестувальники", kCx, y, kAccent, 13, kSemibold);
     DrawFitted(L"Gold flin, Tree Fan, EliParker", kCx, y + 20, 0xFFC4C4CE, 15, width);
     DrawText(en ? L"F10 or Esc close" : L"F10 або Esc закрити", kCx, kPy + kPh - 30, kDim, 13);
 }
@@ -1932,7 +1934,7 @@ void DrawStory() {
     }
     wchar_t line[400];
 
-    DrawText(en ? L"Progress" : L"Прогрес", kCx, y, kAccent, 13);
+    DrawText(en ? L"Progress" : L"Прогрес", kCx, y, kAccent, 13, kSemibold);
     if (st.episode > 0) wsprintfW(line, en ? L"Episode %d  ·  chapter %d  ·  step %d" : L"Епізод %d  ·  розділ %d  ·  крок %d", st.episode, st.chapter, st.step);
     else wsprintfW(line, en ? L"Before the first episode (chapter %d, step %d)" : L"Ще до першого епізоду (розділ %d, крок %d)", st.chapter, st.step);
     DrawText(line, kCx, y + 20, kText, 20);
@@ -1940,7 +1942,7 @@ void DrawStory() {
              kCx, y + 48, st.finished ? kOn : kDim, 15);
     y += 80;
 
-    DrawText(en ? L"Side quests" : L"Побічні завдання", kCx, y, kAccent, 13);
+    DrawText(en ? L"Side quests" : L"Побічні завдання", kCx, y, kAccent, 13, kSemibold);
     if (!st.sideKnown) {
         DrawText(en ? L"No data: the game's flag table has no such group." : L"Немає даних: у таблиці прапорів гри немає такої групи.", kCx, y + 20, kDim, 15);
         y += 52;
@@ -1956,7 +1958,7 @@ void DrawStory() {
         y += 12;
     }
 
-    DrawText(en ? L"Current destination" : L"Поточна ціль", kCx, y, kAccent, 13);
+    DrawText(en ? L"Current destination" : L"Поточна ціль", kCx, y, kAccent, 13, kSemibold);
     if (!st.destKnown) {
         lstrcpyW(line, en ? L"No data: the game's flag table has no such group." : L"Немає даних: у таблиці прапорів гри немає такої групи.");
     } else if (st.destIndex < 0) {
@@ -1980,7 +1982,7 @@ void DrawStory() {
     if (points >= 0) y += 19.f * (float)DrawLines(line, kCx, y, 0xFFC4C4CE, 15, 19, w, 3, true);  // not with the waypoint switched off
     y += 12;
 
-    DrawText(en ? L"Story flags" : L"Сюжетні прапори", kCx, y, kAccent, 13);
+    DrawText(en ? L"Story flags" : L"Сюжетні прапори", kCx, y, kAccent, 13, kSemibold);
     wsprintfW(line, en ? L"Raised %d of %d" : L"Піднято %d з %d", st.flagsRaised, st.flagsTotal);
     DrawText(line, kCx, y + 20, kText, 17);
 }
@@ -2000,7 +2002,7 @@ void Draw() {
     FillRect(kPx + kPw - 5, kPy + kPh - 15, 2, 11, kDim);
     FillRect(kPx, kPy, kSideW, kPh, Fade(kSideBg));
 
-    DrawText(L"UltimateFIXDP", kPx + 24, kPy + 22, kText, 22);
+    DrawText(L"UltimateFIXDP", kPx + 24, kPy + 22, kText, 22, kSemibold);
     wchar_t ver[32];
     wsprintfW(ver, g_cfg.language == 1 ? L"version %S" : L"версія %S", kVersion);
     DrawText(ver, kPx + 24, kPy + 52, kDim, 13);
@@ -2016,7 +2018,7 @@ void Draw() {
     }
 
     Page& pg = g_pages[g_page];
-    DrawText(Tx(pg.title), kCx, kPy + 24, kText, 26);
+    DrawText(Tx(pg.title), kCx, kPy + 24, kText, 26, kSemibold);
     DrawText(Tx(pg.subtitle), kCx, kPy + 62, kDim, 15);
     FillRect(kCx, kPy + 100, kCr - kCx, 1, kLine);
 
@@ -2034,8 +2036,8 @@ void Draw() {
         float h = RowHeight(g_rows[r]);
         if (y + h > kListBottom) break;
         if (g_rows[r].item < 0) {
-            DrawText(Tx(g_rows[r].heading), kCx, y + 11, kAccent, 13);
-            float w = TextWidth(Tx(g_rows[r].heading), 13);
+            DrawText(Tx(g_rows[r].heading), kCx, y + 11, kAccent, 13, kSemibold);
+            float w = TextWidth(Tx(g_rows[r].heading), 13, kSemibold);  // the same weight, or the hairline runs into the text
             FillRect(kCx + w + 12, y + 19, kCr - kCx - w - 12, 1, kLine);
         } else {
             DrawItemRow(pg.items[g_rows[r].item], y, g_rows[r].item == g_sel);
@@ -2360,7 +2362,7 @@ void StartHint(void* device) {
     FillRect(x + 4, y, w - 4, 1, alpha(0xFF2A2A34));
     wchar_t ver[64];
     wsprintfW(ver, L"%S", kVersion);
-    const float tw = DrawText(title, x + 22, y + 14, alpha(0xFFF2F2F5), 20);
+    const float tw = DrawText(title, x + 22, y + 14, alpha(0xFFF2F2F5), 20, kSemibold);
     DrawText(ver, x + 22 + tw + 10, y + 19, alpha(0xFF9696A4), 14);
     const float textW = w - 22 - (key ? 64 + 18 + 16 : 18);
     DrawFitted(line, x + 22, y + 48, alpha(lineColor), 15, textW);

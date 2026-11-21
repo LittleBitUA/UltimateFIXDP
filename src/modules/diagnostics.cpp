@@ -77,7 +77,7 @@ void DrawNotice(void* device) {
         g_noticeLaidOut = lang;
         LayOutNotice(t.text);
     }
-    float w = ui::TextWidth(t.title, 16);
+    float w = ui::TextWidth(t.title, 16, ui::kSemibold);
     for (int i = 0; i < g_noticeLineCount; ++i) {
         const float lw = ui::TextWidth(g_noticeLine[i], 14);
         if (lw > w) w = lw;
@@ -87,7 +87,7 @@ void DrawNotice(void* device) {
     const u32 alpha = g_noticeMs - age < 1000 ? (g_noticeMs - age) * 255 / 1000 : 255;  // fades out over the last second
     ui::FillRect(x, kNoticeTop, w, h, WithAlpha(0xD0101014, alpha));
     ui::FillRect(x, kNoticeTop, 3.f, h, WithAlpha(0xFFE5A83A, alpha));
-    ui::DrawText(t.title, x + 16.f, kNoticeTop + 8.f, WithAlpha(0xFFF2F2F5, alpha), 16);
+    ui::DrawText(t.title, x + 16.f, kNoticeTop + 8.f, WithAlpha(0xFFF2F2F5, alpha), 16, ui::kSemibold);
     for (int i = 0; i < g_noticeLineCount; ++i)
         ui::DrawText(g_noticeLine[i], x + 16.f, kNoticeTop + 31.f + 18.f * (float)i, WithAlpha(0xFFC4C4CE, alpha), 14);
     ui::OverlayEnd();
