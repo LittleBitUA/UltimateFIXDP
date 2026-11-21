@@ -1344,6 +1344,24 @@ void SetValue(Item& it, int v) {
 
 int g_confirm = 0;  // 0 nothing, 1 asking about this page, 2 asking about everything, 3 asking to restart the game
 constexpr int kConfirmRestart = 3;
+// The button of the question Enter / A presses, moved with ← → (keys or pad) or the mouse: 0 yes, 1 no. From the sofa a
+// pad has no other way to see which answer it is about to give, so the focused one carries a ring (DrawConfirm).
+int g_confirmFocus = 0;
+
+// Every question starts here. Wiping ALL settings is the one answer that cannot be taken back across pages, so it starts on
+// "no": an A pressed once more out of habit (A has just pressed the chip that asks) keeps the player's values.
+void AskConfirm(int what) {
+    g_confirm = what;
+    g_confirmFocus = what == 2 ? 1 : 0;
+}
+
+// The two answers of the question, side by side under its text: 0 yes, 1 no (the hit boxes and the drawing share these).
+constexpr float kConfirmBtnW = 200, kConfirmBtnH = 34, kConfirmBtnTop = 120;
+float ConfirmButtonX(int i) { return kConfirmX + 40 + i * 240; }
+bool OverConfirmButton(int i, float mx, float my) {
+    const float x = ConfirmButtonX(i), y = kConfirmY + kConfirmBtnTop;
+    return mx >= x && mx <= x + kConfirmBtnW && my >= y && my <= y + kConfirmBtnH;
+}
 
 // The card with the selected row's whole description (F1, R3, a click on the description box): about 15 Ukrainian hints are
 // longer than the box's six lines and lost their ending. It is modal like the question: the list under it does not move.
@@ -1362,7 +1380,7 @@ void OpenHelp() {
 void ResetPageDefaults() {
     int pick = g_resetPick;
     g_resetPick = 0;
-    if (pick == 1 || pick == 2) g_confirm = pick;
+    if (pick == 1 || pick == 2) AskConfirm(pick);
 }
 
 int RestorePage(Page& pg, const wchar_t* tmp) {
@@ -1409,7 +1427,7 @@ void PerformReset(int scope) {
 
 // ---- "Restart the game": shown in the sidebar while settings wait for a restart (R, X / Square or a click), asked first.
 void AskRestart() {
-    if (PendingCount() > 0) g_confirm = kConfirmRestart;
+    if (PendingCount() > 0) AskConfirm(kConfirmRestart);
 }
 
 // The restart ends the process at once (TerminateProcess, as after an update): never while the game writes dp.sav, which
@@ -1832,21 +1850,29 @@ void HandleInput(bool foreground) {
         g_wheel = 0;
         return;
     }
-    if (g_confirm) {  // the question (restore defaults, restart): Enter / Y / A confirms, Esc / N / B cancels, or click a button
+    if (g_confirm) {  // the question (restore defaults, restart): ← → pick a button, Enter / A presses it; Y yes, Esc / N / B no
         g_wheel = 0;
+        if (Pressed(VK_LEFT) || (pad & kPadLeft)) g_confirmFocus = 0;
+        if (Pressed(VK_RIGHT) || (pad & kPadRight)) g_confirmFocus = 1;
         float mx, my;
-        bool click = Pressed(VK_LBUTTON) && MousePosition(&mx, &my);
-        bool yes = Pressed(VK_RETURN) || Pressed('Y') || (pad & kPadAccept);
-        bool no = Pressed(VK_ESCAPE) || Pressed('N') || (pad & kPadBack);
-        if (click) {
-            if (mx >= kConfirmX + 40 && mx <= kConfirmX + 40 + 200 && my >= kConfirmY + 120 && my <= kConfirmY + 154) yes = true;
-            else if (mx >= kConfirmX + 280 && mx <= kConfirmX + 280 + 200 && my >= kConfirmY + 120 && my <= kConfirmY + 154) no = true;
+        const bool at = MousePosition(&mx, &my);
+        if (at && g_mouseMoved) {  // the ring follows the mouse onto a button, as hover selects a row
+            if (OverConfirmButton(0, mx, my)) g_confirmFocus = 0;
+            else if (OverConfirmButton(1, mx, my)) g_confirmFocus = 1;
+        }
+        const bool press = Pressed(VK_RETURN) || (pad & kPadAccept);
+        bool yes = Pressed('Y') || (press && g_confirmFocus == 0);
+        bool no = Pressed(VK_ESCAPE) || Pressed('N') || (pad & kPadBack) || (press && g_confirmFocus == 1);
+        if (Pressed(VK_LBUTTON) && at) {
+            if (OverConfirmButton(0, mx, my)) yes = true;
+            else if (OverConfirmButton(1, mx, my)) no = true;
         }
         if (yes) {
             if (g_confirm == kConfirmRestart) PerformRestart();  // returns only when it was refused (a notice says why)
             else PerformReset(g_confirm);
             g_confirm = 0;
         } else if (no) {
+            Log("menu: question %d answered no", g_confirm);  // the yes side logs what it did
             g_confirm = 0;
         }
         return;
@@ -2259,6 +2285,39 @@ void DrawEditBox(float y) {
     DrawText(text, kCr - 10 - tw, y + 10, kText, 18);
 }
 
+// Where the row's control lies across the row (the switch, the value, the buttons, the slider and its number), as DrawItemRow
+// lays it out. False while a number is typed: the edit box has its own red frame.
+bool ControlSpan(const Item& it, float* x0, float* x1) {
+    *x1 = kCr;
+    if (it.kind == kBool) {
+        *x0 = kCr - kSwitchW;
+    } else if (g_editing) {
+        return false;
+    } else if (it.names) {
+        wchar_t v[40];
+        wsprintfW(v, L"‹  %s  ›", Tx(it.names[*it.value - it.lo]));
+        *x0 = kCr - TextWidth(v, 18);
+    } else if (it.presets) {
+        float bx[8], bw[8];
+        int bn;
+        ChipLayout(it, bx, bw, &bn);
+        *x0 = bx[0];
+    } else {
+        *x0 = kSliderX - 8;  // the knob's half sticks out at the minimum
+    }
+    return true;
+}
+
+// With the pad driving there is no cursor to say where a press goes, and from the sofa the highlight's grey is faint: a
+// calm kLine2 outline around the selected row's control shows what ← → and A act on. Drawn with the highlight (Draw), so
+// it glides with it, and filled with the highlight's colour, so the control drawn over it looks the same as before.
+void DrawPadFocus(const Item& it, float rowY) {
+    float x0, x1;
+    if (!ControlSpan(it, &x0, &x1)) return;
+    const float h = 32, cy = rowY + kRowH / 2;
+    FillRoundFramed(x0 - 8, cy - h / 2, x1 - x0 + 16, h, it.kind == kBool ? h / 2 : 8, kSelected, kLine2, 2);
+}
+
 // `sel` only picks the colours: the highlight under the selected row is drawn by Draw, which lets it glide between rows.
 void DrawItemRow(Item& it, float y, bool sel) {
     // where the control of the row begins (the switch, the value, the first button or the slider): the label stops before it
@@ -2645,14 +2704,23 @@ void DrawConfirm() {
     else
         DrawText(en ? L"Your current values will be replaced. This cannot be undone." : L"Ваші поточні значення буде замінено. Скасувати це не вийде.",
                  kConfirmX + 24, kConfirmY + 60, kMuted, 15);
-    if (g_padMode) DrawPadLineImpl(en ? L"{A} yes      {B} no" : L"{A} так      {B} ні", kConfirmX + 24, kConfirmY + 90, kFaint, 14, kConfirmW - 48);
-    else DrawText(en ? L"Enter or Y: yes      Esc or N: no" : L"Enter або Y: так      Esc або N: ні", kConfirmX + 24, kConfirmY + 88, kFaint, 14);
+    if (g_padMode)
+        DrawPadLineImpl(en ? L"← → pick      {A} press      {B} no" : L"← → вибір      {A} натиснути      {B} ні", kConfirmX + 24, kConfirmY + 90, kFaint, 14,
+                        kConfirmW - 48);
+    else
+        DrawFitted(en ? L"← →: pick      Enter: press      Y: yes      Esc or N: no" : L"← →: вибір      Enter: натиснути      Y: так      Esc або N: ні",
+                   kConfirmX + 24, kConfirmY + 88, kFaint, 14, kConfirmW - 48);
     const wchar_t* yes = restart ? (en ? L"Yes, restart" : L"Так, перезапустити") : (en ? L"Yes, restore" : L"Так, відновити");
     const wchar_t* no = restart ? (en ? L"No, later" : L"Ні, пізніше") : (en ? L"No, keep" : L"Ні, лишити");
-    FillRound(kConfirmX + 40, kConfirmY + 120, 200, 34, 8, kAccent);
-    DrawText(yes, kConfirmX + 40 + 100 - TextWidth(yes, 16) / 2, kConfirmY + 127, kWhite, 16);
-    FillRoundFramed(kConfirmX + 280, kConfirmY + 120, 200, 34, 8, kSelected, kLine2);
-    DrawText(no, kConfirmX + 280 + 100 - TextWidth(no, 16) / 2, kConfirmY + 127, kText, 16);
+    const float by = kConfirmY + kConfirmBtnTop;
+    // The focus ring: a 2-unit white frame 4 units outside the focused button, the dialog's own colour in the gap, so it
+    // reads on the red button and on the grey one alike.
+    const float fx = ConfirmButtonX(g_confirmFocus ? 1 : 0);
+    FillRoundFramed(fx - 4, by - 4, kConfirmBtnW + 8, kConfirmBtnH + 8, 12, kRaised, kWhite, 2);
+    FillRound(ConfirmButtonX(0), by, kConfirmBtnW, kConfirmBtnH, 8, kAccent);
+    DrawText(yes, ConfirmButtonX(0) + kConfirmBtnW / 2 - TextWidth(yes, 16) / 2, by + 7, kWhite, 16);
+    FillRoundFramed(ConfirmButtonX(1), by, kConfirmBtnW, kConfirmBtnH, 8, g_confirmFocus ? kHover : kSelected, kLine2);
+    DrawText(no, ConfirmButtonX(1) + kConfirmBtnW / 2 - TextWidth(no, 16) / 2, by + 7, g_confirmFocus ? kWhite : kText, 16);
 }
 
 // Over the language buttons while settings wait for a restart: how many, and the button that restarts the game (it asks
@@ -2831,6 +2899,7 @@ void Draw() {
             const float hy = kListTop + GlideTo(rowGlide, y - kListTop, r, g_page * 100000 + g_scroll);
             FillRect(kCx - 12, hy + 1, kCr - kCx + 24, kRowH - 2, kSelected);
             FillRect(kCx - 12, hy + 1, 3, kRowH - 2, kAccent);
+            if (g_padMode) DrawPadFocus(pg.items[g_sel], hy);
             break;
         }
         y += h;
