@@ -84,10 +84,10 @@ static const char kDefaultIni[] =
     "AutoLargeAddress=1\r\n"
     "; 1 = the stick-waggle QTE (alternate A/D) counts every swap as at 60 FPS; above 60 the game counted each swap less. Restart needed.\r\n"
     "QteFix=1\r\n"
-    "; 1 = the smoke of the prologue doorways gets the game's animated grey cloud over it, as on the Xbox 360: the PC port makes the\r\n"
-    "; cloud each frame but no PC shader shows it, so the smoke was one black patch. Changes at once.\r\n"
-    "; Experiment, off: drawn with the game's cloud material pair the smoke comes out as hard blocks; which material the Xbox used is unknown.\r\n"
-    "SmokeFix=0\r\n"
+    "; 1 = the prologue's smoke is drawn as on the Xbox 360 (read from a capture of the Xbox build): each smoke sheet's alpha is\r\n"
+    "; multiplied by a 128x64 mask at the model's second UV, which the PC port left out (one solid black patch). The Xbox also has a\r\n"
+    "; second, grey smoke layer whose texture the PC data lack: put it as UltimateFix\\smoke\\cloud.png to have it. Changes at once.\r\n"
+    "SmokeFix=1\r\n"
     "; Experiment, no visible change yet: 1 = smoke volumes (the doorways of the prologue) are not drawn into the G-buffer.\r\n"
     "FogFix=0\r\n"
     "; 1 = the lock-on aims at the chest. The game aims at the waist bone and lowers the point by a tenth of the distance\r\n"
@@ -911,7 +911,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.compressBackups = GetPrivateProfileIntW(L"Save", L"CompressBackups", 1, ini) ? 1 : 0;
     g_cfg.fasterLoading = GetPrivateProfileIntW(L"Fixes", L"FasterLoading", 1, ini) ? 1 : 0;
     g_cfg.qteFix = GetPrivateProfileIntW(L"Fixes", L"QteFix", 1, ini) ? 1 : 0;
-    g_cfg.smokeFix = GetPrivateProfileIntW(L"Fixes", L"SmokeFix", 0, ini) ? 1 : 0;
+    g_cfg.smokeFix = GetPrivateProfileIntW(L"Fixes", L"SmokeFix", 1, ini) ? 1 : 0;
     g_cfg.fogFix = GetPrivateProfileIntW(L"Fixes", L"FogFix", 0, ini) ? 1 : 0;
     g_cfg.lockOnAim = GetPrivateProfileIntW(L"Fixes", L"LockOnAim", 1, ini) ? 1 : 0;
     g_cfg.lockOnHeight = (int)GetPrivateProfileIntW(L"Fixes", L"LockOnHeight", 40, ini);

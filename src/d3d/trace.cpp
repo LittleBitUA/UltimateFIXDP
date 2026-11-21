@@ -430,34 +430,100 @@ bool CurrentPsIsSmoke() {
 }
 // With TraceWater: each lit particle draw (the prologue's black smoke) explained once per particle texture, at most 8, in
 // UltimateFix\smoke_<caller>_<texture>.txt with its vertex shader, the vertices and its texture as PNG.
-// SmokeFix. The prologue's smoke is an animated model of sheets (skinned) with a black DXT3 texture: the smoke is only in its
-// alpha. On the Xbox 360 its material used the game's special material slot 0 (the table at A000A0, filled by FUN_006D1610): the
-// animated cloud's normal map in s1 (g_tNormal, A000C8), a mask in s2 (g_tMask, A000CC), specular (1.0, 128.0, 2.0) and a UV scale
-// of (1.5, 1.0): the light glints over the black sheets along the moving cloud, the grey wisps. In the PC data no material asks for
-// that slot, so the smoke is drawn with the plain particle shader and stays one dark patch. The game's own pair for it is still in
-// DP.exe: the skinned vertex shader with tangents and the UV scale (bytecode at A36BE8) and the particle pixel shader with normal,
-// mask and specular for the same lights (ABE804, the plain one being ABD8D0). For the smoke sheets the mod draws with that pair and
-// the table's textures and values; nothing of its own.
-constexpr u32 kSmokePlainPs = 0x00ABD8D0, kSmokeNormalPs = 0x00ABE804, kSmokeNormalVs = 0x00A36BE8;
+// SmokeFix, restored from the Xbox 360 (a RenderDoc capture of the Xbox build, the shaders read draw by draw). The prologue's
+// smoke is two skinned models of sheets. The Xbox draws each with its sheet texture at UV1 (shifted in V by -4.895 / +4.895) and
+// multiplies the alpha by a 128x64 mask read at the model's second UV: alpha = sheet.a * mask.a, colour = light * sheet.rgb.
+//   layer A: the black 256x128 sheet (PC d7a18744, Xbox 11038) x the 128x64 mask (PC c8c48237, Xbox 11039), V - 4.895
+//   layer B: a grey cloud 256x128 (Xbox 11042, absent from the PC data) x the same mask, V + 4.895
+// The PC port draws layer A without the mask (a solid black blob) and, instead of layer B, the mask itself as a black sheet.
+// Restored here: layer A gets the mask; layer B is drawn with the cloud when UltimateFix\smoke\cloud.png is there (the Xbox
+// texture, not shipped) and left out otherwise, as the Xbox draws no sheet of the bare mask. Shaders: the game's skinned vertex
+// shader that passes the second UV (A38290: texcoord0.zw = the model's second UV, texcoord0.xy = UV * c243.xy + c243.zw) and a
+// copy of the game's particle pixel shader (ABD8D0: the same lights, shadow, density and fog) with the mask in s1.
+constexpr u32 kSmokePlainPs = 0x00ABD8D0, kSmokeUv2Vs = 0x00A38290;
+const char kSmokePs[] =
+    "float4 lit0 : register(c0); float4 lit1 : register(c1); float4 lit2 : register(c2); float4 litDir : register(c3);\n"
+    "float4 pos1 : register(c7); float4 pos2 : register(c8); float4 density : register(c12); float4 fogColor : register(c63);\n"
+    "sampler2D sheet : register(s0); sampler2D mask : register(s1); sampler2D shadow : register(s7);\n"
+    "float4 main(float4 uv : TEXCOORD0, float4 nrm : TEXCOORD1, float3 wp : TEXCOORD2, float4 sp : TEXCOORD5, float4 col : COLOR0) : COLOR {\n"
+    "  float3 n = normalize(nrm.xyz);\n"
+    "  float3 d1 = pos1.xyz - wp; float3 s1 = d1 * pos1.w; float a1 = saturate(1 - dot(s1, s1));\n"
+    "  float3 light = saturate(dot(n, normalize(d1))) * lit1.rgb * a1;\n"
+    "  light += lit0.rgb * saturate(dot(n, -litDir.xyz));\n"
+    "  float3 d2 = pos2.xyz - wp; float3 s2 = d2 * pos2.w; float a2 = saturate(1 - dot(s2, s2));\n"
+    "  light += saturate(dot(n, normalize(d2))) * lit2.rgb * a2;\n"
+    "  float lum = dot(light, float3(0.299, 0.587, 0.114));\n"
+    "  float4 sh = tex2Dproj(shadow, sp);\n"
+    "  float t = saturate((1 - sh.w) * lum * density.z + sh.w);\n"
+    "  float2 m = max(t.xx, density.xy);\n"
+    "  float3 lighting = light * m.x + m.y * col.rgb;\n"
+    "  float4 tex = tex2D(sheet, uv.xy);\n"
+    "  float a = tex.a * tex2D(mask, uv.zw).a * col.a;\n"
+    "  return float4(nrm.w * (tex.rgb * lighting - fogColor.rgb) + fogColor.rgb, a);\n"
+    "}\n";
+
 void* g_smokePs = nullptr;
 void* g_smokeVs = nullptr;
 bool g_smokeShadersTried = false;
+void* g_smokeMask = nullptr;   // the PC 128x64 smoke texture (c8c48237), seen at its own draw
+void* g_smokeCloud = nullptr;  // UltimateFix\smoke\cloud.png (the Xbox texture of layer B), when the player put it there
+bool g_smokeCloudTried = false;
 
 void BuildSmokeShaders(void* dev) {
     if (g_smokeShadersTried) return;
     g_smokeShadersTried = true;
-    const DWORD* ps = (const DWORD*)(uintptr_t)kSmokeNormalPs;
-    const DWORD* vs = (const DWORD*)(uintptr_t)kSmokeNormalVs;
-    if (ps[0] != 0xFFFF0300u || vs[0] != 0xFFFE0300u) {
-        Log("smoke: the game's shaders at %08X / %08X differ from DP.exe 1.01b, no smoke fix", kSmokeNormalPs, kSmokeNormalVs);
+    const DWORD* vs = (const DWORD*)(uintptr_t)kSmokeUv2Vs;
+    if (vs[0] != 0xFFFE0300u) {
+        Log("smoke: the game's vertex shader at %08X differs from DP.exe 1.01b, no smoke fix", kSmokeUv2Vs);
         return;
     }
     typedef HRESULT(WINAPI * MakeFn)(void*, const DWORD*, void**);
-    CreatePsFn makePs = r_CreatePs ? r_CreatePs : (CreatePsFn)(*(void***)dev)[kCreatePixelShader];
-    MakeFn makeVs = (MakeFn)(*(void***)dev)[91];  // IDirect3DDevice9::CreateVertexShader
-    const HRESULT a = makePs(dev, ps, &g_smokePs);
-    const HRESULT b = makeVs(dev, vs, &g_smokeVs);
-    Log("smoke: the game's shaders for the cloud material made (pixel %08X, vertex %08X)", (u32)a, (u32)b);
+    typedef HRESULT(WINAPI * CompileFn)(const char*, UINT, const void*, void*, const char*, const char*, DWORD, void**, void**, void**);
+    typedef void*(WINAPI * PtrFn)(void*);
+    typedef DWORD(WINAPI * SizeFn)(void*);
+    typedef ULONG(WINAPI * RelFn)(void*);
+    MakeFn makeVs = (MakeFn)(*(void***)dev)[91];  // CreateVertexShader
+    const HRESULT v = makeVs(dev, vs, &g_smokeVs);
+    HMODULE d3dx = GetModuleHandleW(L"d3dx9_43.dll");
+    CompileFn compile = d3dx ? (CompileFn)(void*)GetProcAddress(d3dx, "D3DXCompileShader") : nullptr;
+    void *code = nullptr, *errors = nullptr;
+    const HRESULT c = compile ? compile(kSmokePs, sizeof(kSmokePs) - 1, nullptr, nullptr, "main", "ps_3_0", 0, &code, &errors, nullptr) : E_FAIL;
+    if (errors) {
+        char msg[300];
+        const char* text = (const char*)((PtrFn)(*(void***)errors)[3])(errors);
+        const DWORD size = ((SizeFn)(*(void***)errors)[4])(errors);
+        int n = 0;
+        for (DWORD i = 0; text && i < size && text[i] && n < 299; ++i) msg[n++] = (text[i] == '\r' || text[i] == '\n') ? ' ' : text[i];
+        msg[n] = 0;
+        if (FAILED(c)) Log("smoke: the smoke shader did not compile: %s", msg);
+        ((RelFn)(*(void***)errors)[2])(errors);
+    }
+    HRESULT p = E_FAIL;
+    if (SUCCEEDED(c) && code) {
+        CreatePsFn makePs = r_CreatePs ? r_CreatePs : (CreatePsFn)(*(void***)dev)[kCreatePixelShader];
+        p = makePs(dev, (const DWORD*)((PtrFn)(*(void***)code)[3])(code), &g_smokePs);
+        ((RelFn)(*(void***)code)[2])(code);
+    }
+    Log("smoke: shaders for the Xbox smoke (vertex %08X, pixel %08X)", (u32)v, (u32)p);
+}
+
+void LoadSmokeCloud(void* dev) {
+    if (g_smokeCloudTried) return;
+    g_smokeCloudTried = true;
+    typedef HRESULT(WINAPI * FromFileFn)(void*, const wchar_t*, UINT, UINT, UINT, DWORD, DWORD, DWORD, DWORD, DWORD, DWORD, void*, void*, void**);
+    HMODULE d3dx = GetModuleHandleW(L"d3dx9_43.dll");
+    FromFileFn load = d3dx ? (FromFileFn)(void*)GetProcAddress(d3dx, "D3DXCreateTextureFromFileExW") : nullptr;
+    wchar_t path[MAX_PATH + 32];
+    static const wchar_t* const kNames[2] = {L"cloud.dds", L"cloud.png"};
+    for (int i = 0; i < 2 && load && !g_smokeCloud; ++i) {
+        wsprintfW(path, L"%sUltimateFix\\smoke\\%s", g_paths.gameDir, kNames[i]);
+        if (GetFileAttributesW(path) == INVALID_FILE_ATTRIBUTES) continue;
+        if (SUCCEEDED(load(dev, path, 0, 0, 0, 0, 0, 1 /*MANAGED*/, 0xFFFFFFFFu, 0xFFFFFFFFu, 0, nullptr, nullptr, &g_smokeCloud)) && g_smokeCloud)
+            Log("smoke: layer B texture loaded: %S", path);
+        else
+            Log("smoke: %S could not be loaded", path);
+    }
+    if (!g_smokeCloud) Log("smoke: no UltimateFix\\smoke\\cloud.png (the Xbox texture of the second smoke layer): that layer is left out");
 }
 
 // A DXT3 texture whose colour is black wherever its pixels look (decoded per block), cached per texture
@@ -499,29 +565,22 @@ bool IsBlackDxt3(void* tex) {
     return black;
 }
 
-// The game's grey cloud: the 256x256 picture that FUN_006DBC10 turns into a normal map (its draw returns to 006DBCBD, the cloud in
-// s0). The special material table (A000C8) holds that normal map, the blue one, not the grey cloud.
-void* g_greyCloud = nullptr;
-void NoteGreyCloud(u32 from) {
-    if (from == 0x6DBCBDu && g_stageTex[0] && SmallSquareTarget(g_stageTex[0]) == 256) {
-        if (g_greyCloud != g_stageTex[0]) Log("smoke: the grey cloud is texture %08X", (u32)(uintptr_t)g_stageTex[0]);
-        g_greyCloud = g_stageTex[0];
-    }
-}
-
-// The texture of a holder in the special material table (the way FUN_006B6020 picks it)
-void* HolderTexture(u32 slotVa) {
-    const u8* holder = *(const u8* const*)(uintptr_t)slotVa;
-    if (!holder) return nullptr;
-    void* t = *(void* const*)(holder + 0x14);
-    if (!t) t = *(void* const*)(holder + 0x18);
-    if (!t) t = *(void* const*)(holder + 0x1C);
-    return t;
-}
-
 const DWORD* CurrentPsCode();
 
-// Draws a smoke sheet with the game's cloud material when this is one; false when the game draws it as it is
+// The texture's size, 0 when not a 2D texture
+void TextureSize(void* tex, u32* w, u32* h) {
+    *w = *h = 0;
+    if (!tex) return;
+    typedef DWORD(WINAPI * TypeFn)(void*);
+    typedef HRESULT(WINAPI * DescFn)(void*, UINT, u32*);
+    void** vt = *(void***)tex;
+    u32 d[8] = {};
+    if (((TypeFn)vt[10])(tex) != 3 || FAILED(((DescFn)vt[17])(tex, 0, d))) return;
+    *w = d[6];
+    *h = d[7];
+}
+
+// Draws a smoke sheet the Xbox way when this is one; false when the game draws it as it is
 template <typename Draw> bool SmokeDraw(void* dev, Draw draw, HRESULT* hr) {
     if (!g_cfg.smokeFix || !g_stageTex[0] || CurrentPsCode() != (const DWORD*)(uintptr_t)kSmokePlainPs) return false;
     typedef HRESULT(WINAPI * GetRsFn)(void*, DWORD, DWORD*);
@@ -531,75 +590,67 @@ template <typename Draw> bool SmokeDraw(void* dev, Draw draw, HRESULT* hr) {
     getRs(dev, 27 /*ALPHABLENDENABLE*/, &blend);
     getRs(dev, 14 /*ZWRITEENABLE*/, &zwrite);
     if (!blend || zwrite) return false;
-    typedef DWORD(WINAPI * TypeFn)(void*);
-    if (((TypeFn)(*(void***)g_stageTex[0])[10])(g_stageTex[0]) != 3 || !IsBlackDxt3(g_stageTex[0])) return false;
+    u32 w = 0, h = 0;
+    TextureSize(g_stageTex[0], &w, &h);
+    const bool sheetA = w == 256 && h == 128, maskSheet = w == 128 && h == 64;
+    if ((!sheetA && !maskSheet) || !IsBlackDxt3(g_stageTex[0])) return false;
+    if (maskSheet) g_smokeMask = g_stageTex[0];
     BuildSmokeShaders(dev);
-    void* normal = HolderTexture(0x00A000C8);
-    void* mask = HolderTexture(0x00A000CC);
-    if (!g_smokePs || !g_smokeVs || !normal || !r_SetPs || !r_SetTexture || !r_SetPsConstF || !r_SetVsConstF) {
-        static bool told = false;
-        if (!told) {
-            told = true;
-            Log("smoke: the cloud material cannot be drawn (shaders %08X %08X, normal map %08X, mask %08X)", (u32)(uintptr_t)g_smokePs,
-                (u32)(uintptr_t)g_smokeVs, (u32)(uintptr_t)normal, (u32)(uintptr_t)mask);
-        }
-        return false;
+    LoadSmokeCloud(dev);
+    void* diffuse = sheetA ? g_stageTex[0] : g_smokeCloud;
+    if (maskSheet && !g_smokeCloud) {  // the Xbox draws no sheet of the bare mask
+        *hr = 0;
+        return true;
     }
+    if (!g_smokePs || !g_smokeVs || !g_smokeMask || !diffuse || !r_SetPs || !r_SetTexture || !r_SetVsConstF) return false;
     typedef HRESULT(WINAPI * GetVsFn)(void*, void**);
     typedef HRESULT(WINAPI * SetVsFn)(void*, void*);
     typedef HRESULT(WINAPI * GetSsFn)(void*, DWORD, DWORD, DWORD*);
     typedef HRESULT(WINAPI * SetSsFn)(void*, DWORD, DWORD, DWORD);
-    typedef HRESULT(WINAPI * GetPsCFn)(void*, UINT, float*, UINT);
+    typedef HRESULT(WINAPI * GetCFn)(void*, UINT, float*, UINT);
     typedef ULONG(WINAPI * RelFn)(void*);
     GetSsFn getSs = (GetSsFn)dvt[68];
     SetSsFn setSs = (SetSsFn)dvt[69];
-    // the table's values: UV scale/offset at A000AC (VS c243 g_vScrlParam), specular at A000BC.. (PS c9 g_vSpecular)
-    const float* table = (const float*)(uintptr_t)0x00A000A0;
-    const float scroll[4] = {table[3], table[4], table[5], table[6]};
-    const float specular[4] = {table[7], table[8], table[9], 0.f};
-    const float* cam = (const float*)(uintptr_t)(0x00BD9648 + 4);  // CRdCamera: the eye
-    const float eye[4] = {cam[0], cam[1], cam[2], 1.f};
-    float ownVs243[4], ownPs9[4], ownPs62[4];
-    ((GetPsCFn)dvt[95])(dev, 243, ownVs243, 1);  // GetVertexShaderConstantF
-    ((GetPsCFn)dvt[110])(dev, 9, ownPs9, 1);     // GetPixelShaderConstantF
-    ((GetPsCFn)dvt[110])(dev, 62, ownPs62, 1);
+    // UV1 = UV + (0, -4.895) for layer A, (0, +4.895) for layer B (the Xbox c200 of each draw); the sheet wraps
+    const float scroll[4] = {1.f, 1.f, 0.f, sheetA ? -4.89506f : 4.89506f};
+    float ownVs243[4];
+    ((GetCFn)dvt[95])(dev, 243, ownVs243, 1);  // GetVertexShaderConstantF
     void* ownVs = nullptr;
     ((GetVsFn)dvt[93])(dev, &ownVs);
     void* ownPs = g_curPs;
+    void* ownTex0 = g_stageTex[0];
     void* ownTex1 = g_stageTex[1];
-    void* ownTex2 = g_stageTex[2];
     static const DWORD kStates[5] = {1 /*ADDRESSU*/, 2 /*ADDRESSV*/, 5 /*MAGFILTER*/, 6 /*MINFILTER*/, 7 /*MIPFILTER*/};
     static const DWORD kValues[5] = {1 /*WRAP*/, 1, 2 /*LINEAR*/, 2, 2 /*LINEAR*/};
     DWORD saved[2][5];
-    for (int st = 1; st <= 2; ++st)
+    for (int st = 0; st < 2; ++st)
         for (int i = 0; i < 5; ++i) {
-            saved[st - 1][i] = 0;
-            getSs(dev, st, kStates[i], &saved[st - 1][i]);
+            saved[st][i] = 0;
+            getSs(dev, st, kStates[i], &saved[st][i]);
             setSs(dev, st, kStates[i], kValues[i]);
         }
     ((SetVsFn)dvt[92])(dev, g_smokeVs);
     r_SetPs(dev, g_smokePs);
-    r_SetTexture(dev, 1, normal);
-    r_SetTexture(dev, 2, mask);
+    r_SetTexture(dev, 0, diffuse);
+    r_SetTexture(dev, 1, g_smokeMask);
     r_SetVsConstF(dev, 243, scroll, 1);
-    r_SetPsConstF(dev, 9, specular, 1);
-    r_SetPsConstF(dev, 62, eye, 1);
     *hr = draw();
-    r_SetPsConstF(dev, 62, ownPs62, 1);
-    r_SetPsConstF(dev, 9, ownPs9, 1);
     r_SetVsConstF(dev, 243, ownVs243, 1);
-    r_SetTexture(dev, 2, ownTex2);
     r_SetTexture(dev, 1, ownTex1);
+    r_SetTexture(dev, 0, ownTex0);
     r_SetPs(dev, ownPs);
     ((SetVsFn)dvt[92])(dev, ownVs);
     if (ownVs) ((RelFn)(*(void***)ownVs)[2])(ownVs);
-    for (int st = 1; st <= 2; ++st)
-        for (int i = 0; i < 5; ++i) setSs(dev, st, kStates[i], saved[st - 1][i]);
-    static bool told = false;
-    if (!told) {
-        told = true;
-        Log("smoke: drawn with the game's cloud material (UV %d %d, specular %d %d %d, thousandths)", Milli(scroll[0]), Milli(scroll[1]),
-            Milli(specular[0]), Milli(specular[1]), Milli(specular[2]));
+    for (int st = 0; st < 2; ++st)
+        for (int i = 0; i < 5; ++i) setSs(dev, st, kStates[i], saved[st][i]);
+    static bool toldA = false, toldB = false;
+    if (sheetA && !toldA) {
+        toldA = true;
+        Log("smoke: layer A drawn the Xbox way (the sheet x the 128x64 mask at the second UV, V - 4.895)");
+    }
+    if (!sheetA && !toldB) {
+        toldB = true;
+        Log("smoke: layer B drawn with the Xbox cloud texture (x the mask, V + 4.895)");
     }
     return true;
 }
@@ -1334,7 +1385,6 @@ HRESULT WINAPI H_DrawIp(void* dev, DWORD prim, INT base, UINT minIdx, UINT verts
         ExplainCloudWriter(dev, from);
     }
     if (g_cfg.traceWater && HuntSkips(dev, from, count)) return 0;
-    if (g_cfg.smokeFix) NoteGreyCloud(from);
     {
         HRESULT hr = 0;
         if (SmokeDraw(dev, [&] { return r_DrawIp(dev, prim, base, minIdx, verts, start, count); }, &hr)) return hr;
@@ -1354,7 +1404,6 @@ HRESULT WINAPI H_DrawP(void* dev, DWORD prim, UINT start, UINT count) {
         ExplainCloudWriter(dev, from);
     }
     if (g_cfg.traceWater && HuntSkips(dev, from, count)) return 0;
-    if (g_cfg.smokeFix) NoteGreyCloud(from);
     {
         HRESULT hr = 0;
         if (SmokeDraw(dev, [&] { return r_DrawP(dev, prim, start, count); }, &hr)) return hr;
@@ -1454,7 +1503,7 @@ void PatchDevice(void* dev) {
             Log("water: diagnostic hooked (%d%d%d%d%d%d%d): each distinct water draw goes to the log once; Numpad 1 switches WaterTest", a, b,
                 c, d, e, f, g);
         else
-            Log("fog: draw hooks in (%d%d%d): %s%s", c, d && e, f, g_cfg.smokeFix ? "the smoke gets the game's cloud material (SmokeFix)" : "",
+            Log("fog: draw hooks in (%d%d%d): %s%s", c, d && e, f, g_cfg.smokeFix ? "the smoke is drawn the Xbox way (SmokeFix)" : "",
                 g_cfg.fogFix ? (g_cfg.smokeFix ? ", smoke volumes kept out of the G-buffer" : "smoke volumes kept out of the G-buffer") : "");
     }
     if (g_cfg.shadowPrecision && !g_cfg.traceResources)
