@@ -95,6 +95,7 @@ struct Config {
     int antialiasMode;       // how the edges are smoothed: 0 the FXAA-like pass, 1 SMAA 1x (falls back to 0 when it cannot run)
     int smaaQuality;         // SMAA: 0 low, 1 medium, 2 high (how far along an edge its end is looked for)
     int sharpen;             // sharpening of the final picture in percent (0 = off)
+    int sharpenMode;         // how it sharpens: 0 the plain unsharp mask, 1 contrast-adaptive (AMD FidelityFX RCAS; falls back to 0)
     int filtersUnderHud;     // smoothing, sharpening and the in-game look run after the game's composite, under its 2D layer
     int gameAlias;           // the game's own unused 4-tap filter in the composite: 0 off (as on PC), 1 the game's offset, 2 a quarter of an output pixel
     int screenshotKey;       // virtual key code for a PNG screenshot, 0 = off
@@ -424,6 +425,15 @@ bool DrawNoticeInBox(float x, float y, float w, float h, int context);
 bool DrawNoticeBelow(float centreX, float top, float maxW);
 void OpenLogFolder();          // the F10 menu: Explorer on the UltimateFix folder
 void WriteDiagnosticReport();  // the F10 menu: UltimateFix\ufx_report.txt
+
+// 2 to the power of tenths: 2^(t/10) for t in -30..30 without a C runtime (exposure in ssao.cpp, sharpness in overlay.cpp).
+inline float Pow2Tenths(int t) {
+    const float step = 1.0717735f;  // 2^0.1
+    float v = 1.0f;
+    if (t > 0) for (int i = 0; i < t; ++i) v *= step;
+    else for (int i = 0; i < -t; ++i) v /= step;
+    return v;
+}
 
 namespace ui {
 bool Install();                      // input blocking hooks; returns true if the menu is available

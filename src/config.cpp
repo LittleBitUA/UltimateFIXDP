@@ -168,8 +168,13 @@ static const char kDefaultIni[] =
     "; SMAA only: how far along an edge its end is looked for. 0 = low (about 8 pixels), 1 = medium (16), 2 = high (32:\r\n"
     "; the smoothest nearly horizontal and nearly vertical lines). Changes at once.\r\n"
     "SmaaQuality=2\r\n"
-    "; Sharpen the final picture (unsharp mask), percent 0..100. 0 = off, 50 by default. Changes at once.\r\n"
+    "; Sharpen the final picture, percent 0..100. 0 = off, 50 by default. Changes at once.\r\n"
     "Sharpen=50\r\n"
+    "; How Sharpen works. 1 = contrast-adaptive (our own code of AMD FidelityFX RCAS, MIT): soft, low-contrast detail gets\r\n"
+    "; the full strength and contrasty edges only a little, so a dark branch against the sky gets no bright halo, and noise\r\n"
+    "; is not raised; best with RenderScale 150..200. When its shader cannot start, the log says so and 0 is used.\r\n"
+    "; 0 = the old unsharp mask, the same push on every edge. Changes at once.\r\n"
+    "SharpenMode=1\r\n"
     "; 1 = smoothing, sharpening and GameLook go onto the 3D picture only, before the game draws its interface: subtitles,\r\n"
     "; icons, the map and the game's menus stay sharp (the console never filtered them either). The TV gamma and the photo\r\n"
     "; mode sliders still cover the whole frame. Frames without the game's 3D picture (title, loading screens, videos) are\r\n"
@@ -790,6 +795,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.sharpen = (int)GetPrivateProfileIntW(L"Graphics", L"Sharpen", 50, ini);
     if (g_cfg.sharpen < 0) g_cfg.sharpen = 0;
     if (g_cfg.sharpen > 100) g_cfg.sharpen = 100;
+    g_cfg.sharpenMode = GetPrivateProfileIntW(L"Graphics", L"SharpenMode", 1, ini) == 0 ? 0 : 1;
     g_cfg.filtersUnderHud = GetPrivateProfileIntW(L"Graphics", L"FiltersUnderHud", 1, ini) != 0 ? 1 : 0;
     g_cfg.gameAlias = (int)GetPrivateProfileIntW(L"Graphics", L"GameAliasFilter", 0, ini);
     if (g_cfg.gameAlias < 0 || g_cfg.gameAlias > 2) g_cfg.gameAlias = 0;

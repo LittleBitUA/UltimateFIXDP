@@ -753,6 +753,8 @@ void* g_copyTex = nullptr;       // IDirect3DTexture9, render target, same size 
 void* g_copySurf = nullptr;
 UINT g_copyW = 0, g_copyH = 0, g_copyFmt = 0;
 bool g_sharpFailed = false;
+void* g_rcasShader = nullptr;   // SharpenMode=1
+bool g_rcasFailed = false;
 
 const char kSharpenSource[] =
     "sampler s0 : register(s0);\n"
@@ -765,6 +767,40 @@ const char kSharpenSource[] =
     "  float3 e = tex2D(s0, uv + float2(c0.x, 0.0)).rgb;\n"
     "  float3 avg = (n + s + w + e) * 0.25;\n"
     "  return float4(saturate(c + (c - avg) * c0.z), 1.0);\n"
+    "}\n";
+
+// Contrast-adaptive sharpening ([Graphics] SharpenMode=1): our own HLSL of the RCAS formula published by AMD in
+// FidelityFX FSR 1 (ffx_fsr1.h, FsrRcasF, MIT). The unsharp mask above pushes every edge by the same amount, so a dark
+// branch against the sky gets a bright rim that clips to white. RCAS picks one negative lobe weight for the 4-neighbour
+// cross: the largest that, from the ring's min and max, can never push any channel out of 0..1, capped at -0.1875
+// (AMD's FSR_RCAS_LIMIT) and scaled by c1.x. A contrasty edge, or one near black or white, leaves little room, so it gets
+// a small push and no clipped rim; soft low-contrast detail gets the full strength. The denoise term lowers the lobe by
+// up to half where the centre stands alone against its ring (grain, dither, single bright pixels), so noise is not
+// sharpened into speckles.
+// The 1/256 terms are ours: AMD divides by 4*max (0 on pure black, e.g. letterbox bars) and by 4*min-4 (0 on pure
+// white), and a division by zero there would give NaN pixels. Both ratios are 0 in those cases anyway.
+const char kRcasSource[] =
+    "sampler s0 : register(s0);\n"
+    "float4 c0 : register(c0);\n"  // xy = texel size
+    "float4 c1 : register(c1);\n"  // x = strength: 1 at 100 %, half of it for every 50 points less
+    "float4 main(float2 uv : TEXCOORD0) : COLOR {\n"
+    "  float3 b = tex2D(s0, uv + float2(0.0, -c0.y)).rgb;\n"
+    "  float3 d = tex2D(s0, uv + float2(-c0.x, 0.0)).rgb;\n"
+    "  float3 e = tex2D(s0, uv).rgb;\n"
+    "  float3 f = tex2D(s0, uv + float2(c0.x, 0.0)).rgb;\n"
+    "  float3 h = tex2D(s0, uv + float2(0.0, c0.y)).rgb;\n"
+    "  float3 mn4 = min(min(b, d), min(f, h));\n"
+    "  float3 mx4 = max(max(b, d), max(f, h));\n"
+    "  float3 hitMin = min(mn4, e) / (4.0 * mx4 + 0.00390625);\n"
+    "  float3 hitMax = (1.0 - max(mx4, e)) / (4.0 * mn4 - 4.00390625);\n"
+    "  float3 l = max(-hitMin, hitMax);\n"
+    "  float lobe = max(-0.1875, min(max(max(l.r, l.g), l.b), 0.0)) * c1.x;\n"
+    "  float3 w = float3(0.5, 1.0, 0.5);\n"  // luma times 2, as AMD's
+    "  float bL = dot(b, w), dL = dot(d, w), eL = dot(e, w), fL = dot(f, w), hL = dot(h, w);\n"
+    "  float range = max(max(max(bL, dL), max(fL, hL)), eL) - min(min(min(bL, dL), min(fL, hL)), eL);\n"
+    "  float nz = saturate(abs(0.25 * (bL + dL + fL + hL) - eL) / max(range, 0.00390625));\n"
+    "  lobe *= 1.0 - 0.5 * nz;\n"
+    "  return float4((lobe * (b + d + f + h) + e) / (4.0 * lobe + 1.0), 1.0);\n"
     "}\n";
 
 // Edge-directional smoothing in the spirit of FXAA (our own implementation of the well-known idea): the blur direction
@@ -1316,6 +1352,8 @@ const char kColorSource[] =
 const char* const kProfilesColor[] = {"ps_2_b", "ps_2_a", "ps_3_0", "ps_2_0", nullptr};
 
 const char* const kProfilesSharp[] = {"ps_2_0", nullptr};
+// RCAS is about 55 arithmetic slots, too close to the 64 of ps_2_0, so it gets the larger 2.x profiles only.
+const char* const kProfilesRcas[] = {"ps_2_b", "ps_2_a", "ps_3_0", nullptr};
 const char* const kProfilesFxaa[] = {"ps_2_b", "ps_2_a", "ps_2_0", nullptr};
 
 }  // namespace
@@ -1353,6 +1391,26 @@ void ColorFrame(void* dev) {
 }
 
 void SharpenFrame(void* dev, int percent) {
+    if (g_cfg.sharpenMode == 1 && !g_rcasFailed && percent > 0) {
+        // AMD's sharpness is in stops (0 = strongest, each stop halves the lobe): 100 % = 0 stops, 50 % = 1 stop. The
+        // default 50 then lifts a soft, low-contrast edge by about as much as the unsharp mask at 50 did.
+        const float extra[4] = {Pow2Tenths(-(100 - (percent > 100 ? 100 : percent)) / 5), 0.f, 0.f, 0.f};
+        RunPass(dev, &g_rcasShader, &g_rcasFailed, "sharpen (rcas)", kRcasSource, sizeof(kRcasSource) - 1, kProfilesRcas, percent,
+                extra, 1);
+        if (!g_rcasFailed) {
+            static bool logged = false;
+            if (!logged && g_rcasShader) {
+                logged = true;
+                Log("sharpen: contrast-adaptive (AMD FidelityFX RCAS) pass active");
+            }
+            return;
+        }
+        // The shader (or the copy of the back buffer) could not be made, and RunPass said why. The old pass takes over
+        // from this frame on; the setting goes back in memory only, so the menu row shows what really sharpens (the ini
+        // keeps the player's choice for the next start), as AntialiasFrame does with SMAA.
+        g_cfg.sharpenMode = 0;
+        Log("sharpen: falling back to the unsharp mask");
+    }
     RunPass(dev, &g_sharpShader, &g_sharpFailed, "sharpen", kSharpenSource, sizeof(kSharpenSource) - 1, kProfilesSharp, percent);
 }
 
