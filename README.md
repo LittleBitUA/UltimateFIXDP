@@ -247,6 +247,7 @@ What we hold to: *"tested in game"* in this README means a person tested it in g
 > <br>**DualSense:** turn off Steam Input for the game (Properties → Controller).
 > <br>**Do not combine** with DPfix, ZachFix or DPStabilityFix: UltimateFIXDP replaces them.
 > <br>**Coming from DP1 Launcher?** This is its successor: remove DPfix (`d3d9.dll`, `DPfix.ini`) first.
+> <br>**Linux / Steam Deck (Proton):** players report it works, the F10 menu included. Use **GE-Proton**: with Valve's Proton the game's videos do not play (a matter of the game under Proton, not of the mod). If F10 does nothing, add to the game's launch options: `WINEDLLOVERRIDES="x3daudio1_7=n,b" %command%`.
 
 The release archive holds only the mod: `X3DAudio1_7.dll`, the `UltimateFix` folder and a short `README_UA.txt`. The source code is this repository. Newer versions: the mod asks GitHub at the start and offers **F9** to update itself (`[Menu] CheckUpdates=0` turns that off).
 
@@ -496,6 +497,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 > <br>**DualSense:** вимкніть Steam Input для гри (Властивості → Контролер).
 > <br>**Не поєднуйте** з DPfix, ZachFix і DPStabilityFix: UltimateFIXDP їх замінює.
 > <br>**Користувались DP1 Launcher?** Це його наступник: спершу приберіть DPfix (`d3d9.dll`, `DPfix.ini`).
+> <br>**Linux / Steam Deck (Proton):** за словами гравців, працює, разом із меню F10. Беріть **GE-Proton**: зі звичайним Proton від Valve не відтворюються ролики гри (це справа гри під Proton, не мода). Якщо F10 нічого не відкриває, додайте в параметри запуску гри: `WINEDLLOVERRIDES="x3daudio1_7=n,b" %command%`.
 
 В архіві релізу лише мод: `X3DAudio1_7.dll`, тека `UltimateFix` і коротка `README_UA.txt`. Вихідний код — у цьому репозиторії. Нові версії: на старті мод питає GitHub і пропонує **F9**, щоб оновитися самому (`[Menu] CheckUpdates=0` вимикає це).
 
