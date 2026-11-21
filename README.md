@@ -26,8 +26,8 @@ _Універсальний фікс для_ **Deadly Premonition: The Director'
 One DLL in the game folder instead of DPfix, a stability fix, a map fix and a crash fix.
 No installer: press **F10** in game and everything is there. The mod also gives the game 4 GB of memory by itself (from the second start).
 
-> **Version 0.7.8.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
-> <br>New in 0.7.8: **a redesigned F10 menu** (crisp text, the website's palette, quiet motion, changed settings marked) and **five graphics options** (filters under the interface, smoother far shadows, smooth glow, dither against banding, the game's own edge filter) — see [What's new](#whats-new-in-078). In 0.7.7: **an Xbox pad without Steam Input**. In 0.7.6: **PlayStation icons on a DualSense (Edge too)**. In 0.7.5: texture replacements in mod folders work. In 0.7.4: **York can fly** (cheats, F3), the lock-on aims at the chest instead of the hips. In 0.7.3: a mod's name, author and version in a plain `mod.txt`. In 0.7.2: **updates itself** (F9 on the start card), a much smaller archive — see [What's new](#whats-new-in-072). In 0.7.1: fixes for the **thread races** behind the crashes and hangs on entering buildings, the **QTE at high FPS**, **4 GB of memory by itself**, checked and compressed save backups, the game's own Xbox icons — see [What's new](#whats-new-in-071).
+> **Version 0.7.9.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
+> <br>New in 0.7.9: **a new Mods page** with each mod's picture and description, **the F10 menu on a gamepad**, no stutter without a pad, adaptive sharpening (AMD RCAS) — see [What's new](#whats-new-in-079). In 0.7.8: **a redesigned F10 menu** (crisp text, the website's palette, quiet motion, changed settings marked) and **five graphics options** (filters under the interface, smoother far shadows, smooth glow, dither against banding, the game's own edge filter) — see [What's new](#whats-new-in-078). In 0.7.7: **an Xbox pad without Steam Input**. In 0.7.6: **PlayStation icons on a DualSense (Edge too)**. In 0.7.5: texture replacements in mod folders work. In 0.7.4: **York can fly** (cheats, F3), the lock-on aims at the chest instead of the hips. In 0.7.3: a mod's name, author and version in a plain `mod.txt`. In 0.7.2: **updates itself** (F9 on the start card), a much smaller archive — see [What's new](#whats-new-in-072). In 0.7.1: fixes for the **thread races** behind the crashes and hangs on entering buildings, the **QTE at high FPS**, **4 GB of memory by itself**, checked and compressed save backups, the game's own Xbox icons — see [What's new](#whats-new-in-071).
 
 ### Features
 
@@ -108,6 +108,24 @@ port with the Xbox 360 original:
   panel now waits for the next frame (`[Fixes] ZeroFrameMenus`; not yet checked
   in the game, `[Debug] ForceZeroFrame` reproduces the bug).
 
+### What's new in 0.7.9
+
+**The Mods page, redesigned.** A list on the left (the mod's picture, name, version and author, its switch) and a card on the right for the selected mod: its **picture (350×350)**, name, version, author, whether it is on, what it brings, buttons to move it up or down and to open its folder, and its **whole description**. How to give your mod a picture and a description: see [Making a mod](#making-a-mod).
+
+**The F10 menu on a gamepad.** View + Menu together (on a DualSense Create + Options) opens and closes it. The D-pad or the left stick moves (held, it repeats; sliders speed up), A / Cross picks, B / Circle goes back, Y / Triangle puts the default back, LB / RB change the section, LT / RT scroll a screen, R3 shows a whole description, X / Square opens a mod's folder. The hints show the pad's own button icons (PlayStation ones on a DualSense). While the menu is open the game does not see the pad. Row "Gamepad control of the menu" (`[Menu] PadControl`).
+
+**No more stutter without a gamepad.** With no pad plugged in, Windows took 18–62 ms to answer the game's question about it, twice a second. A background thread asks now, and the game gets the last answer at once (`[Input] PadPollThread`).
+
+**Smaller things:**
+- The mouse no longer takes the selection away from the arrows or the pad; the cursor hides while a pad drives the menu.
+- Moving the panel (its top strip) and resizing it (the bottom right corner) work on every page.
+- Questions (restore defaults, restart) show which button is focused; ← → change it.
+- The About page has the website link and an "Open the log folder" button.
+- **You can see what waits for a restart.** The "restart" tag turns amber only on a setting whose value differs from what runs now, and its description says what runs. The sidebar counts these settings and offers "Restart the game" (a click, R, or X / Square on a pad). It asks first, because progress since the last save is lost, and it refuses while the game is writing its save (seen with the save protection on).
+- **Long descriptions in full.** A description too long for its box ends with "… F1 / R3: in full". F1, R3 on a pad or a click on the box opens it on a card over the list, scrolled with ↑ ↓ or the wheel, with the default, the value now and when a change applies. Esc, F1, B or a click outside closes it. A setting without a description (the photo sliders) gets one from its range and default.
+- **An honest photo preview.** The photo mode page no longer darkens the whole picture, so brightness, contrast and the filters are judged on the real image; the list keeps enough opacity to stay readable. Hold the right mouse button (L3 on a pad) to fade the panel away and look at the picture; the game still sees no input, and a small note says to let go. "Picture" is now the second row, under the free camera. With the menu closed, a quiet strip at the bottom names the flying keys and F11 / F4 / F10 / F6 for 6 seconds (again after any F key). It is drawn after the screenshot is taken, so it is never in a picture.
+- **Adaptive sharpening** (`SharpenMode=1`): sharpening now follows AMD FidelityFX RCAS. Soft detail gets the full strength and contrasty edges only a little, so branches against the sky and wires get no bright halos. `SharpenMode=0` brings back the old unsharp mask. Not yet checked in the game.
+
 ### What's new in 0.7.8
 
 **A redesigned F10 menu:**
@@ -115,9 +133,6 @@ port with the Xbox 360 original:
 - **One calm palette, the same as the website.** No green any more. Switches are red or grey pills with a round knob, and buttons and cards have rounded corners.
 - **Quiet motion.** The menu fades in, the selection glides between rows, and a switch knob slides. Closing stays instant. You can turn it off with the row "Menu animation" (`[Menu] Animations`).
 - **You can see what you changed.** A changed setting gets a grey dot, the sidebar shows how many settings changed in each section, and a slider marks its default. Backspace puts the selected setting back to its default.
-- **You can see what waits for a restart.** The "restart" tag turns amber only on a setting whose value differs from what runs now, and its description says what runs. The sidebar counts these settings and offers "Restart the game" (a click, R, or X / Square on a pad). It asks first, because progress since the last save is lost, and it refuses while the game is writing its save (seen with the save protection on).
-- **Long descriptions in full.** A description too long for its box ends with "… F1 / R3: in full". F1, R3 on a pad or a click on the box opens it on a card over the list, scrolled with ↑ ↓ or the wheel, with the default, the value now and when a change applies. Esc, F1, B or a click outside closes it. A setting without a description (the photo sliders) gets one from its range and default.
-- **An honest photo preview.** The photo mode page no longer darkens the whole picture, so brightness, contrast and the filters are judged on the real image; the list keeps enough opacity to stay readable. Hold the right mouse button (L3 on a pad) to fade the panel away and look at the picture; the game still sees no input, and a small note says to let go. "Picture" is now the second row, under the free camera. With the menu closed, a quiet strip at the bottom names the flying keys and F11 / F4 / F10 / F6 for 6 seconds (again after any F key). It is drawn after the screenshot is taken, so it is never in a picture.
 - **Notices.** A notice is coloured by what it means (grey for information, amber for a warning, coral for an error). Up to three wait their turn, and with the menu open they appear inside the panel instead of over its title.
 
 **Graphics (F10 → Screen and graphics; each can be switched off):**
@@ -125,7 +140,6 @@ port with the Xbox 360 original:
 - **Smoother far shadows** (`FarShadowFilter=1`): the far sun shadow cascade is filtered with the same four taps the game uses for the near ones. Distant shadow edges no longer step and crawl.
 - **Smooth glow and depth of field** (`SmoothBloom=1`): the bloom and the blur are upscaled with a cubic filter. Halos around lamps and the out-of-focus background have no square steps at 1440p/4K.
 - **Dither against banding** (`Dither=1`): a fixed, invisible noise removes the colour bands in skies, fog and dark gradients.
-- **Adaptive sharpening** (`SharpenMode=1`): sharpening now follows AMD FidelityFX RCAS. Soft detail gets the full strength and contrasty edges only a little, so branches against the sky and wires get no bright halos. `SharpenMode=0` brings back the old unsharp mask. Not yet checked in the game.
 - **The game's own edge filter** (`GameAliasFilter`, off by default): a 4-tap filter the game has in its final shader but never uses. 1 = as written in the game, 2 = adjusted to the render scale. It is not known whether the Xbox used it.
 
 **Also:**
@@ -311,6 +325,19 @@ A mod is a folder in `UltimateFix\mods\` (next to `DP.exe`). F10 → Mods lists 
 | `description.txt` | a longer description: the whole text of the file with its line breaks, up to 1023 characters (or `опис.txt`; UTF-8, UTF-16 or ANSI); it wins over `Description:` |
 | `cover.png` | the mod's picture: a square, **350×350** recommended, PNG or JPG (`cover.jpg`, `preview.png`, `preview.jpg`, `image.png` work too); a picture that is not square is cropped to its middle |
 
+**A picture and a description, step by step:**
+1. Make a square picture, **350×350 pixels** (bigger works too: the mod scales it down; a picture that is not square is cropped to its middle, never stretched). PNG or JPG; a PNG may have transparency. The corners are rounded by the menu, so draw the picture with square corners.
+2. Name it `cover.png` (or `cover.jpg`) and put it right in the mod's folder, next to `mod.txt`, not in `textures\`.
+3. Write `mod.txt` (UTF-8):
+   ```
+   Name: Ukrainian translation
+   Author: Little Bit
+   Version: 1.2
+   Description: The whole game in Ukrainian.\nMenus, letters and subtitles included.
+   ```
+   For a longer text with paragraphs, put it in `description.txt` instead (it wins over `Description:`; up to 1023 characters).
+4. Restart the game: the mods are read at start. F10 → Mods shows the picture in the list and at 350×350 in the card (at 1080p; smaller on a smaller window). The log says `mods: <folder>: cover cover.png found`.
+
 None of these files is ever taken for a game file. For example:
 
 ```
@@ -347,8 +374,8 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 Одна DLL у теці гри замість DPfix, фіксу стабільності, фіксу мапи й фіксу вильотів.
 Без інсталятора: натисніть **F10** у грі, і все там. Мод також сам дає грі 4 ГБ пам'яті (з другого запуску).
 
-> **Версія 0.7.8.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
-> <br>Нове в 0.7.8: **оновлене меню F10** (чіткий текст, палітра сайту, тихий рух, позначки змінених налаштувань) і **п'ять графічних опцій** (фільтри під інтерфейсом, згладжені далекі тіні, плавне світіння, дизеринг проти смуг, власний фільтр країв гри) — див. [Що нового](#що-нового-в-078). У 0.7.7: **Xbox-пад без Steam Input**. У 0.7.6: **іконки PlayStation на DualSense (і Edge)**. У 0.7.5: заміни текстур у теках модів працюють. У 0.7.4: **Йорк літає** (читкоди, F3), автоприціл цілиться в груди, а не в стегна. У 0.7.3: назва, автор і версія мода у звичайному `mod.txt`. У 0.7.2: **оновлюється сам** (F9 на стартовій плашці), значно менший архів — див. [Що нового](#що-нового-в-072). У 0.7.1: виправлено **гонки потоків**, через які гра падала й зависала при вході в будівлі, **QTE на високому FPS**, **4 ГБ пам'яті самі собою**, перевірені й стиснені копії збережень, оригінальні іконки Xbox — див. [Що нового](#що-нового-в-071).
+> **Версія 0.7.9.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
+> <br>Нове в 0.7.9: **нова сторінка модів** з картинкою й описом кожного мода, **меню F10 з ґеймпада**, без ривків без пада, адаптивна різкість (AMD RCAS) — див. [Що нового](#що-нового-в-079). У 0.7.8: **оновлене меню F10** (чіткий текст, палітра сайту, тихий рух, позначки змінених налаштувань) і **п'ять графічних опцій** (фільтри під інтерфейсом, згладжені далекі тіні, плавне світіння, дизеринг проти смуг, власний фільтр країв гри) — див. [Що нового](#що-нового-в-078). У 0.7.7: **Xbox-пад без Steam Input**. У 0.7.6: **іконки PlayStation на DualSense (і Edge)**. У 0.7.5: заміни текстур у теках модів працюють. У 0.7.4: **Йорк літає** (читкоди, F3), автоприціл цілиться в груди, а не в стегна. У 0.7.3: назва, автор і версія мода у звичайному `mod.txt`. У 0.7.2: **оновлюється сам** (F9 на стартовій плашці), значно менший архів — див. [Що нового](#що-нового-в-072). У 0.7.1: виправлено **гонки потоків**, через які гра падала й зависала при вході в будівлі, **QTE на високому FPS**, **4 ГБ пам'яті самі собою**, перевірені й стиснені копії збережень, оригінальні іконки Xbox — див. [Що нового](#що-нового-в-071).
 
 ### Можливості
 
@@ -430,6 +457,24 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
   ZeroFrameMenus`; у грі ще не перевірено, `[Debug] ForceZeroFrame` відтворює
   ваду).
 
+### Що нового в 0.7.9
+
+**Нова сторінка модів.** Ліворуч список (картинка мода, назва, версія й автор, перемикач), праворуч картка вибраного мода: **картинка 350×350**, назва, версія, автор, чи він увімкнений, що він несе, кнопки «Вище», «Нижче», «Відкрити теку мода» і **повний опис**. Як дати своєму моду картинку й опис: див. [Як зробити мод](#як-зробити-мод).
+
+**Меню F10 з ґеймпада.** View + Menu разом (на DualSense Create + Options) відкриває й закриває меню. Хрестовина або лівий стік ходять (утримання повторює, повзунки прискорюються), A / хрестик вибирає, B / коло — назад, Y / трикутник повертає типове значення, LB / RB — розділ, LT / RT — екран рядків, R3 — повний опис, X / квадрат — тека мода. Підказки показують справжні іконки кнопок пада (на DualSense — PlayStation). Поки меню відкрите, гра пада не бачить. Рядок «Керування меню ґеймпадом» (`[Menu] PadControl`).
+
+**Без ривків, коли ґеймпада немає.** Без підключеного пада Windows відповідала на питання гри про нього 18–62 мс, двічі на секунду. Тепер питає фоновий потік, а гра одразу отримує останню відповідь (`[Input] PadPollThread`).
+
+**Дрібніше:**
+- Миша більше не перебиває вибір стрілками чи падом; курсор ховається, коли меню керує пад.
+- Перетягування панелі (за верхню смугу) і зміна розміру (за правий нижній кут) працюють на кожній сторінці.
+- У питаннях (відновити типові, перезапуск) видно, яка кнопка вибрана; ← → перемикають.
+- На сторінці «Про мод» — посилання на сайт і кнопка «Відкрити теку журналів».
+- **Видно, що чекає перезапуску.** Позначка «перезапуск» стає бурштиновою лише на налаштуванні, значення якого відрізняється від того, що працює зараз, а його опис каже, що працює. Бічна панель рахує такі налаштування й пропонує «Перезапустити гру» (клік, R або X / квадрат на паді). Спершу вона питає, бо прогрес після останнього збереження втрачається, і відмовляє, поки гра записує збереження (видно з увімкненим захистом збережень).
+- **Довгий опис повністю.** Опис, що не влазить у своє поле, закінчується «… F1 / R3: повністю». F1, R3 на ґеймпаді або клік по полю відкриває його на картці над списком: гортається ↑ ↓ або колесом, унизу типове значення, поточне й коли зміна діє. Закриває Esc, F1, B або клік поза карткою. Налаштування без опису (повзунки фоторежиму) отримують опис із діапазону й типового значення.
+- **Чесний перегляд у фоторежимі.** Сторінка фоторежиму більше не затемнює весь кадр, тож яскравість, контраст і фільтри видно на справжній картинці; список лишається достатньо непрозорим, щоб його було легко читати. Затисніть праву кнопку миші (L3 на ґеймпаді), і панель зникне, щоб роздивитися кадр; гра при цьому не бачить натискань, а невеличкий напис просить відпустити кнопку. «Знімок» тепер другий рядок, під вільною камерою. Коли меню закрите, внизу на 6 секунд з'являється тиха смужка з клавішами польоту й F11 / F4 / F10 / F6 (знову після будь-якої F-клавіші). Вона малюється вже після знімка, тож на знімок не потрапляє.
+- **Адаптивна різкість** (`SharpenMode=1`): різкість тепер працює за алгоритмом AMD FidelityFX RCAS. Нерізкі деталі вона підсилює на повну, а контрастні краї лише трохи, тож гілки на тлі неба й дроти не мають світлих ореолів. `SharpenMode=0` повертає стару різкість. У грі ще не перевірено.
+
 ### Що нового в 0.7.8
 
 **Оновлене меню F10:**
@@ -437,8 +482,6 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 - **Одна спокійна палітра, як на сайті.** Зеленого більше немає. Перемикачі стали червоними або сірими «пілюлями» з круглою кнопкою, кнопки й картки мають заокруглені кути.
 - **Тихий рух.** Меню плавно з'являється, виділення ковзає між рядками, кнопка перемикача з'їжджає. Закривається меню, як і раніше, миттєво. Вимикається рядком «Анімація меню» (`[Menu] Animations`).
 - **Видно, що ви змінили.** Біля зміненого налаштування стоїть сіра крапка, у бічній панелі видно, скільки змін у кожному розділі, а повзунок позначає своє типове значення. Backspace повертає вибраному налаштуванню типове значення.
-- **Довгий опис повністю.** Опис, що не влазить у своє поле, закінчується «… F1 / R3: повністю». F1, R3 на ґеймпаді або клік по полю відкриває його на картці над списком: гортається ↑ ↓ або колесом, унизу типове значення, поточне й коли зміна діє. Закриває Esc, F1, B або клік поза карткою. Налаштування без опису (повзунки фоторежиму) отримують опис із діапазону й типового значення.
-- **Чесний перегляд у фоторежимі.** Сторінка фоторежиму більше не затемнює весь кадр, тож яскравість, контраст і фільтри видно на справжній картинці; список лишається достатньо непрозорим, щоб його було легко читати. Затисніть праву кнопку миші (L3 на ґеймпаді), і панель зникне, щоб роздивитися кадр; гра при цьому не бачить натискань, а невеличкий напис просить відпустити кнопку. «Знімок» тепер другий рядок, під вільною камерою. Коли меню закрите, внизу на 6 секунд з'являється тиха смужка з клавішами польоту й F11 / F4 / F10 / F6 (знову після будь-якої F-клавіші). Вона малюється вже після знімка, тож на знімок не потрапляє.
 - **Сповіщення.** Колір сповіщення залежить від змісту: сірий для інформації, бурштиновий для попередження, кораловий для помилки. Сповіщення стають у чергу (до трьох), а при відкритому меню показуються всередині панелі, а не поверх заголовка.
 
 **Графіка (F10 → Екран і графіка; кожне можна вимкнути):**
@@ -446,7 +489,6 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 - **Згладжені далекі тіні** (`FarShadowFilter=1`): далекий каскад сонячних тіней фільтрується тими самими чотирма вибірками, що й ближні. Краї тіней удалині більше не «сходинками» й не повзуть.
 - **Плавне світіння й розфокус** (`SmoothBloom=1`): світіння й розмиття збільшуються кубічним фільтром. Ореоли ліхтарів і розмитий фон без квадратних сходинок на 1440p/4K.
 - **Дизеринг проти смуг** (`Dither=1`): нерухомий непомітний шум прибирає смуги на небі, у тумані й темних переходах.
-- **Адаптивна різкість** (`SharpenMode=1`): різкість тепер працює за алгоритмом AMD FidelityFX RCAS. Нерізкі деталі вона підсилює на повну, а контрастні краї лише трохи, тож гілки на тлі неба й дроти не мають світлих ореолів. `SharpenMode=0` повертає стару різкість. У грі ще не перевірено.
 - **Власний фільтр країв гри** (`GameAliasFilter`, вимкнено за замовчуванням): 4-точковий фільтр, який є у фінальному шейдері гри, але гра його ніколи не вмикає. 1 = як записано в грі, 2 = під масштаб рендерингу. Чи вмикав його Xbox, невідомо.
 
 **Також:**
@@ -618,6 +660,19 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 | `mod.txt` | `Назва: …`, `Автор: …`, `Версія: …`, `Опис: …` (або `mod.ini`, `info.txt`; англійські ключі теж працюють); `\n` в описі починає новий рядок |
 | `description.txt` | довший опис: увесь текст файлу з його рядками, до 1023 символів (або `опис.txt`; UTF-8, UTF-16 чи ANSI); він важливіший за `Опис:` |
 | `cover.png` | картинка мода: квадрат, рекомендовано **350×350**, PNG або JPG (підходять і `cover.jpg`, `preview.png`, `preview.jpg`, `image.png`); неквадратну картинку обрізано до середини |
+
+**Картинка й опис, крок за кроком:**
+1. Зробіть квадратну картинку **350×350 пікселів** (більша теж підійде: мод її зменшить; неквадратну мод обріже до середини, а не розтягне). PNG або JPG; PNG може мати прозорість. Кути меню заокруглює саме, тож малюйте з прямими кутами.
+2. Назвіть її `cover.png` (або `cover.jpg`) і покладіть просто в теку мода, поруч із `mod.txt`, а не в `textures\`.
+3. Напишіть `mod.txt` (UTF-8):
+   ```
+   Назва: Українська локалізація
+   Автор: Little Bit
+   Версія: 1.2
+   Опис: Уся гра українською.\nМеню, листи й субтитри теж.
+   ```
+   Довший текст з абзацами покладіть в `опис.txt` або `description.txt` (він важливіший за `Опис:`; до 1023 символів).
+4. Перезапустіть гру: моди читаються на старті. F10 → Моди покаже картинку в списку і 350×350 у картці (на 1080p; на меншому вікні менше). У журналі буде `mods: <тека>: cover cover.png found`.
 
 Жоден із цих файлів не вважається файлом гри. Наприклад:
 
