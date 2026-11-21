@@ -577,6 +577,36 @@ void* SmokeTextureFor(void* dev) {
     return SmokeCopyOf(dev, g_stageTex[0]);
 }
 
+// With TraceWater: every draw that reads the 256x256 cloud target (the smoke's noise picture) explained once per caller in
+// UltimateFix\draw_<caller>.txt, and the other render targets it reads saved as cloud_<caller>_s<stage>.png
+void ExplainCloudReader(void* dev, u32 from) {
+    int cloud = -1;
+    for (int st = 0; st < 4 && cloud < 0; ++st)
+        if (SmallSquareTarget(g_stageTex[st]) == 256) cloud = st;
+    if (cloud < 0) return;
+    static u32 done[12];
+    static int count = 0;
+    for (int i = 0; i < count; ++i) if (done[i] == from) return;
+    if (count >= 12) return;
+    done[count++] = from;
+    wchar_t path[MAX_PATH + 64];
+    wsprintfW(path, L"%sUltimateFix\\draw_%08X.txt", g_paths.gameDir, from);
+    WriteDrawFile(dev, from, path);
+    char t[8][48];
+    for (int st = 0; st < 8; ++st) DescribeTexture(g_stageTex[st], t[st]);
+    Log("cloud: a draw from %08X reads the 256x256 cloud in s%d: s0 %s | s1 %s | s2 %s | s3 %s | s4 %s | s5 %s | s6 %s | s7 %s", from, cloud, t[0], t[1],
+        t[2], t[3], t[4], t[5], t[6], t[7]);
+    typedef HRESULT(WINAPI * SaveFn)(const wchar_t*, DWORD, void*, const void*);
+    HMODULE d3dx = GetModuleHandleW(L"d3dx9_43.dll");
+    SaveFn save = d3dx ? (SaveFn)(void*)GetProcAddress(d3dx, "D3DXSaveTextureToFileW") : nullptr;
+    for (int st = 0; st < 8 && save; ++st) {
+        if (!g_stageTex[st]) continue;
+        wsprintfW(path, L"%sUltimateFix\\cloud_%08X_s%d.png", g_paths.gameDir, from, st);
+        const HRESULT hr = save(path, 3 /*PNG*/, g_stageTex[st], nullptr);
+        Log("cloud:   s%d saved as %S (%s)", st, path, SUCCEEDED(hr) ? "ok" : "failed");
+    }
+}
+
 void ExplainSmoke(void* dev, u32 from) {
     // the smoke particles only: blended (ALPHABLENDENABLE 1), no depth writes, a DXT3 texture; the same shader family also draws
     // opaque characters, which filled the first list
@@ -1071,6 +1101,7 @@ HRESULT WINAPI H_DrawIp(void* dev, DWORD prim, INT base, UINT minIdx, UINT verts
     }
     g_drawFirstVertex = (UINT)(base + (INT)minIdx);
     if (g_cfg.traceWater && CurrentPsIsSmoke()) ExplainSmoke(dev, from);
+    if (g_cfg.traceWater) ExplainCloudReader(dev, from);
     if (g_cfg.traceWater && HuntSkips(dev, from, count)) return 0;
     if (void* grey = SmokeTextureFor(dev)) {
         void* own = g_stageTex[0];
@@ -1087,6 +1118,7 @@ HRESULT WINAPI H_DrawP(void* dev, DWORD prim, UINT start, UINT count) {
     const u32 from = Caller();
     g_drawFirstVertex = start;
     if (g_cfg.traceWater && CurrentPsIsSmoke()) ExplainSmoke(dev, from);
+    if (g_cfg.traceWater) ExplainCloudReader(dev, from);
     if (g_cfg.traceWater && HuntSkips(dev, from, count)) return 0;
     if (void* grey = SmokeTextureFor(dev)) {
         void* own = g_stageTex[0];

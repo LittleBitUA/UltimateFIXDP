@@ -87,7 +87,8 @@ static const char kDefaultIni[] =
     "; 1 = smoke that the port left black gets its grey back: the smoke of the prologue doorways (an animated model of sheets) has a\r\n"
     "; DXT3 texture whose colour is all black and whose smoke is only in the alpha; on the Xbox 360 the same picture gave the colour as\r\n"
     "; well (light wisps). The colour is made from the alpha. Changes at once.\r\n"
-    "SmokeFix=1\r\n"
+    "; Experiment (off): the Xbox 360 smoke is dark too, with a distorting texture over it; the grey is not it.\r\n"
+    "SmokeFix=0\r\n"
     "; Experiment, no visible change yet: 1 = smoke volumes (the doorways of the prologue) are not drawn into the G-buffer.\r\n"
     "FogFix=0\r\n"
     "; 1 = the lock-on aims at the chest. The game aims at the waist bone and lowers the point by a tenth of the distance\r\n"
@@ -906,7 +907,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.compressBackups = GetPrivateProfileIntW(L"Save", L"CompressBackups", 1, ini) ? 1 : 0;
     g_cfg.fasterLoading = GetPrivateProfileIntW(L"Fixes", L"FasterLoading", 1, ini) ? 1 : 0;
     g_cfg.qteFix = GetPrivateProfileIntW(L"Fixes", L"QteFix", 1, ini) ? 1 : 0;
-    g_cfg.smokeFix = GetPrivateProfileIntW(L"Fixes", L"SmokeFix", 1, ini) ? 1 : 0;
+    g_cfg.smokeFix = GetPrivateProfileIntW(L"Fixes", L"SmokeFix", 0, ini) ? 1 : 0;
     g_cfg.fogFix = GetPrivateProfileIntW(L"Fixes", L"FogFix", 0, ini) ? 1 : 0;
     g_cfg.lockOnAim = GetPrivateProfileIntW(L"Fixes", L"LockOnAim", 1, ini) ? 1 : 0;
     g_cfg.lockOnHeight = (int)GetPrivateProfileIntW(L"Fixes", L"LockOnHeight", 40, ini);
