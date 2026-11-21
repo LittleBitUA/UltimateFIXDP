@@ -3,7 +3,8 @@
 // Layout (1280x720 coordinates): a sidebar with the sections on the left, the settings of the chosen section on the right
 // (grouped, with switches and sliders, scrollable), a description of the selected setting at the bottom.
 // Keys: F10 opens/closes, Up/Down selects, Left/Right changes (on a row of action buttons it only moves the highlight),
-// Enter/Space toggles or presses the highlighted button, Tab / PgUp / PgDn switches the section, Esc closes. The mouse
+// Enter/Space toggles or presses the highlighted button, Backspace puts the selected setting back to its default (a changed
+// one has a grey dot after its label), Tab / PgUp / PgDn switches the section, Esc closes. The mouse
 // works too: click a section, a switch, a slider, a button or the value; the wheel scrolls.
 // A change of a setting that has an ini key is written to UltimateFix.ini at once (a slider when the drag ends). Rows
 // without a key (most of the photo mode and the cheats) last for the session only.
@@ -27,6 +28,9 @@ struct Tr {
 };
 const wchar_t* Tx(const Tr& t) { return (g_cfg.language == 1 && t.en) ? t.en : t.uk; }
 
+// "Not in the default ini": GetPrivateProfileIntW gives it back for a missing key (no <climits> here for INT_MIN).
+constexpr int kNoDefault = -999999;
+
 struct Item {
     Tr label;
     int* value;
@@ -45,6 +49,7 @@ struct Item {
     void (*format)(int value, wchar_t* out) = nullptr;  // text for the value
     bool resolution = false;                      // typed numbers below 1280 are heights (1080 -> 1920x1080)
     void (*running)(wchar_t* out) = nullptr;      // what actually runs now, when a setting waits for a restart (empty = same)
+    int def = kNoDefault;  // the value of the default ini, read once at the first opening (LoadDefaults); kNoDefault = none
 };
 
 const Tr kGlyphTr[4] = {{L"Вимк.", L"Off"}, {L"Авто", L"Auto"}, {L"Xbox", L"Xbox"}, {L"PlayStation", L"PlayStation"}};
@@ -1225,25 +1230,32 @@ int RestorePage(Page& pg, const wchar_t* tmp) {
     for (int i = 0; i < pg.count; ++i) {
         Item& it = pg.items[i];
         if (!it.key || !it.section || !it.value) continue;
-        int v = (int)GetPrivateProfileIntW(it.section, it.key, -999999, tmp);
-        if (v == -999999) continue;  // not in the default ini
+        int v = (int)GetPrivateProfileIntW(it.section, it.key, kNoDefault, tmp);
+        if (v == kNoDefault) continue;  // not in the default ini
         SetValue(it, v);
         ++restored;
     }
     return restored;
 }
 
-void PerformReset(int scope) {
-    wchar_t tmp[MAX_PATH];
+// Writes the default ini (as the DLL writes a new one, OutputWidth set to the monitor) to UltimateFix\defaults.tmp, so the
+// defaults can be read with the same GetPrivateProfileIntW as the real ini. The caller deletes the file. False: not written.
+bool WriteDefaultsFile(wchar_t* tmp) {
     lstrcpyW(tmp, g_paths.dataDir);
     lstrcatW(tmp, L"defaults.tmp");
     HANDLE h = CreateFileW(tmp, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
-    if (h == INVALID_HANDLE_VALUE) return;
+    if (h == INVALID_HANDLE_VALUE) return false;
     unsigned long length = 0;
     const char* text = DefaultIniText(&length);
     DWORD written;
     WriteFile(h, text, length, &written, nullptr);
     CloseHandle(h);
+    return true;
+}
+
+void PerformReset(int scope) {
+    wchar_t tmp[MAX_PATH];
+    if (!WriteDefaultsFile(tmp)) return;
     int restored = 0;
     if (scope == 2) {
         for (Page& pg : g_pages) restored += RestorePage(pg, tmp);
@@ -1252,6 +1264,74 @@ void PerformReset(int scope) {
     }
     DeleteFileW(tmp);
     Log("menu: defaults restored (%s, %d settings)", scope == 2 ? "everything" : "this page", restored);
+}
+
+// ---- What was changed: every setting with an ini key learns its default once, from the same defaults.tmp as Restore
+// defaults (so the marks, the Backspace reset and the full reset always agree, migrated keys included). A row whose value
+// differs gets a grey dot after its label, a slider a tick at the default, a preset row a line under the default button,
+// and Backspace on the selected row puts that one setting back.
+bool Changed(const Item& it) { return it.def != kNoDefault && it.value && *it.value != it.def; }
+
+// How many settings of a page differ from their defaults (the number in the sidebar).
+int ChangedCount(const Page& pg) {
+    if (pg.about || !pg.items) return 0;
+    int n = 0;
+    for (int i = 0; i < pg.count; ++i)
+        if (Changed(pg.items[i])) ++n;
+    return n;
+}
+
+void LoadDefaults() {
+    static bool loaded = false;
+    if (loaded) return;
+    loaded = true;
+    wchar_t tmp[MAX_PATH];
+    if (!WriteDefaultsFile(tmp)) {
+        Log("menu: defaults.tmp could not be written: no default marks, Backspace does nothing");
+        return;
+    }
+    int known = 0, changed = 0;
+    for (Page& pg : g_pages) {
+        if (pg.about || !pg.items) continue;
+        for (int i = 0; i < pg.count; ++i) {
+            Item& it = pg.items[i];
+            if (!it.key || !it.section || !it.value) continue;  // not stored: a test, a button that does something once
+            int v = (int)GetPrivateProfileIntW(it.section, it.key, kNoDefault, tmp);
+            if (v == kNoDefault) continue;  // not in the default ini
+            // SetValue keeps a value inside the row's range, so a default outside it could never be reached by Backspace
+            if (v < it.lo) v = it.lo;
+            if (v > it.hi) v = it.hi;
+            it.def = v;
+            ++known;
+            if (Changed(it)) ++changed;
+        }
+    }
+    DeleteFileW(tmp);
+    Log("menu: defaults known for %d settings, %d changed (grey dot; Backspace restores one)", known, changed);
+}
+
+// The default of a row as the row shows its values: "Off", the name, the formatted value or the number.
+void FormatDefault(const Item& it, wchar_t* out) {
+    const bool en = g_cfg.language == 1;
+    const int v = it.def;
+    if (it.kind == kBool) {
+        lstrcpyW(out, v ? (en ? L"On" : L"Увімк.") : (en ? L"Off" : L"Вимк."));
+        return;
+    }
+    if (it.names && v >= it.lo && v <= it.hi) {
+        lstrcpyW(out, Tx(it.names[v - it.lo]));
+        return;
+    }
+    if (it.format) {
+        it.format(v, out);
+        return;
+    }
+    for (int i = 0; i < it.presetCount; ++i)
+        if (it.presets[i] == v) {
+            lstrcpyW(out, Tx(it.presetNames[i]));
+            return;
+        }
+    wsprintfW(out, L"%d", v);
 }
 
 // Stores the place and size of the panel (the ini and g_cfg).
@@ -1501,6 +1581,9 @@ void HandleInput(bool foreground) {
             }
             if (Pressed(VK_SPACE)) Change(it, +1);
         }
+        // Backspace: this one setting back to its default, no question (one value, and it is shown in the description). The
+        // typing box returned above, so its Backspace never gets here; not during a slider drag, which would take it back.
+        if (Pressed(VK_BACK) && Changed(it) && !g_dragging) SetValue(it, it.def);
     }
     if (Pressed(VK_TAB)) SelectPage(g_page + ((GetAsyncKeyState(VK_SHIFT) & 0x8000) ? -1 : 1));
     if (Pressed(VK_NEXT)) SelectPage(g_page + 1);
@@ -1742,14 +1825,18 @@ void DrawItemRow(Item& it, float y, bool sel) {
     }
     const wchar_t* tag = g_cfg.language == 1 ? L"restart" : L"перезапуск";
     float tagRoom = it.restart ? TextWidth(tag, 12) + 10 : 0.f;
-    float lw = DrawFitted(Tx(it.label), kCx, y + 10, sel ? kWhite : kText, 18, limit - kCx - tagRoom);
+    // changed from the default: a small grey dot right after the label (grey, not red: it only says "yours", nothing is wrong)
+    const bool changed = Changed(it);
+    const float markRoom = changed ? 12.f : 0.f;
+    float lw = DrawFitted(Tx(it.label), kCx, y + 10, sel ? kWhite : kText, 18, limit - kCx - tagRoom - markRoom);
+    if (changed) FillRound(kCx + lw + 7, y + 22, 5, 5, 2.5f, kMuted);  // on the middle of the lower-case letters
     if (it.restart) {
-        float tw = DrawText(tag, kCx + lw + 10, y + 14, kWarn, 12);
+        float tw = DrawText(tag, kCx + lw + markRoom + 10, y + 14, kWarn, 12);
         if (it.running) {
             wchar_t t[64];
             it.running(t);
             if (t[0]) {  // what is really running now; a shorter wording when the long one would run into the control
-                float x0 = kCx + lw + 10 + tw + 10, room = limit - x0;
+                float x0 = kCx + lw + markRoom + 10 + tw + 10, room = limit - x0;
                 const wchar_t* shown = t;
                 wchar_t shorter[40];
                 if (TextWidth(shown, 12) > room) {
@@ -1790,6 +1877,13 @@ void DrawItemRow(Item& it, float y, bool sel) {
         ChipLayout(it, cx, cw, &n);
         int cur = PresetIndex(it);
         bool actionRow = IsActionRow(it);
+        // the button of the default: a preset, or the last one while it shows a default that is none of the presets
+        int defChip = -1;
+        if (it.def != kNoDefault) {
+            for (int i = 0; i < it.presetCount; ++i)
+                if (it.presets[i] == it.def) defChip = i;
+            if (defChip < 0 && cur < 0 && *it.value == it.def) defChip = it.presetCount;
+        }
         for (int i = 0; i < n; ++i) {
             const bool active = i == cur || (i == it.presetCount && cur < 0);  // the preset the value is
             const bool action = it.presetCount == 1 && !it.key && i == 0;  // a button that does something (Apply, Take a picture ...)
@@ -1818,6 +1912,7 @@ void DrawItemRow(Item& it, float y, bool sel) {
             else it.format(*it.value, label);
             float tw = TextWidth(label, 15);
             DrawText(label, cx[i] + (cw[i] - tw) / 2, cy - 9, text, 15);
+            if (i == defChip) FillRect(cx[i] + 8, cy + kChipH / 2 + 3, cw[i] - 16, 1, kFaint);  // a hairline under the default
         }
         return;
     }
@@ -1826,6 +1921,10 @@ void DrawItemRow(Item& it, float y, bool sel) {
     float t = (float)(*it.value - it.lo) / (float)(it.hi - it.lo);
     FillRound(kSliderX, cy - 3, sw, 6, 3, kLine2);
     FillRound(kSliderX, cy - 3, sw * t, 6, 3, sel ? kAccent : kFaint);  // red only on the selected row
+    if (it.def != kNoDefault && it.hi > it.lo) {  // a thin tick at the default, under the knob (hidden by it while at the default)
+        const float td = (float)(it.def - it.lo) / (float)(it.hi - it.lo);
+        FillRect(kSliderX + sw * td - 0.5f, cy - 6, 1, 12, kMuted);  // FillRect puts a hairline on a whole pixel
+    }
     FillRound(kSliderX + sw * t - 8, cy - 8, 16, 16, 8, kWhite);
     if (it.format) it.format(*it.value, value);
     else wsprintfW(value, L"%d", *it.value);
@@ -2097,7 +2196,16 @@ void Draw() {
     for (int p = 0; p < kPageCount; ++p) {
         float y = kNavTop + p * kNavH;
         bool cur = p == g_page;
-        DrawText(Tx(g_pages[p].title), kPx + 26, y + 12, cur ? kWhite : kMuted, 17);
+        const float nameW = DrawText(Tx(g_pages[p].title), kPx + 26, y + 12, cur ? kWhite : kMuted, 17);
+        // how many settings of the section differ from the default, faint at the right; a dot when the number would touch the name
+        const int changed = ChangedCount(g_pages[p]);
+        if (changed) {
+            wchar_t num[8];
+            wsprintfW(num, L"%d", changed);
+            const float right = kPx + kSideW - 16, nw = TextWidth(num, 12);
+            if (kPx + 26 + nameW + 8 <= right - nw) DrawText(num, right - nw, y + 17, kFaint, 12);  // on the name's baseline
+            else if (kPx + 26 + nameW + 6 <= right - 5) FillRound(right - 5, y + 23, 5, 5, 2.5f, kFaint);
+        }
     }
 
     Page& pg = g_pages[g_page];
@@ -2169,16 +2277,25 @@ void Draw() {
     } else {
         const wchar_t* hint = Tx(cur.hint);
         const wchar_t* note = en ? L"Takes effect after the game is restarted." : L"Набуде чинності після перезапуску гри.";
+        // a changed row ends with its default and the key that brings it back: one more line kept free under the text
+        const bool changed = Changed(cur);
+        const int reserved = (cur.restart ? 1 : 0) + (changed ? 1 : 0);
         int px = 15;
         float lh = 18;
-        int room = (int)((hintBottom - hintTop) / lh) - (cur.restart ? 1 : 0);
+        int room = (int)((hintBottom - hintTop) / lh) - reserved;
         if (hint && DrawLines(hint, 0, 0, 0, px, lh, hintW, 99, false) > room) {
             px = 13;
             lh = 15;
-            room = (int)((hintBottom - hintTop) / lh) - (cur.restart ? 1 : 0);
+            room = (int)((hintBottom - hintTop) / lh) - reserved;
         }
         int used = hint ? DrawLines(hint, kCx + 4, hintTop, kMuted, px, lh, hintW, room, true) : 0;
-        if (cur.restart) DrawFitted(note, kCx + 4, hintTop + lh * (float)used + 2, kWarn, 13, hintW);
+        if (cur.restart) DrawFitted(note, kCx + 4, hintTop + lh * (float)used++ + 2, kWarn, 13, hintW);
+        if (changed) {
+            wchar_t value[64], line[128];
+            FormatDefault(cur, value);
+            wsprintfW(line, en ? L"Default: %s  ·  Backspace restores" : L"Типово: %s  ·  Backspace повертає", value);
+            DrawFitted(line, kCx + 4, hintTop + lh * (float)used + 2, kFaint, 13, hintW);
+        }
     }
 
     if (g_confirm) {
@@ -2199,7 +2316,8 @@ void Draw() {
     DrawFitted(en ? L"↑ ↓ select     ← → change / pick a button     Enter type a number / press     Tab section     wheel / click     F10 or Esc close"
                   : L"↑ ↓ вибір     ← → змінити / вибрати кнопку     Enter ввести число / натиснути     Tab розділ     колесо / клік     F10 або Esc закрити",
                kCx, kPy + kPh - 36, kFaint, 13, kCr + 24 - kCx);
-    DrawFitted(en ? L"drag the header: move     drag the corner: resize     double-click the corner: reset" : L"заголовок: перенести     куточок: розмір     подвійний клік по куточку: скинути",
+    DrawFitted(en ? L"Backspace default     drag the header: move     drag the corner: resize     double-click the corner: reset"
+                  : L"Backspace типове     заголовок: перенести     куточок: розмір     подвійний клік по куточку: скинути",
                kCx, kPy + kPh - 20, kFaint, 12, kCr + 24 - kCx);
 }
 
@@ -2379,6 +2497,7 @@ void OpenChanged(bool foreground) {
     FlushUnsaved();
     Log("menu: %s", g_open ? "opened" : "closed");
     if (g_open) {
+        LoadDefaults();  // once, at the first opening: the ini and the pages are ready by now
         g_swallowEsc = false;
         g_openedAt = MotionStamp();  // the fade-in starts now; the highlights start on their rows (GlideTo)
         g_motionFrame += 2;
