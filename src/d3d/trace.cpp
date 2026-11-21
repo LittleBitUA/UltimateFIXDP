@@ -255,11 +255,29 @@ bool NamesMirror(const DWORD* code) {
     return false;
 }
 
+// True when the shader's constant table names `name` (the CTAB comment block that comes first).
+bool NamesConstant(const DWORD* code, const char* name) {
+    if (!code || (code[0] & 0xFFFF0000u) != 0xFFFF0000u) return false;
+    const DWORD tok = code[1];
+    if ((tok & 0xFFFF) != 0xFFFE) return false;
+    const DWORD len = (tok >> 16) & 0x7FFF;
+    const char* b = (const char*)(code + 2);
+    int n = 0;
+    while (name[n]) ++n;
+    for (DWORD i = 0; i + n <= len * 4; ++i) {
+        int k = 0;
+        while (k < n && b[i + k] == name[k]) ++k;
+        if (k == n) return true;
+    }
+    return false;
+}
+
 // Every pixel shader with its bytecode, so one draw can be explained (DumpDraw), and whether it writes a second colour target
 // (oC1: the normal of the G-buffer pass).
 void* g_psObj[2048];
 const DWORD* g_psCode[2048];
 bool g_psOC1[2048];
+bool g_psSmoke[2048];  // the lit particle shader (g_vDensity + g_tShadow): the prologue's black smoke is drawn with it
 int g_psCount = 0;
 
 // True when the shader bytecode writes oC1. Instructions are walked by their length field (ps_2_0 and later), and the def
@@ -287,7 +305,12 @@ bool CurrentPsWritesOC1() {
 
 HRESULT WINAPI H_CreatePs(void* dev, const DWORD* code, void** out) {
     HRESULT hr = r_CreatePs(dev, code, out);
-    if (SUCCEEDED(hr) && out && *out && g_psCount < 2048) { g_psObj[g_psCount] = *out; g_psCode[g_psCount] = code; g_psOC1[g_psCount++] = WritesOC1(code); }
+    if (SUCCEEDED(hr) && out && *out && g_psCount < 2048) {
+        g_psObj[g_psCount] = *out;
+        g_psCode[g_psCount] = code;
+        g_psSmoke[g_psCount] = NamesConstant(code, "g_vDensity") && NamesConstant(code, "g_tShadow");
+        g_psOC1[g_psCount++] = WritesOC1(code);
+    }
     if (SUCCEEDED(hr) && out && *out && NamesMirror(code) && g_waterShaderCount < 512) {
         g_waterShaders[g_waterShaderCount++] = *out;
         if (g_waterShaderCount == 1) Log("water: water pixel shaders recognised (g_vMirror); the first is from %08X", (u32)(uintptr_t)code);
@@ -395,6 +418,26 @@ template <typename Draw> HRESULT WaterDraw(void* dev, bool water, Draw draw) {
 // UltimateFix\draw_<caller>.txt with its constants c0..c31 and the blend, alpha and depth states, to see why it comes out black.
 float g_psCx[32][4];
 void WriteDrawFile(void* dev, u32 from, const wchar_t* path);
+UINT g_drawFirstVertex = 0;  // the draw being explained: its first vertex in stream 0 (base + min index), 0 for DrawPrimitive's start
+bool CurrentPsIsSmoke() {
+    for (int i = 0; i < g_psCount; ++i) if (g_psObj[i] == g_curPs) return g_psSmoke[i];
+    return false;
+}
+// With TraceWater: each lit particle draw (the prologue's black smoke) explained once per particle texture, at most 8, in
+// UltimateFix\smoke_<caller>_<texture>.txt with its vertex shader, the vertices and its texture as PNG.
+void SaveStagePng(void* tex, int stage, u32 from);
+void ExplainSmoke(void* dev, u32 from) {
+    static u32 seen[8];
+    static int count = 0;
+    const u32 tex = (u32)(uintptr_t)g_stageTex[0];
+    for (int i = 0; i < count; ++i) if (seen[i] == tex) return;
+    if (count >= 8) return;
+    seen[count++] = tex;
+    wchar_t path[MAX_PATH + 64];
+    wsprintfW(path, L"%sUltimateFix\\smoke_%08X_%08X.txt", g_paths.gameDir, from, tex);
+    WriteDrawFile(dev, from, path);
+    SaveStagePng(g_stageTex[0], 0, from);
+}
 void DumpDraw(void* dev, u32 from) {
     static u32 done[8];
     static int doneCount = 0;
@@ -451,6 +494,92 @@ void WriteDrawFile(void* dev, u32 from, const wchar_t* path) {
         getRs(dev, st.id, &v);
         n = wsprintfA(line, "%s = %u\r\n", st.name, v);
         WriteFile(f, line, n, &put, nullptr);
+    }
+    // the vertex shader (its bytecode from the device), its constants that are not zero, the vertex layout and the first vertices
+    typedef HRESULT(WINAPI * GetVsFn)(void*, void**);
+    typedef HRESULT(WINAPI * GetFuncFn)(void*, void*, UINT*);
+    typedef HRESULT(WINAPI * GetVsConstFn)(void*, UINT, float*, UINT);
+    typedef ULONG(WINAPI * RelFn2)(void*);
+    void** dvt = *(void***)dev;
+    void* vs = nullptr;
+    if (SUCCEEDED(((GetVsFn)dvt[93])(dev, &vs)) && vs) {
+        UINT size = 0;
+        ((GetFuncFn)(*(void***)vs)[4])(vs, nullptr, &size);
+        DWORD* vcode = size && size < (1u << 20) ? (DWORD*)VirtualAlloc(nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) : nullptr;
+        if (vcode && SUCCEEDED(((GetFuncFn)(*(void***)vs)[4])(vs, vcode, &size))) {
+            n = wsprintfA(line, "\r\nvertex shader %08X:\r\n", (u32)(uintptr_t)vs);
+            WriteFile(f, line, n, &put, nullptr);
+            void* vbuf = nullptr;
+            if (dis && SUCCEEDED(dis(vcode, FALSE, nullptr, &vbuf)) && vbuf) {
+                void** bvt = *(void***)vbuf;
+                typedef void*(WINAPI * PtrFn2)(void*);
+                typedef DWORD(WINAPI * SizeFn2)(void*);
+                const char* text = (const char*)((PtrFn2)bvt[3])(vbuf);
+                DWORD tsize = ((SizeFn2)bvt[4])(vbuf);
+                while (tsize && text[tsize - 1] == 0) --tsize;
+                WriteFile(f, text, tsize, &put, nullptr);
+                ((RelFn2)bvt[2])(vbuf);
+            }
+        }
+        if (vcode) VirtualFree(vcode, 0, MEM_RELEASE);
+        ((RelFn2)(*(void***)vs)[2])(vs);
+    }
+    static float vc[256][4];
+    if (SUCCEEDED(((GetVsConstFn)dvt[95])(dev, 0, &vc[0][0], 256))) {
+        n = wsprintfA(line, "\r\nVS constants that are not zero (thousandths):\r\n");
+        WriteFile(f, line, n, &put, nullptr);
+        for (int r = 0; r < 256; ++r) {
+            if (vc[r][0] == 0.f && vc[r][1] == 0.f && vc[r][2] == 0.f && vc[r][3] == 0.f) continue;
+            n = wsprintfA(line, "c%d %d %d %d %d\r\n", r, Milli(vc[r][0]), Milli(vc[r][1]), Milli(vc[r][2]), Milli(vc[r][3]));
+            WriteFile(f, line, n, &put, nullptr);
+        }
+    }
+    typedef HRESULT(WINAPI * GetDeclFn)(void*, void**);
+    typedef HRESULT(WINAPI * DeclElemsFn)(void*, void*, UINT*);
+    void* decl = nullptr;
+    if (SUCCEEDED(((GetDeclFn)dvt[88])(dev, &decl)) && decl) {
+        u8 el[64 * 8];
+        UINT count = 64;
+        if (SUCCEEDED(((DeclElemsFn)(*(void***)decl)[4])(decl, el, &count))) {
+            n = wsprintfA(line, "\r\nvertex layout (stream offset type usage index):\r\n");
+            WriteFile(f, line, n, &put, nullptr);
+            for (UINT i = 0; i < count && i < 64; ++i) {
+                const u16 stream = *(const u16*)(el + i * 8), offset = *(const u16*)(el + i * 8 + 2);
+                if (stream == 0xFF) break;
+                n = wsprintfA(line, "%u %u %u %u %u\r\n", stream, offset, el[i * 8 + 4], el[i * 8 + 6], el[i * 8 + 7]);
+                WriteFile(f, line, n, &put, nullptr);
+            }
+        }
+        ((RelFn2)(*(void***)decl)[2])(decl);
+    }
+    typedef HRESULT(WINAPI * GetStreamFn)(void*, UINT, void**, UINT*, UINT*);
+    typedef HRESULT(WINAPI * VbLockFn)(void*, UINT, UINT, void**, DWORD);
+    typedef HRESULT(WINAPI * VbUnlockFn)(void*);
+    void* vb = nullptr;
+    UINT vbOffset = 0, stride = 0;
+    if (SUCCEEDED(((GetStreamFn)dvt[101])(dev, 0, &vb, &vbOffset, &stride)) && vb) {
+        const UINT first = vbOffset + g_drawFirstVertex * stride, bytes = stride * 8;
+        void* ptr = nullptr;
+        if (stride && stride <= 256 && SUCCEEDED(((VbLockFn)(*(void***)vb)[11])(vb, first, bytes, &ptr, 0x10 /*READONLY*/)) && ptr) {
+            n = wsprintfA(line, "\r\nfirst 8 vertices of stream 0 (stride %u, as floats in thousandths and as hex):\r\n", stride);
+            WriteFile(f, line, n, &put, nullptr);
+            for (int v = 0; v < 8; ++v) {
+                const u32* w = (const u32*)((const u8*)ptr + v * stride);
+                for (UINT k = 0; k < stride / 4; ++k) {
+                    float fv;
+                    __builtin_memcpy(&fv, &w[k], 4);
+                    const bool plain = (fv > -1.0e6f && fv < 1.0e6f);
+                    n = plain ? wsprintfA(line, "%d/%08X ", Milli(fv), w[k]) : wsprintfA(line, "-/%08X ", w[k]);
+                    WriteFile(f, line, n, &put, nullptr);
+                }
+                WriteFile(f, "\r\n", 2, &put, nullptr);
+            }
+            ((VbUnlockFn)(*(void***)vb)[12])(vb);
+        } else {
+            n = wsprintfA(line, "\r\nstream 0: stride %u, the vertex buffer could not be read\r\n", stride);
+            WriteFile(f, line, n, &put, nullptr);
+        }
+        ((RelFn2)(*(void***)vb)[2])(vb);
     }
     CloseHandle(f);
     Log("water: the draw from %08X explained in %S", from, path);
@@ -768,6 +897,8 @@ HRESULT WINAPI H_DrawIp(void* dev, DWORD prim, INT base, UINT minIdx, UINT verts
         if (!told++) Log("fog: a smoke volume left out of the G-buffer (it was drawn there as a solid dark wall)");
         return 0;
     }
+    g_drawFirstVertex = (UINT)(base + (INT)minIdx);
+    if (g_cfg.traceWater && CurrentPsIsSmoke()) ExplainSmoke(dev, from);
     if (g_cfg.traceWater && HuntSkips(dev, from, count)) return 0;
     const bool w = NoteWaterDraw(count, from);
     return WaterDraw(dev, w, [&] { return r_DrawIp(dev, prim, base, minIdx, verts, start, count); });
@@ -775,6 +906,8 @@ HRESULT WINAPI H_DrawIp(void* dev, DWORD prim, INT base, UINT minIdx, UINT verts
 HRESULT WINAPI H_DrawP(void* dev, DWORD prim, UINT start, UINT count) __attribute__((noinline));
 HRESULT WINAPI H_DrawP(void* dev, DWORD prim, UINT start, UINT count) {
     const u32 from = Caller();
+    g_drawFirstVertex = start;
+    if (g_cfg.traceWater && CurrentPsIsSmoke()) ExplainSmoke(dev, from);
     if (g_cfg.traceWater && HuntSkips(dev, from, count)) return 0;
     const bool w = NoteWaterDraw(count, from);
     return WaterDraw(dev, w, [&] { return r_DrawP(dev, prim, start, count); });
