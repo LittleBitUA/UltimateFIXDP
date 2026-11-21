@@ -1827,6 +1827,65 @@ void MouseFrame() {
     g_mouseKnown = true;
 }
 
+// Moving and resizing the panel with the mouse, on every page (the About, Mods, Residents and Story pages return from
+// HandleInput before its settings part, which held this until 0.7.9: there the panel could not be moved). True when the mouse
+// was used for it this frame.
+bool PanelMoveResize() {
+    float mx, my;
+    if (!MousePosition(&mx, &my)) return false;
+    const bool click = Pressed(VK_LBUTTON);
+    const bool held = Down(VK_LBUTTON);
+    // moving and resizing the panel: the header (the top strip) moves it, the corner resizes it, a double click on the corner resets it
+    static bool movingPanel = false, resizingPanel = false;
+    static float grabX = 0, grabY = 0;
+    static DWORD lastCornerClick = 0;
+    if (!held) {
+        if (movingPanel || resizingPanel) SavePanelGeometry();
+        movingPanel = resizingPanel = false;
+    }
+    bool onCorner = mx >= kPx + kPw - 24 && mx <= kPx + kPw + 6 && my >= kPy + kPh - 24 && my <= kPy + kPh + 6;
+    bool onHeader = mx >= kPx && mx < kPx + kPw && my >= kPy && my < kPy + 84;
+    if (click && onCorner) {
+        DWORD now = GetTickCount();
+        if (now - lastCornerClick < 450) {
+            kPx = kPanelX0; kPy = kPanelY0; kPw = kPanelW0; kPh = kPanelH0;
+            UpdateLayout();
+            SavePanelGeometry();
+            BuildRows();
+            KeepSelectionVisible();
+        } else {
+            resizingPanel = true;
+        }
+        lastCornerClick = now;
+        return true;
+    }
+    if (click && onHeader && !resizingPanel) {
+        movingPanel = true;
+        grabX = mx - kPx;
+        grabY = my - kPy;
+        return true;
+    }
+    // The dragged place and size are kept on whole layout units: a fractional one stayed for the whole session (only the
+    // ini got whole numbers) and put every edge of the menu between two units.
+    if (movingPanel && held) {
+        kPx = SnapWhole(mx - grabX);
+        kPy = SnapWhole(my - grabY);
+        UpdateLayout();
+        return true;
+    }
+    if (resizingPanel && held) {
+        kPw = SnapWhole(mx - kPx + 10);
+        kPh = SnapWhole(my - kPy + 10);
+        // the size stops at the screen edge; otherwise UpdateLayout moved the panel instead and it crept away frame by frame
+        if (kPx + kPw > 1280) kPw = 1280 - kPx;
+        if (kPy + kPh > 720) kPh = 720 - kPy;
+        UpdateLayout();
+        KeepSelectionVisible();
+        return true;
+    }
+    return false;
+}
+
 void HandleInput(bool foreground) {
     Page& pg = g_pages[g_page];
     if (!foreground) {
@@ -1913,6 +1972,10 @@ void HandleInput(bool foreground) {
         HelpCardRect(&cx, &cy, &cw, &ch);
         const bool outside = Pressed(VK_LBUTTON) && MousePosition(&mx, &my) && (mx < cx || mx >= cx + cw || my < cy || my >= cy + ch);
         if (Pressed(VK_ESCAPE) || Pressed(VK_F1) || (pad & (kPadBack | kPadDetails)) || outside) g_helpOpen = false;
+        return;
+    }
+    if (PanelMoveResize()) {
+        g_wheel = 0;
         return;
     }
     const int pageBefore = g_page;
@@ -2070,54 +2133,6 @@ void HandleInput(bool foreground) {
         if (!g_padOn || !(g_pad.down & (kPadLeft | kPadRight))) FlushUnsaved();
     }
     if (MousePosition(&mx, &my)) {
-        // moving and resizing the panel: the header (the top strip) moves it, the corner resizes it, a double click on the corner resets it
-        static bool movingPanel = false, resizingPanel = false;
-        static float grabX = 0, grabY = 0;
-        static DWORD lastCornerClick = 0;
-        if (!held) {
-            if (movingPanel || resizingPanel) SavePanelGeometry();
-            movingPanel = resizingPanel = false;
-        }
-        bool onCorner = mx >= kPx + kPw - 24 && mx <= kPx + kPw + 6 && my >= kPy + kPh - 24 && my <= kPy + kPh + 6;
-        bool onHeader = mx >= kPx && mx < kPx + kPw && my >= kPy && my < kPy + 84;
-        if (click && onCorner) {
-            DWORD now = GetTickCount();
-            if (now - lastCornerClick < 450) {
-                kPx = kPanelX0; kPy = kPanelY0; kPw = kPanelW0; kPh = kPanelH0;
-                UpdateLayout();
-                SavePanelGeometry();
-                BuildRows();
-                KeepSelectionVisible();
-            } else {
-                resizingPanel = true;
-            }
-            lastCornerClick = now;
-            return;
-        }
-        if (click && onHeader && !resizingPanel) {
-            movingPanel = true;
-            grabX = mx - kPx;
-            grabY = my - kPy;
-            return;
-        }
-        // The dragged place and size are kept on whole layout units: a fractional one stayed for the whole session (only the
-        // ini got whole numbers) and put every edge of the menu between two units.
-        if (movingPanel && held) {
-            kPx = SnapWhole(mx - grabX);
-            kPy = SnapWhole(my - grabY);
-            UpdateLayout();
-            return;
-        }
-        if (resizingPanel && held) {
-            kPw = SnapWhole(mx - kPx + 10);
-            kPh = SnapWhole(my - kPy + 10);
-            // the size stops at the screen edge; otherwise UpdateLayout moved the panel instead and it crept away frame by frame
-            if (kPx + kPw > 1280) kPw = 1280 - kPx;
-            if (kPy + kPh > 720) kPh = 720 - kPy;
-            UpdateLayout();
-            KeepSelectionVisible();
-            return;
-        }
         if (click && SidebarClick(mx, my)) return;
         if (click && OnHintBox(mx, my)) {  // the description box: its whole text on a card
             OpenHelp();
