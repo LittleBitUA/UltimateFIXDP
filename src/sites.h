@@ -668,6 +668,15 @@ constexpr SiteDef kSiteExposure75 = {"exposure x0.75", 0x6EA1A7, 6, {0xDC, 0x0D,
 constexpr SiteDef kCompositeShader = {"composite pixel shader", 0xBD4638, 16,
     {0x00, 0x03, 0xFF, 0xFF, 0xFE, 0xFF, 0x6A, 0x00, 0x43, 0x54, 0x41, 0x42, 0x1C, 0x00, 0x00, 0x00}};
 constexpr uint32_t kCompositeShaderCopyVa = 0xBD1628, kCompositeShaderSize = 1000, kCompositeShaderFnv = 0x62D2C59B;
+// Variant 31 of the same blob (variant 15 at BD1A10h has the same bytes): variant 30 plus the game's own 4-tap filter. Before
+// the depth of field mix it reads the scene four times, at uv - c17, uv + c17 * (1, -1), uv + c17 * (-1, 1) and uv + c17, and
+// averages the four (alpha too); c17 is g_vAlias in its CTAB. The PC port never selects it: bit 0 of the variant index is the
+// `push 0` at 6EA378h (FUN_006E9F60 -> FUN_006EA8E0), yet it still sets c17 = 0.5 / the size of [post+1BCh] every frame
+// (FUN_006EAA40 at 6EA34Bh). [Graphics] GameAliasFilter draws the composite with these bytes (ui/xbox_look.cpp); 1264 bytes,
+// recognised by size and FNV-1a like variant 30, both copies checked by tests/verify_sites.cpp.
+constexpr SiteDef kCompositeAliasShader = {"composite 4-tap pixel shader", 0xBD4A20, 16,
+    {0x00, 0x03, 0xFF, 0xFF, 0xFE, 0xFF, 0x76, 0x00, 0x43, 0x54, 0x41, 0x42, 0x1C, 0x00, 0x00, 0x00}};
+constexpr uint32_t kCompositeAliasShaderCopyVa = 0xBD1A10, kCompositeAliasShaderSize = 1264, kCompositeAliasShaderFnv = 0xD1342B71;
 inline uint32_t Fnv1a(const uint8_t* data, uint32_t length) {
     uint32_t h = 2166136261u;
     for (uint32_t i = 0; i < length; ++i) h = (h ^ data[i]) * 16777619u;
@@ -922,7 +931,7 @@ constexpr const SiteDef* kAllSites[] = {
     &kSiteZeroDelta, &kSiteHouseListFormat, &kSiteExtraJoyPoll, &kSiteSkipIntro,
     &kSiteResetRefresh, &kSitePresentCall, &kSitePreResetCall, &kSiteAniso1, &kSiteAniso2,
     &kSiteReflectionBias, &kSiteSceneInitCall, &kSitePostInitCall,
-    &kCompositeShader,
+    &kCompositeShader, &kCompositeAliasShader,
     &kSiteStorageH1, &kSiteStorageW1, &kSiteStorageH2, &kSiteStorageW2,
     &kSiteWorldUpdateCalls[0], &kSiteWorldUpdateCalls[1], &kSiteCarDriveCall, &kSiteCarAfterStepCall, &kSiteCarTicks[0], &kSiteCarTicks[1], &kSiteCarTicks[2],
     &kSiteCarTicks[3], &kSiteCarTicks[4], &kSiteCarTicks[5], &kSiteCarTicks[6], &kSiteCarTicks[7], &kSiteCarTicks[8], &kSiteCarTicks[9],

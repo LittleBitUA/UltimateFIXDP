@@ -34,9 +34,15 @@ void FinalImagePass(void* device, void** shader, bool* failed, const char* name,
 struct LookSaved {
     void* shader;        // the game's pixel shader (a reference is held until End)
     float constants[8];  // c20 and c21 as they were
+    bool offset;         // c17 was changed for the game's 4-tap filter (GameAliasFilter=2)
+    float aliasOffset[4];  // c17 as it was
 };
 bool XboxLookBegin(void* device, LookSaved* saved);
 void XboxLookEnd(void* device, const LookSaved* saved);
+// The game's own 4-tap filter without the grading ([Graphics] GameAliasFilter): the same Begin/End pair, for the case where
+// XboxLookBegin did not take the draw. Begin swaps the game's variant 30 for its variant 31; End puts the shader and c17 back.
+bool GameAliasBegin(void* device, LookSaved* saved);
+void GameAliasEnd(void* device, const LookSaved* saved);
 void XboxGammaFrame(void* device);              // display gamma of the console on the finished picture
 void RequestScreenshot();                       // a PNG of the next frame (no menu in it)
 void OpenPhotoPage();                           // opens the menu on the photo mode page

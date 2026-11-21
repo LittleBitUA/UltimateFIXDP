@@ -175,6 +175,12 @@ static const char kDefaultIni[] =
     "; mode sliders still cover the whole frame. Frames without the game's 3D picture (title, loading screens, videos) are\r\n"
     "; filtered as a whole as before. 0 = everything on the finished frame with the interface. Changes at once.\r\n"
     "FiltersUnderHud=1\r\n"
+    "; The game's own 4-tap filter in its final composite (g_vAlias): the PC version has the shader and still sets its\r\n"
+    "; offset every frame, but never selects it. Whether the Xbox 360 used it is not confirmed. 0 = off, as on PC;\r\n"
+    "; 1 = the game's own filter with the game's offset (a slightly softer picture); 2 = the same four taps a quarter of an\r\n"
+    "; output pixel apart, which with RenderScale above 100 takes more of the scene's pixels into each screen pixel (less\r\n"
+    "; shimmer on wires, fences and roof edges). Changes at once.\r\n"
+    "GameAliasFilter=0\r\n"
     "; PNG screenshot of the picture without the menu into UltimateFix\\screenshots. Virtual key code, 122 = F11, 0 = off.\r\n"
     "ScreenshotKey=122\r\n"
     "; Interface icons. The game loads ONE icon atlas at start and only switches the coordinates between keyboard and\r\n"
@@ -760,6 +766,8 @@ void LoadConfig(const wchar_t* ini) {
     if (g_cfg.sharpen < 0) g_cfg.sharpen = 0;
     if (g_cfg.sharpen > 100) g_cfg.sharpen = 100;
     g_cfg.filtersUnderHud = GetPrivateProfileIntW(L"Graphics", L"FiltersUnderHud", 1, ini) != 0 ? 1 : 0;
+    g_cfg.gameAlias = (int)GetPrivateProfileIntW(L"Graphics", L"GameAliasFilter", 0, ini);
+    if (g_cfg.gameAlias < 0 || g_cfg.gameAlias > 2) g_cfg.gameAlias = 0;
     g_cfg.screenshotKey = (int)GetPrivateProfileIntW(L"Graphics", L"ScreenshotKey", 122, ini);
     g_cfg.glyphTheme = (int)GetPrivateProfileIntW(L"Graphics", L"GlyphTheme", 1, ini);
     if (g_cfg.glyphTheme < 0 || g_cfg.glyphTheme > 3) g_cfg.glyphTheme = 1;

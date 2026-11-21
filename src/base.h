@@ -93,6 +93,7 @@ struct Config {
     int smaaQuality;         // SMAA: 0 low, 1 medium, 2 high (how far along an edge its end is looked for)
     int sharpen;             // sharpening of the final picture in percent (0 = off)
     int filtersUnderHud;     // smoothing, sharpening and the in-game look run after the game's composite, under its 2D layer
+    int gameAlias;           // the game's own unused 4-tap filter in the composite: 0 off (as on PC), 1 the game's offset, 2 a quarter of an output pixel
     int screenshotKey;       // virtual key code for a PNG screenshot, 0 = off
     int glyphTheme;          // interface icons for the pad: 0 off, 1 auto (PlayStation for a DualSense), 2 Xbox, 3 PlayStation
     int dumpTextures;        // write the original textures to UltimateFix\\textures\\dump (diagnostic)

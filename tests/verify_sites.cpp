@@ -189,6 +189,20 @@ int main(int argc, char** argv) {
         printf("%s  composite shader hash    %08X (%u bytes)\n", match ? "ok  " : "FAIL", va, kCompositeShaderSize);
         ok &= match;
     }
+    // The variant with the game's own 4-tap filter ([Graphics] GameAliasFilter draws with its bytes): both copies, and its
+    // constant table names g_vAlias.
+    for (uint32_t va : {kCompositeAliasShader.va, kCompositeAliasShaderCopyVa}) {
+        size_t off, last;
+        bool match = vaToOff(va, &off) && vaToOff(va + kCompositeAliasShaderSize - 1, &last) &&
+                     Fnv1a(&g_file[off], kCompositeAliasShaderSize) == kCompositeAliasShaderFnv &&
+                     rd32(off + kCompositeAliasShaderSize - 4) == 0x0000FFFF;
+        if (match) {
+            const std::string code((const char*)&g_file[off], kCompositeAliasShaderSize);
+            match = code.find("g_vAlias") != std::string::npos;
+        }
+        printf("%s  composite 4-tap shader   %08X (%u bytes)\n", match ? "ok  " : "FAIL", va, kCompositeAliasShaderSize);
+        ok &= match;
+    }
 
     for (const ShadowSite& site : kShadowSites) {
         size_t off;

@@ -1,7 +1,8 @@
 // Ambient occlusion hook: the final composite of the game draws one quad (FUN_006E9F60, a single DrawPrimitive through
 // the device vtable). The call is redirected to a function with the same signature that first lets the overlay module
 // darken the HDR scene, then makes the game's own draw call. The Xbox 360 look (ui/xbox_look.cpp) uses the same place:
-// for this one draw it swaps the game's tone-map pixel shader for the mod's copy with the colour grading.
+// for this one draw it swaps the game's tone-map pixel shader for the mod's copy with the colour grading. The game's own
+// 4-tap filter (GameAliasFilter) too: with the grading it is in the mod's copy, without it the game's variant 31 draws.
 #include "../base.h"
 #include "../sites.h"
 #include "../ui/ui.h"
@@ -45,9 +46,11 @@ HRESULT WINAPI CompositeDrawHook(void* dev, DWORD type, UINT start, UINT count) 
     if (g_cfg.ambientOcclusion > 0 && world) ui::AmbientOcclusionPass(dev, g_cfg.ambientOcclusion, g_cfg.aoRadius);
     ui::LookSaved look;
     const bool graded = g_cfg.xboxLook && ui::XboxLookBegin(dev, &look);
+    const bool aliased = !graded && g_cfg.gameAlias > 0 && ui::GameAliasBegin(dev, &look);
     void** vtable = *(void***)dev;
     HRESULT hr = ((HRESULT(WINAPI*)(void*, DWORD, UINT, UINT))vtable[81])(dev, type, start, count);
     if (graded) ui::XboxLookEnd(dev, &look);
+    if (aliased) ui::GameAliasEnd(dev, &look);
     if (tune) ((SetPsConstFn)vtable[109])(dev, 9, tuned, 2);
     // after the game's own state is back: the passes save and restore all of it around themselves
     if (SUCCEEDED(hr)) ui::PostFiltersAfterComposite(dev);

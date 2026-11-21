@@ -22,6 +22,13 @@
 //    the console's video output, not confirmed for this game.
 // 3. Soft highlights (XboxShoulder): not a console feature, it only shares the shader.
 // The exposure factors (XboxExposure) are two operand patches in graphics_tweaks.cpp and do not depend on any of this.
+// 4. The game's own 4-tap filter ([Graphics] GameAliasFilter), which works with or without the Xbox look: variant 31 of the
+//    same blob (sites.h, kCompositeAliasShader) is variant 30 plus four diagonal taps of the scene at uv +- c17 (g_vAlias),
+//    averaged. The PC port never selects it, though it still sets c17 every frame. Without the grading the composite is drawn
+//    with variant 31's own byte code from DP.exe (a shader object of ours, made from the game's bytes once: so nothing depends
+//    on the game's table entry for index 31, and frames with another variant, the title among them, stay as they are); with
+//    the grading our copy below gets the same taps. Mode 2 only sets c17 to a quarter of an output pixel for that draw.
+//    Whether the Xbox 360 drew with it is not known (the console's capture has not been checked for it yet).
 //
 // Nothing here was run in the game: the HLSL below is compiled on the player's machine by d3dx9_43, and a compile error
 // is written to the log and leaves the game's own shader in place.
@@ -39,6 +46,10 @@ using namespace d3d;
 // IDirect3DDevice9 methods the overlay's list (d3d9.h) does not name, and IDirect3DPixelShader9::GetFunction. The game
 // itself calls SetPixelShaderConstantF through [vtable+1B4h] (FUN_006E2360), which is slot 109.
 enum { kGetPixelShader = 108, kSetPixelShaderConstantF = 109, kGetPixelShaderConstantF = 110, kShaderGetFunction = 4 };
+// More of them for the game's 4-tap filter: the shader made from the game's bytes, and what its log line reports.
+enum { kCreatePixelShader = 106, kGetViewport = 48, kGetTexture = 64, kGetSamplerState = 68, kTexGetLevelDesc = 17 };
+// The register of the filter's offset (g_vAlias in the game's variant 31).
+enum { kAliasRegister = 17 };
 // The registers read back in one call: the game's c9..c16, then up to our own two.
 enum { kFirstRegister = 9, kOurRegister = 20, kRegisterCount = 13 };
 
@@ -48,6 +59,11 @@ typedef HRESULT(WINAPI* SetShaderFn)(void*, void*);
 typedef HRESULT(WINAPI* GetFunctionFn)(void*, void*, UINT*);
 typedef HRESULT(WINAPI* GetConstFn)(void*, UINT, float*, UINT);
 typedef HRESULT(WINAPI* SetConstFn)(void*, UINT, const float*, UINT);
+typedef HRESULT(WINAPI* CreatePsFn)(void*, const DWORD*, void**);
+typedef HRESULT(WINAPI* GetViewportFn)(void*, Viewport*);
+typedef HRESULT(WINAPI* GetTextureFn)(void*, DWORD, void**);
+typedef HRESULT(WINAPI* GetSamplerFn)(void*, DWORD, DWORD, DWORD*);
+typedef HRESULT(WINAPI* LevelDescFn)(void*, UINT, u32*);
 
 // The game's shader, statement for statement (disassembled from BD4638h), up to `col = col * gain + bloom`: depth of
 // field mix by the packed depth, the bluish night tone by the average luminance, exposure, bloom. The alpha is what the
@@ -63,13 +79,20 @@ const char kLookSource[] =
     "float4 c10 : register(c10);\n"  // exposure key
     "float4 c15 : register(c15);\n"  // depth of field distances
     "float4 c16 : register(c16);\n"  // smallest blur
+    "float4 c17 : register(c17);\n"  // xy: offset of the game's 4-tap filter (read only with GAME_ALIAS)
     "float4 c20 : register(c20);\n"  // x contrast scale, y contrast offset, z saturation, w soft highlights 0..1
     "float4 c21 : register(c21);\n"  // rgb colour offset
     "float4 main(float2 uv : TEXCOORD0) : COLOR {\n"
     "  float d = saturate(dot(tex2D(s4, uv).rgb, float3(65535.0, 255.0, 1.0)) * 0.0039215689) * 255.0;\n"
     "  float2 nf = c15.xz - d * c15.yw;\n"
     "  float blur = max(saturate(max(nf.x, 1.0 - nf.y)), c16.x);\n"
+    "#ifdef GAME_ALIAS\n"
+    // the game's own 4-tap filter, as in variant 31 (BD4A20h): the same four taps in the same order, averaged, alpha included
+    "  float4 sharp = (tex2D(s0, uv - c17.xy) + tex2D(s0, uv + c17.xy * float2(1.0, -1.0)) +\n"
+    "                  tex2D(s0, uv + c17.xy * float2(-1.0, 1.0)) + tex2D(s0, uv + c17.xy)) * 0.25;\n"
+    "#else\n"
     "  float4 sharp = tex2D(s0, uv);\n"
+    "#endif\n"
     "  float3 col = lerp(sharp.rgb, tex2D(s3, uv).rgb, blur);\n"
     "  float lum = tex2D(s2, float2(0.5, 0.5)).x;\n"
     "  float night = saturate(1.0 - (lum + 1.5) * 0.24390244);\n"
@@ -88,6 +111,9 @@ const char kLookSource[] =
     "  col = col + c21.rgb;\n"
     "  return float4(col, sharp.a * gain + bloom.a);\n"
     "}\n";
+// The same text compiled with GAME_ALIAS defined: the copy for the game's 4-tap filter.
+const char kAliasDefine[] = "#define GAME_ALIAS 1\n";
+char g_lookAliasSource[sizeof(kAliasDefine) - 1 + sizeof(kLookSource)];
 // The game draws the composite with a vs_3_0 vertex shader, and Direct3D 9 pairs that only with a ps_3_0 pixel shader.
 const char* const kProfilesLook[] = {"ps_3_0", nullptr};
 
@@ -106,6 +132,10 @@ const char* const kProfilesGamma[] = {"ps_2_b", "ps_2_a", "ps_2_0", nullptr};
 void* g_lookShader = nullptr;   // IDirect3DPixelShader9
 bool g_lookFailed = false;
 bool g_lookLogged = false;
+void* g_lookAliasShader = nullptr;  // our copy with the game's 4-tap filter
+bool g_lookAliasFailed = false;
+void* g_aliasShader = nullptr;      // the game's variant 31, made from its bytes in DP.exe
+bool g_aliasFailed = false;
 void* g_gammaShader = nullptr;
 bool g_gammaFailed = false;
 bool g_gammaLogged = false;
@@ -166,13 +196,64 @@ void NoteOtherComposite(void* shader) {
     VirtualFree(code, 0, MEM_RELEASE);
 }
 
-bool IsGameComposite(void* shader) {
-    u8 code[kCompositeShaderSize];
+// Which of the game's composites is bound: 30 (the one the PC draws), 31 (the same with the game's 4-tap filter), else 0.
+int CompositeVariant(void* shader) {
+    u8 code[kCompositeAliasShaderSize];
     UINT size = 0;
     GetFunctionFn getFunction = Method<GetFunctionFn>(shader, kShaderGetFunction);
-    if (FAILED(getFunction(shader, nullptr, &size)) || size != kCompositeShaderSize) return false;
-    if (FAILED(getFunction(shader, code, &size))) return false;
-    return Fnv1a(code, kCompositeShaderSize) == kCompositeShaderFnv;
+    if (FAILED(getFunction(shader, nullptr, &size)) || (size != kCompositeShaderSize && size != kCompositeAliasShaderSize)) return 0;
+    if (FAILED(getFunction(shader, code, &size))) return 0;
+    if (size == kCompositeShaderSize && Fnv1a(code, size) == kCompositeShaderFnv) return 30;
+    if (size == kCompositeAliasShaderSize && Fnv1a(code, size) == kCompositeAliasShaderFnv) return 31;
+    return 0;
+}
+
+int Rounded(float v) { return (int)(Clamp(v, 0.f, 100000.f) + 0.5f); }
+
+// The offset of the 4-tap filter for this one draw. Mode 1 keeps the game's c17 (0.5 / the size the game takes, set every
+// frame by FUN_006EAA40). Mode 2 puts a quarter of an output pixel there: with RenderScale each tap's bilinear footprint then
+// lies inside the output pixel and the four together take more of the scene's pixels behind it: with linear sampling exactly
+// the 2x2 box at 200% and the 4x4 box at 400%, at other scales a weighted footprint about as wide as the output pixel (not
+// an exact box), and at 100% only a slight softening. zw are kept as the game wrote them.
+void AliasOffsetBegin(void* dev, LookSaved* saved, bool graded) {
+    saved->offset = false;
+    float game[4] = {0.f, 0.f, 0.f, 0.f};
+    const bool read = SUCCEEDED(Method<GetConstFn>(dev, kGetPixelShaderConstantF)(dev, kAliasRegister, game, 1));
+    Viewport vp = {};
+    const bool sized = SUCCEEDED(Method<GetViewportFn>(dev, kGetViewport)(dev, &vp)) && vp.width && vp.height;
+    if (g_cfg.gameAlias == 2 && read && sized) {
+        const float ours[4] = {0.25f / (float)vp.width, 0.25f / (float)vp.height, game[2], game[3]};
+        if (SUCCEEDED(Method<SetConstFn>(dev, kSetPixelShaderConstantF)(dev, kAliasRegister, ours, 1))) {
+            saved->offset = true;
+            for (int i = 0; i < 4; ++i) saved->aliasOffset[i] = game[i];
+        }
+    }
+    // One line whenever the way it is drawn changes (mode, path, offset), at most 12 per run: the game's c17 as the size it
+    // is half a pixel of, the scene texture and how the game samples it (D3DTEXF: 1 point, 2 linear).
+    static int lastKey = -1, lines = 0;
+    const int key = g_cfg.gameAlias * 4 + (graded ? 2 : 0) + (saved->offset ? 1 : 0);
+    if (key == lastKey || lines >= 12) return;
+    lastKey = key;
+    ++lines;
+    u32 desc[8] = {};  // Format, Type, Usage, Pool, MultiSampleType, MultiSampleQuality, Width, Height
+    void* scene = nullptr;
+    if (SUCCEEDED(Method<GetTextureFn>(dev, kGetTexture)(dev, 0, &scene)) && scene) {
+        Method<LevelDescFn>(scene, kTexGetLevelDesc)(scene, 0, desc);
+        Method<ReleaseFn>(scene, kRelease)(scene);
+    }
+    DWORD minFilter = 0, magFilter = 0;
+    Method<GetSamplerFn>(dev, kGetSamplerState)(dev, 0, SAMP_MINFILTER, &minFilter);
+    Method<GetSamplerFn>(dev, kGetSamplerState)(dev, 0, SAMP_MAGFILTER, &magFilter);
+    const int gameW = read && game[0] > 0.f ? Rounded(0.5f / game[0]) : 0, gameH = read && game[1] > 0.f ? Rounded(0.5f / game[1]) : 0;
+    Log("composite: the game's own 4-tap filter is on (mode %d, %s), offset %s; the game's c17 is half a pixel of %dx%d, "
+        "scene %ux%u, output %ux%u, s0 filter min %u mag %u",
+        g_cfg.gameAlias, graded ? "the mod's copy with the Xbox grading" : "the game's variant 31",
+        saved->offset ? "a quarter of an output pixel" : (g_cfg.gameAlias == 2 ? "the game's (the mod's could not be set)" : "the game's"),
+        gameW, gameH, desc[6], desc[7], (u32)vp.width, (u32)vp.height, (u32)minFilter, (u32)magFilter);
+}
+
+void AliasOffsetEnd(void* dev, const LookSaved* saved) {
+    if (saved->offset) Method<SetConstFn>(dev, kSetPixelShaderConstantF)(dev, kAliasRegister, saved->aliasOffset, 1);
 }
 
 // c20 and c21 for our shader from the game's c11..c14 and the settings. The strength scales the parameters, so 0 gives
@@ -234,10 +315,12 @@ void TraceEnv(const float* game) {
 // Also with every strength at 0: the shader then gives the game's own picture (neutral constants), which is the way to
 // check the copy against the original in the game, and the ENV numbers still reach the log.
 bool XboxLookBegin(void* dev, LookSaved* saved) {
+    saved->offset = false;
     if (g_lookFailed) return false;
     void* shader = nullptr;
     if (FAILED(Method<GetShaderFn>(dev, kGetPixelShader)(dev, &shader)) || !shader) return false;
-    if (!IsGameComposite(shader)) {
+    const int variant = CompositeVariant(shader);
+    if (!variant) {
         // Another of the game's 32 tone-map variants (other post effects in this scene), or another mod's shader. Each one
         // is reported once and its byte code saved as UltimateFix\composite_<hash>.bin, so it can be supported later.
         NoteOtherComposite(shader);
@@ -250,11 +333,23 @@ bool XboxLookBegin(void* dev, LookSaved* saved) {
         why = "the shader could not be built (d3dx9_43, ps_3_0)";
     else if (FAILED(Method<GetConstFn>(dev, kGetPixelShaderConstantF)(dev, kFirstRegister, game, kRegisterCount)))
         why = "the shader constants of the game could not be read";
+    // the game's 4-tap filter is on, or the game drew with it itself: the copy with the same taps
+    bool alias = !why && (variant == 31 || g_cfg.gameAlias > 0) && !g_lookAliasFailed;
+    if (alias && !g_lookAliasShader) {
+        __builtin_memcpy(g_lookAliasSource, kAliasDefine, sizeof(kAliasDefine) - 1);
+        __builtin_memcpy(g_lookAliasSource + sizeof(kAliasDefine) - 1, kLookSource, sizeof(kLookSource));
+        if (!BuildPixelShader(dev, g_lookAliasSource, sizeof(g_lookAliasSource) - 1, &g_lookAliasShader, kProfilesLook, "xboxlook")) {
+            g_lookAliasFailed = true;
+            alias = false;
+            Log("xboxlook: the copy with the game's 4-tap filter could not be built (d3dx9_43, ps_3_0), graded without the filter");
+        }
+    }
+    void* copy = alias ? g_lookAliasShader : g_lookShader;
     if (!why) {
         float ours[8];
         LookConstants(game, ours);
         Method<SetConstFn>(dev, kSetPixelShaderConstantF)(dev, kOurRegister, ours, 2);
-        if (FAILED(Method<SetShaderFn>(dev, kSetPixelShader)(dev, g_lookShader))) {
+        if (FAILED(Method<SetShaderFn>(dev, kSetPixelShader)(dev, copy))) {
             Method<SetConstFn>(dev, kSetPixelShaderConstantF)(dev, kOurRegister, Register(game, kOurRegister), 2);
             why = "the device refused the shader";
         }
@@ -268,6 +363,7 @@ bool XboxLookBegin(void* dev, LookSaved* saved) {
     TraceEnv(game);
     saved->shader = shader;
     for (int i = 0; i < 8; ++i) saved->constants[i] = Register(game, kOurRegister)[i];
+    if (alias) AliasOffsetBegin(dev, saved, true);
     if (!g_lookLogged) {
         g_lookLogged = true;
         Log("xboxlook: the final composite is drawn with the mod's shader (grading %d%%, contrast formula %d, chroma formula %d, "
@@ -281,6 +377,46 @@ bool XboxLookBegin(void* dev, LookSaved* saved) {
 void XboxLookEnd(void* dev, const LookSaved* saved) {
     Method<SetShaderFn>(dev, kSetPixelShader)(dev, saved->shader);
     Method<SetConstFn>(dev, kSetPixelShaderConstantF)(dev, kOurRegister, saved->constants, 2);
+    AliasOffsetEnd(dev, saved);
+    Method<ReleaseFn>(saved->shader, kRelease)(saved->shader);
+}
+
+// The game's 4-tap filter without the grading (XboxLook off, or its copy could not run): for this one draw the game's own
+// variant 31 in place of variant 30. Only variant 30 is swapped; the game's state is put back by GameAliasEnd.
+bool GameAliasBegin(void* dev, LookSaved* saved) {
+    saved->offset = false;
+    if (g_cfg.gameAlias <= 0 || g_aliasFailed) return false;
+    void* shader = nullptr;
+    if (FAILED(Method<GetShaderFn>(dev, kGetPixelShader)(dev, &shader)) || !shader) return false;
+    if (CompositeVariant(shader) != 30) {
+        Method<ReleaseFn>(shader, kRelease)(shader);
+        return false;
+    }
+    const char* why = nullptr;
+    if (!g_aliasShader) {
+        const SiteDef& s = kCompositeAliasShader;
+        if (!BytesMatch(s.va, s.bytes, s.len) || Fnv1a((const u8*)(uintptr_t)s.va, kCompositeAliasShaderSize) != kCompositeAliasShaderFnv)
+            why = "its byte code at BD4A20h differs from DP.exe 1.01b";
+        else if (FAILED(Method<CreatePsFn>(dev, kCreatePixelShader)(dev, (const DWORD*)(uintptr_t)s.va, &g_aliasShader)) || !g_aliasShader) {
+            g_aliasShader = nullptr;
+            why = "the device refused to create it";
+        }
+    }
+    if (!why && FAILED(Method<SetShaderFn>(dev, kSetPixelShader)(dev, g_aliasShader))) why = "the device refused to bind it";
+    if (why) {
+        g_aliasFailed = true;
+        Log("composite: the game's own 4-tap filter (variant 31) is off for this run: %s", why);
+        Method<ReleaseFn>(shader, kRelease)(shader);
+        return false;
+    }
+    saved->shader = shader;
+    AliasOffsetBegin(dev, saved, false);
+    return true;
+}
+
+void GameAliasEnd(void* dev, const LookSaved* saved) {
+    Method<SetShaderFn>(dev, kSetPixelShader)(dev, saved->shader);
+    AliasOffsetEnd(dev, saved);
     Method<ReleaseFn>(saved->shader, kRelease)(saved->shader);
 }
 
