@@ -1218,7 +1218,7 @@ void PatchDevice(void* dev) {
             Log("water: diagnostic hooked (%d%d%d%d%d%d%d): each distinct water draw goes to the log once; Numpad 1 switches WaterTest", a, b,
                 c, d, e, f, g);
         else
-            Log("fog: draw hooks in (%d%d%d): %s%s", c, d && e, f, g_cfg.smokeFix ? "black smoke textures get their colour from the alpha" : "",
+            Log("fog: draw hooks in (%d%d%d): %s%s", c, d && e, f, g_cfg.smokeFix ? "the smoke cloud's noise gets an alpha (SmokeFix)" : "",
                 g_cfg.fogFix ? (g_cfg.smokeFix ? ", smoke volumes kept out of the G-buffer" : "smoke volumes kept out of the G-buffer") : "");
     }
     if (g_cfg.shadowPrecision && !g_cfg.traceResources)
