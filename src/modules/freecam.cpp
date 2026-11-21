@@ -279,9 +279,9 @@ void FlyFrame(bool menuOpen) {
     if (g_cfg.flyKey && Pressed(3, g_cfg.flyKey) && !menuOpen) {
         g_cfg.cheatFly = !g_cfg.cheatFly;
         ShowNotice(g_cfg.cheatFly ? L"Політ: увімкнено" : L"Політ: вимкнено", g_cfg.cheatFly ? L"Fly: on" : L"Fly: off",
-                   g_cfg.cheatFly ? L"WASD, мишка або Q/E поворот, Space вгору, C вниз, Shift швидше. Вимикайте біля землі."
+                   g_cfg.cheatFly ? L"WASD, мишка або Q/E поворот, Space вгору, Ctrl вниз, Shift швидше. Вимикайте біля землі."
                                   : L"Йорк упаде звідти, де він зараз.",
-                   g_cfg.cheatFly ? L"WASD, the mouse or Q/E turn, Space up, C down, Shift faster. Turn it off near the ground."
+                   g_cfg.cheatFly ? L"WASD, the mouse or Q/E turn, Space up, Ctrl down, Shift faster. Turn it off near the ground."
                                   : L"York falls from where he is now.", 3);
     }
     u8* p = (u8*)(uintptr_t)PlayerObjectNow();
@@ -331,7 +331,7 @@ void FlyFrame(bool menuOpen) {
         const float rx = -fz, rz = fx;  // screen right, as for the free camera
         float fw = (Down('W') ? 1.f : 0.f) - (Down('S') ? 1.f : 0.f);
         float st = (Down('D') ? 1.f : 0.f) - (Down('A') ? 1.f : 0.f);
-        float ud = (Down(VK_SPACE) ? 1.f : 0.f) - (Down('C') ? 1.f : 0.f);
+        float ud = (Down(VK_SPACE) ? 1.f : 0.f) - ((Down(VK_CONTROL) || Down('C')) ? 1.f : 0.f);
         float speed = (float)g_cfg.flySpeed * (Down(VK_SHIFT) ? 4.f : 1.f);
         g_fly[0] += (fx * fw + rx * st) * speed * dt;
         g_fly[2] += (fz * fw + rz * st) * speed * dt;
