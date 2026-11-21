@@ -1348,11 +1348,12 @@ constexpr int kConfirmRestart = 3;
 // pad has no other way to see which answer it is about to give, so the focused one carries a ring (DrawConfirm).
 int g_confirmFocus = 0;
 
-// Every question starts here. Wiping ALL settings is the one answer that cannot be taken back across pages, so it starts on
-// "no": an A pressed once more out of habit (A has just pressed the chip that asks) keeps the player's values.
+// Every question starts here. Wiping ALL settings and restarting the game are the answers that cannot be taken back (the
+// restart loses the unsaved progress), so they start on "no": an A pressed once more out of habit or a double tap (A or X
+// has just pressed the chip that asks) keeps the player's values and the game. Y, a click or ← then A still say yes.
 void AskConfirm(int what) {
     g_confirm = what;
-    g_confirmFocus = what == 2 ? 1 : 0;
+    g_confirmFocus = (what == 2 || what == kConfirmRestart) ? 1 : 0;
 }
 
 // The two answers of the question, side by side under its text: 0 yes, 1 no (the hit boxes and the drawing share these).
@@ -2309,13 +2310,14 @@ bool ControlSpan(const Item& it, float* x0, float* x1) {
 }
 
 // With the pad driving there is no cursor to say where a press goes, and from the sofa the highlight's grey is faint: a
-// calm kLine2 outline around the selected row's control shows what ← → and A act on. Drawn with the highlight (Draw), so
+// quiet kFaint outline (the frame of a hovered chip) around the selected row's control shows what ← → and A act on; kLine2
+// would be about 1.15:1 on the highlight and vanish into an off switch's track. Drawn with the highlight (Draw), so
 // it glides with it, and filled with the highlight's colour, so the control drawn over it looks the same as before.
 void DrawPadFocus(const Item& it, float rowY) {
     float x0, x1;
     if (!ControlSpan(it, &x0, &x1)) return;
     const float h = 32, cy = rowY + kRowH / 2;
-    FillRoundFramed(x0 - 8, cy - h / 2, x1 - x0 + 16, h, it.kind == kBool ? h / 2 : 8, kSelected, kLine2, 2);
+    FillRoundFramed(x0 - 8, cy - h / 2, x1 - x0 + 16, h, it.kind == kBool ? h / 2 : 8, kSelected, kFaint, 2);
 }
 
 // `sel` only picks the colours: the highlight under the selected row is drawn by Draw, which lets it glide between rows.
@@ -2831,14 +2833,15 @@ void Draw() {
     }
     SetOverlayFade(g_openAlpha, g_openRise);
     FillRect(kPx, kPy, kPw, kPh, Fade(kPanelBg));
-    // Without the dimming a bright scene shows through a see-through panel and the rows get hard to read: the list and the
-    // description box keep at least kPhotoListAlpha. A second layer of the panel's own colour tops its alpha up to that
+    // Without the dimming a bright scene shows through a see-through panel and the rows get hard to read: the list, the
+    // description box and the two key lines under it keep at least kPhotoListAlpha. The layer ends 4 units above the panel's
+    // bottom, as it ends 4 units left of its right edge: an edge any higher would run through the key lines' text. A second layer of the panel's own colour tops its alpha up to that
     // (1 - (1 - a)(1 - b) = target), so the colour stays the panel's and only the scene behind it shows less.
     constexpr u32 kPhotoListAlpha = 0xE0;
     const u32 panelA = Fade(kPanelBg) >> 24;
     if (photo && panelA < kPhotoListAlpha) {
         const u32 b = 255 - (255 - kPhotoListAlpha) * 255 / (255 - panelA);
-        FillRound(kCx - 20, kListTop - 8, kCr + 28 - (kCx - 20), kListBottom + kHintBoxBottom + 8 - (kListTop - 8), 12, Alpha(kPanel, b));
+        FillRound(kCx - 20, kListTop - 8, kCr + 28 - (kCx - 20), kPy + kPh - 4 - (kListTop - 8), 12, Alpha(kPanel, b));
     }
     FillRect(kPx, kPy, kPw, 3, kAccent);
     FillRect(kPx + kPw - 15, kPy + kPh - 5, 11, 2, kFaint);  // the grip in the corner: drag to resize
@@ -2857,16 +2860,19 @@ void Draw() {
     FillRect(kPx, navY, 4, kNavH, kAccent);
     for (int p = 0; p < kPageCount; ++p) {
         float y = kNavTop + p * kNavH;
+        // the content is centred on the row: a small panel with the restart block shrinks the rows below 44, and a name kept
+        // at y + 12 would sink to the next row's highlight (at 44 this is exactly y + 12)
+        const float ty = y + SnapWhole((kNavH - 20.f) / 2.f);
         bool cur = p == g_page;
-        const float nameW = DrawText(Tx(g_pages[p].title), kPx + 26, y + 12, cur ? kWhite : kMuted, 17);
+        const float nameW = DrawText(Tx(g_pages[p].title), kPx + 26, ty, cur ? kWhite : kMuted, 17);
         // how many settings of the section differ from the default, faint at the right; a dot when the number would touch the name
         const int changed = ChangedCount(g_pages[p]);
         if (changed) {
             wchar_t num[8];
             wsprintfW(num, L"%d", changed);
             const float right = kPx + kSideW - 16, nw = TextWidth(num, 12);
-            if (kPx + 26 + nameW + 8 <= right - nw) DrawText(num, right - nw, y + 17, kFaint, 12);  // on the name's baseline
-            else if (kPx + 26 + nameW + 6 <= right - 5) FillRound(right - 5, y + 23, 5, 5, 2.5f, kFaint);
+            if (kPx + 26 + nameW + 8 <= right - nw) DrawText(num, right - nw, ty + 5, kFaint, 12);  // on the name's baseline
+            else if (kPx + 26 + nameW + 6 <= right - 5) FillRound(right - 5, ty + 11, 5, 5, 2.5f, kFaint);
         }
     }
     if (g_restartShown) DrawRestartBlock();
