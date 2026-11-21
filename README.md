@@ -26,8 +26,8 @@ _Універсальний фікс для_ **Deadly Premonition: The Director'
 One DLL in the game folder instead of DPfix, a stability fix, a map fix and a crash fix.
 No installer: press **F10** in game and everything is there. The mod also gives the game 4 GB of memory by itself (from the second start).
 
-> **Version 0.7.6.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
-> <br>New in 0.7.6: **PlayStation icons on a DualSense (Edge too)** when the game starts with the pad — see [What's new](#whats-new-in-076). In 0.7.5: texture replacements in mod folders work. In 0.7.4: **York can fly** (cheats, F3), the lock-on aims at the chest instead of the hips. In 0.7.3: a mod's name, author and version in a plain `mod.txt`. In 0.7.2: **updates itself** (F9 on the start card), a much smaller archive — see [What's new](#whats-new-in-072). In 0.7.1: fixes for the **thread races** behind the crashes and hangs on entering buildings, the **QTE at high FPS**, **4 GB of memory by itself**, checked and compressed save backups, the game's own Xbox icons — see [What's new](#whats-new-in-071).
+> **Version 0.7.7.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
+> <br>New in 0.7.7: **an Xbox pad without Steam Input**, and the log says why a pad is not seen — see [What's new](#whats-new-in-077). In 0.7.6: **PlayStation icons on a DualSense (Edge too)**. In 0.7.5: texture replacements in mod folders work. In 0.7.4: **York can fly** (cheats, F3), the lock-on aims at the chest instead of the hips. In 0.7.3: a mod's name, author and version in a plain `mod.txt`. In 0.7.2: **updates itself** (F9 on the start card), a much smaller archive — see [What's new](#whats-new-in-072). In 0.7.1: fixes for the **thread races** behind the crashes and hangs on entering buildings, the **QTE at high FPS**, **4 GB of memory by itself**, checked and compressed save backups, the game's own Xbox icons — see [What's new](#whats-new-in-071).
 
 ### Features
 
@@ -100,6 +100,12 @@ port with the Xbox 360 original:
   next start, the original kept as `DP.exe.bak`).
 - 🧍 **Residents walking into nowhere** — a failed route lookup moved the
   resident to (0, 0, 0); now the resident stays where it stood.
+
+### What's new in 0.7.7
+
+- **An Xbox pad without Steam Input.** The game reads pads only through the old Windows joystick interface (WinMM), where an Xbox pad is not listed when Steam Input is off: the pad did nothing at all. The mod then hands the game the pad it reads through XInput, which needs `[Input] XInputFallback=1` (the default; in the F10 menu "Gamepad through XInput (fallback)"). If an older setup has it at 0, switch it on.
+- **The log says why a pad is not seen**: the fallback switched off, no XInput library, or what XInput answers for each of its four slots.
+- Tested by **EliParker**: an Xbox pad and a DualSense Edge both work, with the automatic icons (PlayStation on the DualSense, Xbox on the Xbox pad). Thank you!
 
 ### What's new in 0.7.6
 
@@ -283,8 +289,8 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 Одна DLL у теці гри замість DPfix, фіксу стабільності, фіксу мапи й фіксу вильотів.
 Без інсталятора: натисніть **F10** у грі, і все там. Мод також сам дає грі 4 ГБ пам'яті (з другого запуску).
 
-> **Версія 0.7.6.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
-> <br>Нове в 0.7.6: **іконки PlayStation на DualSense (і Edge)**, коли гра стартує з ґеймпадом — див. [Що нового](#що-нового-в-076). У 0.7.5: заміни текстур у теках модів працюють. У 0.7.4: **Йорк літає** (читкоди, F3), автоприціл цілиться в груди, а не в стегна. У 0.7.3: назва, автор і версія мода у звичайному `mod.txt`. У 0.7.2: **оновлюється сам** (F9 на стартовій плашці), значно менший архів — див. [Що нового](#що-нового-в-072). У 0.7.1: виправлено **гонки потоків**, через які гра падала й зависала при вході в будівлі, **QTE на високому FPS**, **4 ГБ пам'яті самі собою**, перевірені й стиснені копії збережень, оригінальні іконки Xbox — див. [Що нового](#що-нового-в-071).
+> **Версія 0.7.7.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
+> <br>Нове в 0.7.7: **Xbox-пад без Steam Input**, і журнал каже, чому пад не видно — див. [Що нового](#що-нового-в-077). У 0.7.6: **іконки PlayStation на DualSense (і Edge)**. У 0.7.5: заміни текстур у теках модів працюють. У 0.7.4: **Йорк літає** (читкоди, F3), автоприціл цілиться в груди, а не в стегна. У 0.7.3: назва, автор і версія мода у звичайному `mod.txt`. У 0.7.2: **оновлюється сам** (F9 на стартовій плашці), значно менший архів — див. [Що нового](#що-нового-в-072). У 0.7.1: виправлено **гонки потоків**, через які гра падала й зависала при вході в будівлі, **QTE на високому FPS**, **4 ГБ пам'яті самі собою**, перевірені й стиснені копії збережень, оригінальні іконки Xbox — див. [Що нового](#що-нового-в-071).
 
 ### Можливості
 
@@ -356,6 +362,12 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
   запуску, оригінал лишається як `DP.exe.bak`).
 - 🧍 **Жителі, що йдуть «в нікуди»** — невдалий пошук маршруту переносив жителя
   в (0, 0, 0); тепер він лишається там, де стояв.
+
+### Що нового в 0.7.7
+
+- **Xbox-пад без Steam Input.** Гра читає пади лише через старий інтерфейс джойстиків Windows (WinMM), а там Xbox-пада з вимкненим Steam Input немає: пад зовсім не працював. Тоді мод передає грі пад, який читає через XInput. Для цього потрібно `[Input] XInputFallback=1` (так за замовчуванням; у меню F10 «Ґеймпад через XInput (запасний)»). Якщо у старих налаштуваннях там 0, увімкніть.
+- **Журнал каже, чому пад не видно**: запасний шлях вимкнено, немає бібліотеки XInput, або що XInput відповідає по кожному з чотирьох слотів.
+- Перевірив **EliParker**: і Xbox-пад, і DualSense Edge працюють з автоматичними іконками (PlayStation на DualSense, Xbox на Xbox-паді). Дякуємо!
 
 ### Що нового в 0.7.6
 
