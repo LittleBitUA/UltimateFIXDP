@@ -11,7 +11,8 @@
 
 namespace ufx {
 bool g_usingDxvk = false;
-bool g_d3dWrapper = false;  // a d3d9.dll that is neither DXVK nor the Windows one (DPfix, ReShade, dgVoodoo...)
+bool g_d3dWrapper = false;
+void NoteSmokeMaterial();  // below: the material of the smoke sheets, seen by the slot probe  // a d3d9.dll that is neither DXVK nor the Windows one (DPfix, ReShade, dgVoodoo...)
 namespace {
 
 enum { kSetTexture = 65, kSetVertexShaderConstantF = 94, kSetPixelShaderConstantF = 109, kCreateDevice = 16, kCreateTexture = 23, kCreateRenderTarget = 28, kCreateDepthStencil = 29,
@@ -612,6 +613,7 @@ void ExplainSmoke(void* dev, u32 from) {
     typedef HRESULT(WINAPI * DescFn)(void*, UINT, void*);
     u32 desc[8] = {0};
     if (((TypeFn)vt[10])(t0) != 3 || FAILED(((DescFn)vt[17])(t0, 0, desc)) || desc[0] != 0x33545844u /*DXT3*/) return;
+    NoteSmokeMaterial();
     static u32 seen[16];
     static int count = 0;
     const u32 tex = (u32)(uintptr_t)t0;
@@ -1375,16 +1377,67 @@ void DetectD3dLibrary() { NameD3dLibrary(); }
 // source, and a frame counter. WaterFrame turns them into log lines.
 volatile u32 g_reflRec[4];
 
-// TraceWater: which draws get a special material slot (FUN_006E10F0; slot 0 of the table at A000A0 carries the smoke cloud),
-// each distinct (caller, slot) once in the log
-extern "C" void __cdecl MaterialSlotWorker(u32 caller, int slot) {
+// TraceWater: which draws get a special material slot (FUN_006E10F0; slot 0 of the table at A000A0 carries the smoke cloud), each
+// distinct (caller, slot) once in the log. The mesh draw FUN_006D6E70 (the call returning to 006D73E1) keeps its material at
+// [ebp-0BCh]: id at +0Eh (u16), flags at +14h, texture bytes at +44h/+45h, slot+1 at +46h. On PC no material asks for slot 0, so
+// the smoke sheets never get the cloud. As a test (Numpad 6 switches it), the material seen right before the smoke sheet draws
+// gets slot 0, and the game binds the cloud and picks its own shader for it.
+struct MatInfo {
+    u32 id, flags;
+    int tex0, tex1, slotByte;
+    bool valid;
+} g_lastMat;
+u32 g_smokeMatIds[8];
+int g_smokeMatCount = 0;
+bool g_forceSmokeSlot = true;
+
+extern "C" int __cdecl MaterialSlotWorker(u32 caller, int slot, u32 ebp) {
+    if (caller == 0x6D73E1u && ebp) {
+        const u8* mat = *(const u8* const*)(uintptr_t)(ebp - 0xBC);
+        if (mat) {
+            g_lastMat.id = *(const u16*)(mat + 0x0E);
+            g_lastMat.flags = *(const u32*)(mat + 0x14);
+            g_lastMat.tex0 = (signed char)mat[0x44];
+            g_lastMat.tex1 = (signed char)mat[0x45];
+            g_lastMat.slotByte = (signed char)mat[0x46];
+            g_lastMat.valid = true;
+            if (g_forceSmokeSlot)
+                for (int i = 0; i < g_smokeMatCount; ++i)
+                    if (g_smokeMatIds[i] == g_lastMat.id) {
+                        static u32 told[8];
+                        static int toldCount = 0;
+                        bool seen = false;
+                        for (int k = 0; k < toldCount; ++k) seen |= told[k] == g_lastMat.id;
+                        if (!seen && toldCount < 8) {
+                            told[toldCount++] = g_lastMat.id;
+                            Log("smoke: material %u gets the cloud slot 0 (was %d)", g_lastMat.id, slot);
+                        }
+                        slot = 0;
+                    }
+        }
+    } else if (caller == 0x6D73E1u) {
+        g_lastMat.valid = false;
+    }
     static u32 seen[48];
     static int count = 0;
     const u32 key = caller * 7u + (u32)(slot + 1);
-    for (int i = 0; i < count; ++i) if (seen[i] == key) return;
-    if (count >= 48) return;
-    seen[count++] = key;
-    Log("material slot: %d set from %08X%s", slot, caller, slot == 0 ? " (slot 0 = the smoke cloud material)" : "");
+    bool known = false;
+    for (int i = 0; i < count; ++i) known |= seen[i] == key;
+    if (!known && count < 48) {
+        seen[count++] = key;
+        Log("material slot: %d set from %08X%s", slot, caller, slot == 0 ? " (slot 0 = the smoke cloud material)" : "");
+    }
+    return slot;
+}
+
+// At a smoke sheet draw (TraceWater): the material set last is the sheets' one
+void NoteSmokeMaterial() {
+    if (!g_lastMat.valid) return;
+    for (int i = 0; i < g_smokeMatCount; ++i) if (g_smokeMatIds[i] == g_lastMat.id) return;
+    if (g_smokeMatCount >= 8) return;
+    g_smokeMatIds[g_smokeMatCount++] = g_lastMat.id;
+    Log("smoke: the sheets' material is %u (flags %08X, textures %d %d, slot byte %d)", g_lastMat.id, g_lastMat.flags, g_lastMat.tex0,
+        g_lastMat.tex1, g_lastMat.slotByte);
 }
 
 void InstallMaterialSlotProbe() {
@@ -1459,6 +1512,13 @@ void WaterFrame() {
             held[k] = d;
         }
         HuntFrame(hit[0], hit[1], hit[2], hit[3]);
+        if (hit[3]) {  // Numpad 6: the cloud slot for the smoke sheets on or off
+            g_forceSmokeSlot = !g_forceSmokeSlot;
+            Log("smoke: the cloud slot for the smoke sheets %s (Numpad 6)", g_forceSmokeSlot ? "on" : "off");
+            ShowNotice(g_forceSmokeSlot ? L"Хмара на дим: увімкнено" : L"Хмара на дим: вимкнено",
+                       g_forceSmokeSlot ? L"Cloud on the smoke: on" : L"Cloud on the smoke: off",
+                       L"Numpad 6 перемикає. Порівняйте дим біля дверей.", L"Numpad 6 switches it. Compare the smoke at the door.", 4);
+        }
     }
     if (now && !was) {
         g_cfg.waterTest = (g_cfg.waterTest + 1) % 3;

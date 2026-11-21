@@ -345,10 +345,10 @@ int main(int argc, char** argv) {
         const uint32_t va = 0x10000000;
         size_t n = BuildSlotProbe(q, va, 0x20000000);
         printf("material slot probe %zu bytes\n", n);
-        Check(n == 31 && q[0] == 0x51 && q[1] == 0xFF && q[2] == 0x74 && q[3] == 0x24 && q[4] == 0x08 && q[5] == 0xFF && q[8] == 0x08 && q[9] == 0xE8 &&
-              Rel32To(q, va, 9, 0x20000000) && q[14] == 0x83 && q[15] == 0xC4 && q[16] == 0x08 && q[17] == 0x59 && q[18] == 0x8B && q[19] == 0x44 &&
-              q[22] == 0x89 && q[23] == 0x81 && Rd32(q + 24) == 0x31C && q[28] == 0xC2 && q[29] == 0x04 && q[30] == 0x00,
-              "slot probe", "push ecx / push slot / push return / call / add esp, 8 / pop ecx / the original store / ret 4");
+        Check(n == 28 && q[0] == 0x51 && q[1] == 0x55 && q[2] == 0xFF && q[3] == 0x74 && q[4] == 0x24 && q[5] == 0x0C && q[6] == 0xFF && q[9] == 0x0C &&
+              q[10] == 0xE8 && Rel32To(q, va, 10, 0x20000000) && q[15] == 0x83 && q[16] == 0xC4 && q[17] == 0x0C && q[18] == 0x59 && q[19] == 0x89 &&
+              q[20] == 0x81 && Rd32(q + 21) == 0x31C && q[25] == 0xC2 && q[26] == 0x04 && q[27] == 0x00,
+              "slot probe", "push ecx / push ebp / push slot / push return / call / add esp, 12 / pop ecx / store the worker's slot / ret 4");
     }
     // reflection probe: three loads from the frame, a counter, the original compare, back
     {

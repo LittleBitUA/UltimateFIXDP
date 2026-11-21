@@ -649,17 +649,18 @@ inline size_t BuildFlyPhysicsBridge(uint8_t* out, uint32_t outVa, uint32_t flagV
     return (size_t)(p - out);
 }
 
-// Replaces the start of FUN_006E10F0 (sets the special material slot of a draw, thiscall, ret 4): hands the caller's return address
-// and the slot to a cdecl worker, then does what the function did (`[ecx+31Ch] = slot`) and returns.
+// Replaces the start of FUN_006E10F0 (sets the special material slot of a draw, thiscall, ret 4): hands the caller's return address,
+// the slot and the caller's frame (ebp, untouched) to a cdecl worker, stores the slot the worker returns at [ecx+31Ch] as the
+// function did, and returns.
 inline size_t BuildSlotProbe(uint8_t* out, uint32_t outVa, uint32_t workerVa) {
     uint8_t* p = out;
     *p++ = 0x51;                                                                  // push ecx
-    *p++ = 0xFF; *p++ = 0x74; *p++ = 0x24; *p++ = 0x08;                           // push dword [esp+8]   (the slot)
-    *p++ = 0xFF; *p++ = 0x74; *p++ = 0x24; *p++ = 0x08;                           // push dword [esp+8]   (the return address)
-    *p++ = 0xE8; StubPut32(p, workerVa - (outVa + (uint32_t)(p - out) + 4));      // call worker(caller, slot)
-    *p++ = 0x83; *p++ = 0xC4; *p++ = 0x08;                                        // add esp, 8
+    *p++ = 0x55;                                                                  // push ebp            (the caller's frame)
+    *p++ = 0xFF; *p++ = 0x74; *p++ = 0x24; *p++ = 0x0C;                           // push dword [esp+0Ch] (the slot)
+    *p++ = 0xFF; *p++ = 0x74; *p++ = 0x24; *p++ = 0x0C;                           // push dword [esp+0Ch] (the return address)
+    *p++ = 0xE8; StubPut32(p, workerVa - (outVa + (uint32_t)(p - out) + 4));      // call worker(caller, slot, ebp) -> eax
+    *p++ = 0x83; *p++ = 0xC4; *p++ = 0x0C;                                        // add esp, 0Ch
     *p++ = 0x59;                                                                  // pop ecx
-    *p++ = 0x8B; *p++ = 0x44; *p++ = 0x24; *p++ = 0x04;                           // mov eax, [esp+4]
     *p++ = 0x89; *p++ = 0x81; StubPut32(p, 0x31C);                                // mov [ecx+31Ch], eax
     *p++ = 0xC2; *p++ = 0x04; *p++ = 0x00;                                        // ret 4
     return (size_t)(p - out);
