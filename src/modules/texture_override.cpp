@@ -150,9 +150,27 @@ void NoteAtlas(void* tex) {
     }
 }
 
+HRESULT FromMemoryInner(void* dev, const void* data, UINT size, UINT w, UINT h, UINT mips, DWORD usage, DWORD fmt, DWORD pool,
+                        DWORD filter, DWORD mipFilter, DWORD colorKey, void* info, void* palette, void** out);
+
+// The keyboard icon atlas is recognised by the game's own file (a DDS of 1024x1408), before any replacement: a texture pack may
+// replace that atlas with a picture of another size, and the replacement path returned before the check, so with such a pack the
+// pad icons were never swapped in.
 HRESULT WINAPI H_FromMemoryEx(void* dev, const void* data, UINT size, UINT w, UINT h, UINT mips, DWORD usage, DWORD fmt,
                               DWORD pool, DWORD filter, DWORD mipFilter, DWORD colorKey, void* info, void* palette,
                               void** out) {
+    const bool atlasFile = data && size >= 128 && size != 0x7FFFFFFFu && ((const u32*)data)[0] == 0x20534444u /*"DDS "*/ &&
+                           ((const u32*)data)[3] == 1408 && ((const u32*)data)[4] == 1024;
+    const HRESULT hr = FromMemoryInner(dev, data, size, w, h, mips, usage, fmt, pool, filter, mipFilter, colorKey, info, palette, out);
+    if (atlasFile && hr >= 0 && out && *out && g_cfg.glyphTheme && !g_keyboardAtlas) {
+        g_keyboardAtlas = *out;
+        Log("textures: keyboard icon atlas found (the game's 1024x1408 file), pad icons will be swapped in with the pad mode");
+    }
+    return hr;
+}
+
+HRESULT FromMemoryInner(void* dev, const void* data, UINT size, UINT w, UINT h, UINT mips, DWORD usage, DWORD fmt, DWORD pool,
+                        DWORD filter, DWORD mipFilter, DWORD colorKey, void* info, void* palette, void** out) {
     if (data && size != 0x7FFFFFFFu) {  // a texture of an XPC by name from a mod (game_files.cpp), exact size from the file
         wchar_t named[MAX_PATH + 16];
         if (GameFileNextTexture(named)) {
