@@ -485,7 +485,8 @@ const char kSmokeDeferredPsText[] =
 
 void* g_smokePs = nullptr;     // forward
 void* g_smokePsDef = nullptr;  // deferred (the light buffer in s8)
-void* g_smokeVs = nullptr;
+void* g_smokeVs = nullptr;      // A38290 with texcoord0.zw = the tangent slot's x, y (fed with the second UV, below)
+void* g_smokeVsGame = nullptr;  // A38290 as the game has it (texcoord0.zw = 0, 1): used when no second UV was found
 bool g_smokeShadersTried = false;
 void* g_smokeMask = nullptr;   // the PC 128x64 smoke texture (c8c48237), seen at its own draw
 void* g_smokeCloud = nullptr;  // UltimateFix\smoke\cloud.png (the Xbox texture of layer B), when the player put it there
@@ -535,6 +536,7 @@ void BuildSmokeShaders(void* dev) {
     typedef HRESULT(WINAPI * MakeFn)(void*, const DWORD*, void**);
     const HRESULT v = ((MakeFn)(*(void***)dev)[91])(dev, code, &g_smokeVs);  // CreateVertexShader
     if (FAILED(v)) g_smokeVs = nullptr;
+    if (FAILED(((MakeFn)(*(void***)dev)[91])(dev, vs, &g_smokeVsGame))) g_smokeVsGame = nullptr;
     g_smokePs = CompileSmokePs(dev, kSmokeForwardPs, sizeof(kSmokeForwardPs) - 1, "forward");
     g_smokePsDef = CompileSmokePs(dev, kSmokeDeferredPsText, sizeof(kSmokeDeferredPsText) - 1, "deferred");
     Log("smoke: shaders for the Xbox smoke: vertex %s, pixel forward %s, deferred %s", g_smokeVs ? "ok" : "failed",
@@ -617,6 +619,188 @@ u32 g_smokeFrame = 0;             // Present count (WaterFrame)
 u32 g_smokeMaskFrame = ~0u;       // the frame the mask sheet was last seen in
 bool g_smokeSwap = false;         // Numpad 6: the two models swapped
 UINT g_drawStartIndex = 0;        // DrawIndexedPrimitive's start index of the draw being made
+UINT g_drawNumVerts = 0;          // DrawIndexedPrimitive's NumVertices of the draw being made
+
+// The second UV. The Xbox reads it from the model's second vertex stream (offset 16: values 0.01..0.99 across each sheet, seen in
+// a RenderDoc dump of the Xbox draws' vertex shader output); the PC stream has no such field (its FLOAT16_2 "tangent" holds
+// something else: -0.43..0.43). The PC port split each smoke model into two meshes of the same 44 vertices: the sheet and a copy
+// that carries the 128x64 mask, and that copy's own UV is the Xbox second UV. So for each sheet vertex the mod finds the mask-mesh
+// vertex at the same place and puts its UV into a small vertex buffer of its own, read as a third stream in the tangent's slot.
+struct SmokeMaskMesh {
+    void* vb;  // no reference kept: compared and locked only while the game draws from it
+    UINT off, stride, first, count;
+};
+SmokeMaskMesh g_smokeMaskMeshes[4];
+int g_smokeMaskMeshCount = 0;
+struct SmokeUv2 {
+    bool tried;
+    void* srcVb;
+    UINT first, count;
+    void* vb;  // MANAGED, FLOAT16_2 per vertex at the sheet's vertex numbers
+};
+SmokeUv2 g_smokeUv2[2];
+struct SmokeUv2Decl {
+    void* own;
+    void* made;
+};
+SmokeUv2Decl g_smokeUv2Decls[8];
+int g_smokeUv2DeclCount = 0;
+
+typedef HRESULT(WINAPI* SmokeGetStreamFn)(void*, UINT, void**, UINT*, UINT*);
+typedef HRESULT(WINAPI* SmokeVbLockFn)(void*, UINT, UINT, void**, DWORD);
+typedef HRESULT(WINAPI* SmokeVbUnlockFn)(void*);
+typedef ULONG(WINAPI* SmokeRelFn)(void*);
+
+float HalfToFloat(u16 h);
+
+// At a mask draw: remember where its mesh lies
+void NoteSmokeMaskMesh(void* dev) {
+    void** dvt = *(void***)dev;
+    void* vb = nullptr;
+    UINT off = 0, stride = 0;
+    ((SmokeGetStreamFn)dvt[101])(dev, 0, &vb, &off, &stride);
+    if (vb) ((SmokeRelFn)(*(void***)vb)[2])(vb);
+    if (!vb || !g_drawNumVerts || stride < 16) return;
+    for (int i = 0; i < g_smokeMaskMeshCount; ++i)
+        if (g_smokeMaskMeshes[i].vb == vb && g_smokeMaskMeshes[i].first == g_drawFirstVertex) return;
+    if (g_smokeMaskMeshCount >= 4) return;
+    g_smokeMaskMeshes[g_smokeMaskMeshCount++] = {vb, off, stride, g_drawFirstVertex, g_drawNumVerts};
+    Log("smoke: a mask mesh: vertex buffer %08X, first vertex %u, %u vertices", (u32)(uintptr_t)vb, g_drawFirstVertex, g_drawNumVerts);
+}
+
+// Copies count vertices (position float3 at 0, UV FLOAT16_2 at 12) of a mesh out of its vertex buffer
+bool ReadSmokeMesh(void* vb, UINT off, UINT stride, UINT first, UINT count, float* pos, u32* uv) {
+    void* p = nullptr;
+    if (FAILED(((SmokeVbLockFn)(*(void***)vb)[11])(vb, off + first * stride, count * stride, &p, 0x10 /*READONLY*/)) || !p) return false;
+    for (UINT i = 0; i < count; ++i) {
+        const u8* v = (const u8*)p + i * stride;
+        __builtin_memcpy(pos + i * 3, v, 12);
+        __builtin_memcpy(uv + i, v + 12, 4);
+    }
+    ((SmokeVbUnlockFn)(*(void***)vb)[12])(vb);
+    return true;
+}
+
+// The vertex buffer with the second UV for the sheet being drawn (entries at its vertex numbers), nullptr when none was found
+void* SmokeUv2For(void* dev, int model) {
+    void** dvt = *(void***)dev;
+    void* vb = nullptr;
+    UINT off = 0, stride = 0;
+    ((SmokeGetStreamFn)dvt[101])(dev, 0, &vb, &off, &stride);
+    if (vb) ((SmokeRelFn)(*(void***)vb)[2])(vb);
+    SmokeUv2& c = g_smokeUv2[model & 1];
+    if (c.tried && c.srcVb == vb && c.first == g_drawFirstVertex && c.count == g_drawNumVerts) return c.vb;
+    if (c.vb) ((SmokeRelFn)(*(void***)c.vb)[2])(c.vb);
+    c = {true, vb, g_drawFirstVertex, g_drawNumVerts, nullptr};
+    constexpr UINT kMax = 1024;
+    static float sheetPos[kMax * 3], maskPos[kMax * 3];
+    static u32 sheetUv[kMax], maskUv[kMax], pick[kMax], bestPick[kMax];
+    const UINT n = g_drawNumVerts;
+    if (!vb || stride < 16 || !n || n > kMax || !ReadSmokeMesh(vb, off, stride, g_drawFirstVertex, n, sheetPos, sheetUv)) {
+        Log("smoke: model %d: the sheet's vertices could not be read (%u vertices, stride %u); the mask is read at 0, 1 as by the game's shader",
+            model + 1, n, stride);
+        return nullptr;
+    }
+    int best = -1;
+    float bestCost = 0.f, bestGap = 0.f;
+    for (int m = 0; m < g_smokeMaskMeshCount; ++m) {
+        const SmokeMaskMesh& mm = g_smokeMaskMeshes[m];
+        if (mm.count > kMax || !ReadSmokeMesh(mm.vb, mm.off, mm.stride, mm.first, mm.count, maskPos, maskUv)) continue;
+        float cost = 0.f, gap = 0.f;
+        for (UINT i = 0; i < n; ++i) {
+            float closest = 3.0e38f;
+            u32 at = 0;
+            for (UINT j = 0; j < mm.count; ++j) {
+                float d = 0.f;
+                for (int k = 0; k < 3; ++k) {
+                    const float e = sheetPos[i * 3 + k] - maskPos[j * 3 + k];
+                    d += e * e;
+                }
+                if (d < closest) {
+                    closest = d;
+                    at = j;
+                }
+            }
+            pick[i] = maskUv[at];
+            cost += closest;
+            if (closest > gap) gap = closest;
+        }
+        if (best < 0 || cost < bestCost) {
+            best = m;
+            bestCost = cost;
+            bestGap = gap;
+            for (UINT i = 0; i < n; ++i) bestPick[i] = pick[i];
+        }
+    }
+    if (best < 0) {
+        static bool told = false;
+        if (!told) {
+            told = true;
+            Log("smoke: model %d: no mask mesh seen yet; the mask is read at 0, 1 as by the game's shader until one is", model + 1);
+        }
+        c.tried = false;  // try again at the next draw
+        return nullptr;
+    }
+    typedef HRESULT(WINAPI * MakeVbFn)(void*, UINT, DWORD, DWORD, DWORD, void**, void*);
+    const UINT bytes = (g_drawFirstVertex + n) * 4;
+    void* own = nullptr;
+    void* p = nullptr;
+    if (FAILED(((MakeVbFn)dvt[26])(dev, bytes, 8 /*WRITEONLY*/, 0, 1 /*MANAGED*/, &own, nullptr)) || !own) return nullptr;
+    if (FAILED(((SmokeVbLockFn)(*(void***)own)[11])(own, g_drawFirstVertex * 4, n * 4, &p, 0)) || !p) {
+        ((SmokeRelFn)(*(void***)own)[2])(own);
+        return nullptr;
+    }
+    for (UINT i = 0; i < n; ++i) ((u32*)p)[i] = bestPick[i];
+    ((SmokeVbUnlockFn)(*(void***)own)[12])(own);
+    c.vb = own;
+    // the gap is a squared distance in model units
+    float gap = bestGap, root = gap > 0.f ? gap : 0.f;
+    for (int it = 0; it < 20 && root > 0.f; ++it) root = 0.5f * (root + gap / root);
+    Log("smoke: model %d: second UV from the mask mesh at first vertex %u (%u vertices matched by place, largest gap %d thousandths)",
+        model + 1, g_smokeMaskMeshes[best].first, n, Milli(root));
+    char line[400];
+    int k = 0;
+    for (UINT i = 0; i < n && i < 8; ++i) {
+        const u16* a = (const u16*)&sheetUv[i];
+        const u16* b = (const u16*)&bestPick[i];
+        k += wsprintfA(line + k, "%d %d | %d %d;  ", Milli(HalfToFloat(a[0])), Milli(HalfToFloat(a[1])), Milli(HalfToFloat(b[0])),
+                       Milli(HalfToFloat(b[1])));
+    }
+    Log("smoke:   UV | second UV: %s", line);
+    return own;
+}
+
+// The game's declaration with the FLOAT16_2 tangent slot moved to stream 2, offset 0 (our second-UV buffer)
+void* SmokeUv2DeclOf(void* dev, void* own) {
+    for (int i = 0; i < g_smokeUv2DeclCount; ++i) if (g_smokeUv2Decls[i].own == own) return g_smokeUv2Decls[i].made;
+    typedef HRESULT(WINAPI * DeclElemsFn)(void*, void*, UINT*);
+    typedef HRESULT(WINAPI * MakeDeclFn)(void*, const void*, void**);
+    u8 el[33 * 8], out[34 * 8];
+    UINT count = 32;
+    void* made = nullptr;
+    if (SUCCEEDED(((DeclElemsFn)(*(void***)own)[4])(own, el, &count))) {
+        int n = 0;
+        bool moved = false;
+        for (UINT i = 0; i < count && i < 32; ++i) {
+            const u8* e = el + i * 8;
+            if (*(const u16*)e == 0xFF) break;
+            if (e[6] == 6 /*TANGENT*/ && e[7] == 0) {
+                moved = true;
+                continue;
+            }
+            __builtin_memcpy(out + n * 8, e, 8);
+            ++n;
+        }
+        static const u8 kUv2[8] = {2, 0, 0, 0, 15 /*FLOAT16_2*/, 0, 6 /*TANGENT*/, 0};
+        static const u8 kEnd[8] = {0xFF, 0, 0, 0, 17 /*UNUSED*/, 0, 0, 0};
+        __builtin_memcpy(out + n * 8, kUv2, 8);
+        __builtin_memcpy(out + (n + 1) * 8, kEnd, 8);
+        if (moved) ((MakeDeclFn)(*(void***)dev)[86])(dev, out, &made);
+        if (!made) Log("smoke: the sheet's vertex declaration has no tangent slot to take the second UV");
+    }
+    if (g_smokeUv2DeclCount < 8) g_smokeUv2Decls[g_smokeUv2DeclCount++] = {own, made};
+    return made;
+}
 // The two smoke models, told apart by their own geometry (vertex buffer, its offset, first vertex and first index) and, when
 // both use the same, by the place of the root bone. The game sorts the translucent draws by distance, so their order in the frame
 // changes with the camera: it does not say which model is which (test19/20 went by it, and the grey layer turned black).
@@ -785,6 +969,7 @@ template <typename Draw> bool SmokeDraw(void* dev, Draw draw, HRESULT* hr) {
     if (maskSheet) {  // the Xbox draws no sheet of the bare mask: it is only read by the sheets
         g_smokeMask = g_stageTex[0];
         g_smokeMaskFrame = g_smokeFrame;
+        NoteSmokeMaskMesh(dev);
         {
             float sc[4];
             ((GetCFn)dvt[95])(dev, 243, sc, 1);  // GetVertexShaderConstantF: the scroll the game set for this draw
@@ -853,7 +1038,22 @@ template <typename Draw> bool SmokeDraw(void* dev, Draw draw, HRESULT* hr) {
         }
     const bool set8 = light && light != bound8;
     if (set8) r_SetTexture(dev, 8, light);
-    ((SetVsFn)dvt[92])(dev, g_smokeVs);
+    // the second UV: our buffer in stream 2 and a declaration that reads it in the tangent's slot; else the game's own shader
+    typedef HRESULT(WINAPI * GetDeclFn)(void*, void**);
+    typedef HRESULT(WINAPI * SetDeclFn)(void*, void*);
+    typedef HRESULT(WINAPI * SetStreamFn)(void*, UINT, void*, UINT, UINT);
+    void* uv2 = SmokeUv2For(dev, model);
+    void* ownDecl = nullptr;
+    ((GetDeclFn)dvt[88])(dev, &ownDecl);
+    void* uv2Decl = uv2 && ownDecl ? SmokeUv2DeclOf(dev, ownDecl) : nullptr;
+    void* own2 = nullptr;
+    UINT own2Off = 0, own2Stride = 0;
+    if (uv2Decl) {
+        ((SmokeGetStreamFn)dvt[101])(dev, 2, &own2, &own2Off, &own2Stride);
+        ((SetStreamFn)dvt[100])(dev, 2, uv2, 0, 4);
+        ((SetDeclFn)dvt[87])(dev, uv2Decl);
+    }
+    ((SetVsFn)dvt[92])(dev, uv2Decl || !g_smokeVsGame ? g_smokeVs : g_smokeVsGame);
     r_SetPs(dev, light ? g_smokePsDef : g_smokePs);
     r_SetTexture(dev, 0, diffuse);
     r_SetTexture(dev, 1, g_smokeMask);
@@ -866,6 +1066,12 @@ template <typename Draw> bool SmokeDraw(void* dev, Draw draw, HRESULT* hr) {
     ((SetVsFn)dvt[92])(dev, ownVs);
     if (ownVs) ((RelFn)(*(void***)ownVs)[2])(ownVs);
     if (set8) r_SetTexture(dev, 8, bound8);
+    if (uv2Decl) {
+        ((SetDeclFn)dvt[87])(dev, ownDecl);
+        ((SetStreamFn)dvt[100])(dev, 2, own2, own2Off, own2Stride);
+    }
+    if (own2) ((RelFn)(*(void***)own2)[2])(own2);
+    if (ownDecl) ((RelFn)(*(void***)ownDecl)[2])(ownDecl);
     for (int st = 0; st < 2; ++st)
         for (int i = 0; i < 5; ++i) setSs(dev, st, kStates[i], saved[st][i]);
     static bool told[2][2];
@@ -1600,6 +1806,7 @@ HRESULT WINAPI H_DrawIp(void* dev, DWORD prim, INT base, UINT minIdx, UINT verts
     }
     g_drawFirstVertex = (UINT)(base + (INT)minIdx);
     g_drawStartIndex = start;
+    g_drawNumVerts = verts;
     g_capDev = dev;
     if (g_cap.on) CapDraw(dev, from, "DIP", prim, count);
     if (g_cfg.traceWater && CurrentPsIsSmoke()) ExplainSmoke(dev, from);
