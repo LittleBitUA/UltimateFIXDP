@@ -198,7 +198,7 @@ Item g_pageDisplay[] = {
      {L"Система", L"System"}},
     {{L"Журнал показу (діагностика)", L"Display log (diagnostics)"}, &g_cfg.displayDebug, kBool, 0, 1, 1, false, L"Display", L"Debug", nullptr, nullptr,
      {L"У режимі без рамки пише в журнал перші кадри й кожну зміну способу показу (з розміром буфера), а завжди: розміри вікна протягом 4 секунд після кожного натискання Esc. Для пошуку проблем із показом.", L"In the borderless window, writes the first frames and every change of the way the picture is presented (with the buffer size) to the log, and always the window geometry for 4 seconds after each Esc press. For tracking down display problems."}, NOTR},
-    {{L"Прозорість панелі меню, %", L"Menu panel opacity, %"}, &g_cfg.menuOpacity, kInt, 20, 100, 5, false, L"Menu", L"Opacity", nullptr, nullptr,
+    {{L"Непрозорість панелі меню, %", L"Menu panel opacity, %"}, &g_cfg.menuOpacity, kInt, 20, 100, 5, false, L"Menu", L"Opacity", nullptr, nullptr,
      {L"Чим менше, тим більше крізь меню видно гру. Текст лишається чітким. Змінюється одразу.", L"The lower, the more of the game shows through the menu. The text stays sharp. Changes at once."},
      {L"Вигляд меню", L"Look of the menu"}},
     {{L"Анімація меню", L"Menu animation"}, &g_cfg.menuAnimations, kBool, 0, 1, 1, false, L"Menu", L"Animations", nullptr, nullptr,
@@ -852,7 +852,7 @@ void DoCamera() { g_cheatPick = 0; CheatYorkToCamera(); }
 
 Item g_pageCheats[] = {
     {{L"Гроші", L"Money"}, &g_cheatPick, kInt, 0, 3, 1, false, nullptr, nullptr, DoMoney, nullptr,
-     {L"Додає гроші (до 99999). Змінюється одразу. Деякі розділи можуть змінювати їх самі.", L"Adds money (up to 99999). Applies at once."},
+     {L"Додає гроші (до 99999). Змінюється одразу. Деякі розділи можуть змінювати їх самі.", L"Adds money (up to 99999). Applies at once. Some chapters may change it themselves."},
      {L"Гроші й здоров'я", L"Money and health"}, kMoneyValues, 3, kMoneyNames, nullptr, false},
     {{L"Невразливість (повне здоров'я)", L"Invulnerability (full health)"}, &g_cfg.cheatGod, kBool, 0, 1, 1, false, nullptr, nullptr, nullptr, nullptr,
      {L"Здоров'я щокадру повертається до максимуму. Анімація смерті від падіння чи вибуху може все одно відіграти.", L"Health is put back to the maximum every frame. A death animation from a fall or an explosion may still play."}, NOTR},
@@ -1482,6 +1482,18 @@ bool g_dragScroll = false;
 constexpr float kLangChipW = 84;
 void SetLanguage(int language);
 
+// The About page's one button, "Open the log folder": where it was last drawn (x, y, w, h; DrawAbout sets it every frame
+// and HandleInput reads it), so a person looking for help finds the logs where they look, not only in Fixes > Diagnostics.
+float g_aboutLogs[4] = {0, 0, 0, 0};
+DWORD g_aboutLogsAt = 0;  // when it was drawn: a click on another page at the same place does nothing
+
+bool AboutClick(float mx, float my) {
+    if (GetTickCount() - g_aboutLogsAt > 500) return false;
+    if (mx < g_aboutLogs[0] || mx >= g_aboutLogs[0] + g_aboutLogs[2] || my < g_aboutLogs[1] || my >= g_aboutLogs[1] + g_aboutLogs[3]) return false;
+    DoOpenLogs();
+    return true;
+}
+
 // Clicks in the sidebar: a section or the language. Returns true when the click was used.
 bool SidebarClick(float mx, float my) {
     for (int p = 0; p < kPageCount; ++p) {
@@ -1544,8 +1556,8 @@ void HandleInput(bool foreground) {
         if (pg.mods) {
             ModsPageInput(Pressed(VK_UP) || g_wheel > 0, Pressed(VK_DOWN) || g_wheel < 0, Pressed(VK_RETURN) || Pressed(VK_SPACE),
                           Pressed(VK_LEFT), Pressed(VK_RIGHT), click && !SidebarClick(mx, my), mx, my);
-        } else if (click) {
-            SidebarClick(mx, my);
+        } else if (click && !SidebarClick(mx, my) && !pg.custom && !pg.residents) {  // only the About text has the button
+            AboutClick(mx, my);
         }
         g_wheel = 0;
         return;
@@ -1820,7 +1832,7 @@ void DrawItemRow(Item& it, float y, bool sel) {
     if (it.names) {
         wsprintfW(value, L"‹  %s  ›", Tx(it.names[*it.value - it.lo]));
         float w = TextWidth(value, 18);
-        DrawText(value, kCr - w, y + 10, sel ? kAccentHi : kText, 18);
+        DrawText(value, kCr - w, y + 10, sel ? kAccentText : kText, 18);
         return;
     }
     if (it.presets) {  // buttons: the presets and one for a value of one's own
@@ -1926,7 +1938,7 @@ void DrawAbout() {
     // Everything below fits between the top of the list and the closing hint: on a small panel the gaps shrink (never the letters)
     // and long lines are cut to the panel's width.
     const float top = kListTop - 4, bottom = kPy + kPh - 40, width = kCr - kCx;
-    const float natural = 84 + 64 + 62 + 22 + 5 * 24 + 10 + 44;
+    const float natural = 84 + 64 + 62 + 22 + 5 * 24 + 10 + 44 + 26;
     float s = (bottom - top) / natural;
     if (s > 1.f) s = 1.f;
     const float line = 24 * s < 18 ? 18 : 24 * s;
@@ -1937,15 +1949,15 @@ void DrawAbout() {
     const float vw = DrawText(ver, kCx, y + 40 * s, kFaint, 15);
     DrawUpdateLine(kCx + vw + 24, y + 40 * s, width - vw - 24, en);
     y += 84 * s;
-    DrawText(en ? L"Author" : L"Автор", kCx, y, kAccentHi, 13, kSemibold);
+    DrawText(en ? L"Author" : L"Автор", kCx, y, kAccentText, 13, kSemibold);
     DrawFitted(en ? L"Dmytro Bydlov, the \"Little Bit\" team" : L"Дмитро Бидлов, команда «Little Bit»", kCx, y + 20, kText, 20, width);
     y += 64 * s;
-    DrawText(en ? L"Licence" : L"Ліцензія", kCx, y, kAccentHi, 13, kSemibold);
+    DrawText(en ? L"Licence" : L"Ліцензія", kCx, y, kAccentText, 13, kSemibold);
     DrawFitted(en ? L"MIT: use and change it freely. All code is our own; other projects gave ideas, facts and addresses."
                   : L"MIT: користуйтесь і змінюйте вільно. Увесь код наш власний; інші проєкти дали ідеї, факти й адреси.",
                kCx, y + 20, kText, 15, width);
     y += 62 * s;
-    DrawText(en ? L"Thanks" : L"Подяки", kCx, y, kAccentHi, 13, kSemibold);
+    DrawText(en ? L"Thanks" : L"Подяки", kCx, y, kAccentText, 13, kSemibold);
     const wchar_t* credits[5] = {
         en ? L"ZachFix (h714je): research of the port and many ideas" : L"ZachFix (h714je): дослідження порту й багато ідей",
         en ? L"DPStabilityFix (Cesario67): saves, timing, DualSense layout" : L"DPStabilityFix (Cesario67): збереження, час, розкладка DualSense",
@@ -1955,9 +1967,24 @@ void DrawAbout() {
     };
     for (int i = 0; i < 5; ++i) DrawFitted(credits[i], kCx, y + 20 + (float)i * line, kMuted, 15, width);
     y += 20 + 5 * line + 10 * s;
-    DrawText(en ? L"Testers" : L"Тестувальники", kCx, y, kAccentHi, 13, kSemibold);
+    DrawText(en ? L"Testers" : L"Тестувальники", kCx, y, kAccentText, 13, kSemibold);
     DrawFitted(L"Gold flin, Tree Fan, EliParker", kCx, y + 20, kMuted, 15, width);
+    y += 44 * s;
+    DrawFitted(en ? L"Website, guides and releases: ultimatefixdp.github.io" : L"Сайт, інструкції й випуски: ultimatefixdp.github.io",
+               kCx, y + 6, kFaint, 15, width);
     DrawText(en ? L"F10 or Esc close" : L"F10 або Esc закрити", kCx, kPy + kPh - 30, kFaint, 13);
+    // A quiet button on the line of the closing hint, at the right; the mouse lights it as the other buttons of the menu.
+    const wchar_t* logs = en ? L"Open the log folder" : L"Відкрити теку журналів";
+    const float bw = TextWidth(logs, 13) + 28, bh = 28, bx = kCr - bw, by = kPy + kPh - 36;
+    float mx = 0, my = 0;
+    const bool hover = MousePosition(&mx, &my) && mx >= bx && mx < bx + bw && my >= by && my < by + bh;
+    FillRoundFramed(bx, by, bw, bh, 6, hover ? kHover : kRaised, hover ? kFaint : kLine2);
+    DrawText(logs, bx + 14, by + 6, hover ? kWhite : kText, 13);
+    g_aboutLogs[0] = bx;
+    g_aboutLogs[1] = by;
+    g_aboutLogs[2] = bw;
+    g_aboutLogs[3] = bh;
+    g_aboutLogsAt = GetTickCount();
 }
 
 // True when `size` bytes at `p` can be read: committed pages that allow reading, over the whole range. The Story page reads
@@ -2065,7 +2092,7 @@ void DrawStory() {
     }
     wchar_t line[400];
 
-    DrawText(en ? L"Progress" : L"Прогрес", kCx, y, kAccentHi, 13, kSemibold);
+    DrawText(en ? L"Progress" : L"Прогрес", kCx, y, kAccentText, 13, kSemibold);
     if (st.episode > 0) wsprintfW(line, en ? L"Episode %d  ·  chapter %d  ·  step %d" : L"Епізод %d  ·  розділ %d  ·  крок %d", st.episode, st.chapter, st.step);
     else wsprintfW(line, en ? L"Before the first episode (chapter %d, step %d)" : L"Ще до першого епізоду (розділ %d, крок %d)", st.chapter, st.step);
     DrawText(line, kCx, y + 20, kText, 20);
@@ -2073,7 +2100,7 @@ void DrawStory() {
              kCx, y + 48, st.finished ? kText : kFaint, 15);
     y += 80;
 
-    DrawText(en ? L"Side quests" : L"Побічні завдання", kCx, y, kAccentHi, 13, kSemibold);
+    DrawText(en ? L"Side quests" : L"Побічні завдання", kCx, y, kAccentText, 13, kSemibold);
     if (!st.sideKnown) {
         DrawText(en ? L"No data: the game's flag table has no such group." : L"Немає даних: у таблиці прапорів гри немає такої групи.", kCx, y + 20, kFaint, 15);
         y += 52;
@@ -2089,7 +2116,7 @@ void DrawStory() {
         y += 12;
     }
 
-    DrawText(en ? L"Current destination" : L"Поточна ціль", kCx, y, kAccentHi, 13, kSemibold);
+    DrawText(en ? L"Current destination" : L"Поточна ціль", kCx, y, kAccentText, 13, kSemibold);
     if (!st.destKnown) {
         lstrcpyW(line, en ? L"No data: the game's flag table has no such group." : L"Немає даних: у таблиці прапорів гри немає такої групи.");
     } else if (st.destIndex < 0) {
@@ -2113,7 +2140,7 @@ void DrawStory() {
     if (points >= 0) y += 19.f * (float)DrawLines(line, kCx, y, kMuted, 15, 19, w, 3, true);  // not with the waypoint switched off
     y += 12;
 
-    DrawText(en ? L"Story flags" : L"Сюжетні прапори", kCx, y, kAccentHi, 13, kSemibold);
+    DrawText(en ? L"Story flags" : L"Сюжетні прапори", kCx, y, kAccentText, 13, kSemibold);
     wsprintfW(line, en ? L"Raised %d of %d" : L"Піднято %d з %d", st.flagsRaised, st.flagsTotal);
     DrawText(line, kCx, y + 20, kText, 17);
 }
@@ -2197,7 +2224,7 @@ void Draw() {
         float h = RowHeight(g_rows[r]);
         if (y + h > kListBottom) break;
         if (g_rows[r].item < 0) {
-            DrawText(Tx(g_rows[r].heading), kCx, y + 11, kAccentHi, 13, kSemibold);
+            DrawText(Tx(g_rows[r].heading), kCx, y + 11, kAccentText, 13, kSemibold);
             float w = TextWidth(Tx(g_rows[r].heading), 13, kSemibold);  // the same weight, or the hairline runs into the text
             FillRect(kCx + w + 12, y + 19, kCr - kCx - w - 12, 1, kLine);
         } else {
@@ -2538,7 +2565,8 @@ void StartHint(void* device) {
     } else {
         lstrcpyW(line, en ? L"Settings, photo mode and mods" : L"Налаштування, фоторежим і моди");
     }
-    const float w = 520, h = sub[0] ? 104 : 84, x = 1280 - w - 28, y = 28;
+    // The frame statistics panel (overlay.cpp) owns the top right corner down to 204; with it on, the card goes under it.
+    const float w = 520, h = sub[0] ? 104 : 84, x = 1280 - w - 28, y = g_cfg.frameStats ? 216.f : 28.f;
     // A raised card with a hairline border and rounded corners, as the cards of the site; the red mark sits inside it
     FillRound(x + 3, y + 4, w, h, 10, alpha(0x60000000));  // shadow
     FillRoundFramed(x, y, w, h, 10, alpha(kRaised), alpha(kLine2));

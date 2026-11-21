@@ -256,8 +256,15 @@ void PollSession(DWORD now) {
     if (memLow) {
         lstrcpyW(titleUk, L"Грі бракує пам'яті");
         lstrcpyW(titleEn, L"The game is running out of memory");
-        lstrcpyW(uk, L"Вільного адресного простору гри майже не лишилось, і наступне завантаження може закінчитися вильотом. Збережіться й перезапустіть гру. Допомагає й ufx_laa.exe (4 ГБ) та менший масштаб рендеру.");
-        lstrcpyW(en, L"The game has almost no free address space left, and the next load may crash. Save and restart the game. ufx_laa.exe (4 GB) and a smaller render scale help too.");
+        // ufx_laa.exe is no longer shipped: the 4 GB flag is the mod's own job now (AutoLargeAddress), so the notice points
+        // at that row, and only while this run still has 2 GB (with the flag the restart and a lower scale are all that help).
+        if (HasLargeAddressAware(GetModuleHandleW(nullptr))) {
+            lstrcpyW(uk, L"Вільного адресного простору гри майже не лишилось, і наступне завантаження може закінчитися вильотом. Збережіться й перезапустіть гру. Допомагає й менша «Роздільність 3D».");
+            lstrcpyW(en, L"The game has almost no free address space left, and the next load may crash. Save and restart the game. A lower \"3D resolution\" helps too.");
+        } else {
+            lstrcpyW(uk, L"Вільного адресного простору гри майже не лишилось, і наступне завантаження може закінчитися вильотом. Збережіться й перезапустіть гру. Допомагають менша «Роздільність 3D» і «4 ГБ пам'яті автоматично» (F10, «Виправлення»).");
+            lstrcpyW(en, L"The game has almost no free address space left, and the next load may crash. Save and restart the game. A lower \"3D resolution\" and \"4 GB of memory automatically\" (F10, \"Fixes\") help too.");
+        }
     } else if (poolLow) {
         lstrcpyW(titleUk, L"Варто перезапустити гру");
         lstrcpyW(titleEn, L"Time to restart the game");

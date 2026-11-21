@@ -348,9 +348,9 @@ void ResidentsPage(float left, float top, float right, float bottom) {
     const float nameW = 112, width = right - left;
     const float nowX = left + nameW, nextX = nowX + (width - nameW) * 0.54f;
     const float headY = top + 50, listTop = headY + 24;
-    DrawText(en ? L"Resident" : L"Житель", left, headY, kAccentHi, 13, kSemibold);
-    DrawText(en ? L"Now (since)" : L"Зараз (від)", nowX, headY, kAccentHi, 13, kSemibold);
-    DrawText(en ? L"Next (from)" : L"Далі (від)", nextX, headY, kAccentHi, 13, kSemibold);
+    DrawText(en ? L"Resident" : L"Житель", left, headY, kAccentText, 13, kSemibold);
+    DrawText(en ? L"Now (since)" : L"Зараз (від)", nowX, headY, kAccentText, 13, kSemibold);
+    DrawText(en ? L"Next (from)" : L"Далі (від)", nextX, headY, kAccentText, 13, kSemibold);
     FillRect(left, headY + 19, width, 1, kLine);
 
     int visible = (int)((bottom - listTop) / kRowH);

@@ -303,7 +303,7 @@ static const char kDefaultIni[] =
     "; 1 = bypass the test at the first place (what ZachFix does), 2 = at both places.\r\n"
     "InteriorVisibility=1\r\n"
     "; Far objects that the game shows as a low detail package get their full model from farther away: 1 = as the game,\r\n"
-    "; 2 = one more ring of cells, 3 = the whole streamed area. Costs memory (use ufx_laa.exe). Changes at once.\r\n"
+    "; 2 = one more ring of cells, 3 = the whole streamed area. Costs memory (the 4 GB flag, AutoLargeAddress). Changes at once.\r\n"
     "Alternate3DScale=1\r\n"
     "\r\n"
     "[Gameplay]\r\n"

@@ -969,10 +969,22 @@ void PerfPostEnd(void* dev) {
     g_underTimed = false;
 }
 
+namespace {
+// The box of both performance panels: the start card's rounded shape in the site's colours instead of the old square black.
+// It stays see-through, as the old one was, since it sits over the game all the time. FillRoundFramed lays the inside over
+// the frame's shape, so the frame's alpha adds under the inside too: 0x60 for a hairline that shows over a dark scene, 0xB0
+// for the inside, together a little more cover than the old box's 0.69 (1 - (1 - 0x60/255) * (1 - 0xB0/255), about 0.81).
+void PerfPanelBox(float x, float y, float w, float h) {
+    FillRoundFramed(x, y, w, h, 8.f, theme::Alpha(theme::kBg, 0xB0), theme::Alpha(theme::kLine2, 0x60));
+}
+}  // namespace
+
 void PerfOverlayFrame(void* dev, double fps, double frameMs, double presentMs, double physicsMs) {
     if (!g_cfg.perfOverlay) return;
     static u64 lastUpdate = 0;
-    static wchar_t line1[96] = L"", line2[128] = L"";
+    // line2 was one line of about 75 characters, wider than its 520-unit box in Ukrainian; now it is two short lines (the CPU
+    // side, then the mod's GPU passes) in a box as wide as its text.
+    static wchar_t line1[96] = L"", line2[96] = L"", line3[96] = L"";
     LARGE_INTEGER now, freq;
     QueryPerformanceCounter(&now);
     QueryPerformanceFrequency(&freq);
@@ -984,20 +996,35 @@ void PerfOverlayFrame(void* dev, double fps, double frameMs, double presentMs, d
         static int logTick = 0;
         if (++logTick % 10 == 0 || g_cfg.language == 1) {  // the log is always in English
             wsprintfW(line1, L"%d FPS   %d.%d ms", (int)(fps + 0.5), (int)frameMs, f10);
-            wsprintfW(line2, L"physics %d.%d ms  Present wait %d.%d ms  mod GPU: SSAO %d.%d, post %d.%d ms", (int)physicsMs, p10,
-                      (int)presentMs, w10, (int)g_timerAo.ms, a10, (int)post, g10);
-            if (logTick % 10 == 0) Log("perf: %S | %S", line1, line2);
+            wsprintfW(line2, L"physics %d.%d ms  Present wait %d.%d ms", (int)physicsMs, p10, (int)presentMs, w10);
+            wsprintfW(line3, L"mod GPU: SSAO %d.%d, post %d.%d ms", (int)g_timerAo.ms, a10, (int)post, g10);
+            if (logTick % 10 == 0) Log("perf: %S | %S  %S", line1, line2, line3);  // the same log line as before the split
         }
         if (g_cfg.language != 1) {
             wsprintfW(line1, L"%d FPS   %d,%d мс", (int)(fps + 0.5), (int)frameMs, f10);
-            wsprintfW(line2, L"фізика %d,%d мс  очікування Present %d,%d мс  GPU мода: SSAO %d,%d, пост %d,%d мс", (int)physicsMs, p10,
-                      (int)presentMs, w10, (int)g_timerAo.ms, a10, (int)post, g10);
+            wsprintfW(line2, L"фізика %d,%d мс  очікування Present %d,%d мс", (int)physicsMs, p10, (int)presentMs, w10);
+            wsprintfW(line3, L"GPU мода: SSAO %d,%d, пост %d,%d мс", (int)g_timerAo.ms, a10, (int)post, g10);
         }
     }
     if (!OverlayBegin(dev)) return;
-    FillRect(8, 8, 520, 44, 0xB0000000);
-    DrawText(line1, 14, 10, theme::kWhite, 16);
-    DrawText(line2, 14, 30, theme::kMuted, 13);
+    // The box follows its widest line but only grows (in 8-unit steps), so it does not twitch twice a second as the digits
+    // change; a switch of the language starts it over.
+    static float boxW = 0.f;
+    static int boxLang = -1;
+    if (boxLang != g_cfg.language) {
+        boxLang = g_cfg.language;
+        boxW = 0.f;
+    }
+    float need = TextWidth(line1, 16);
+    const float w2 = TextWidth(line2, 13), w3 = TextWidth(line3, 13);
+    if (w2 > need) need = w2;
+    if (w3 > need) need = w3;
+    need = (float)(((int)need + 24 + 7) / 8 * 8);
+    if (need > boxW) boxW = need;
+    PerfPanelBox(8.f, 8.f, boxW, 68.f);
+    DrawText(line1, 20, 14, theme::kWhite, 16);
+    DrawText(line2, 20, 35, theme::kMuted, 13);
+    DrawText(line3, 20, 52, theme::kMuted, 13);
     OverlayEnd();
 }
 
@@ -1046,7 +1073,7 @@ void FrameStatsPanel(void* dev, double totalMs, double gameMs, double physicsMs,
     }
     if (!OverlayBegin(dev)) return;
     const float w = 214.f, x = 1280.f - w - 8.f, y = 8.f;
-    FillRect(x, y, w, 196.f, 0xB0000000);
+    PerfPanelBox(x, y, w, 196.f);
     static const wchar_t* const namesUk[7] = {L"Всього:", L"Гра (CPU):", L"  з них фізика:", L"Present:", L"Найгірший:", L"Проходи мода:", L"Потік гри працює:"};
     static const wchar_t* const namesEn[7] = {L"Total:", L"Game (CPU):", L"  of it physics:", L"Present:", L"Worst:", L"Mod passes:", L"Game thread busy:"};
     const wchar_t* const* names = g_cfg.language == 1 ? namesEn : namesUk;
@@ -1065,7 +1092,7 @@ void FrameStatsPanel(void* dev, double totalMs, double gameMs, double physicsMs,
     for (int i = 0; i < 120; ++i)
         if (g_frameHist[i] * 1.05 > scale) scale = g_frameHist[i] * 1.05;
     const float gx = x + 8.f, gy = y + 186.f, gh = 38.f, bw = (w - 16.f) / 120.f;
-    FillRect(gx, gy - gh, w - 16.f, gh, 0x40000000);
+    FillRound(gx, gy - gh, w - 16.f, gh, 3.f, theme::Alpha(theme::kBg, 0x80));
     for (int i = 0; i < 120; ++i) {
         double v = g_frameHist[(g_frameHistPos + i) % 120];
         float h = (float)(v / scale) * gh;
@@ -1073,7 +1100,7 @@ void FrameStatsPanel(void* dev, double totalMs, double gameMs, double physicsMs,
         if (h < 1.f) h = 1.f;
         FillRect(gx + (float)i * bw, gy - h, bw > 1.f ? bw - 0.4f : bw, h, v > totalMs * 1.6 + 2.0 ? theme::kAccentHi : theme::kMuted);
     }
-    FillRect(gx, gy - (float)(16.7 / scale) * gh, w - 16.f, 1.f, 0x90FFFFFF);
+    FillRect(gx, gy - (float)(16.7 / scale) * gh, w - 16.f, 1.f, theme::Alpha(theme::kText, 0x90));
     OverlayEnd();
 }
 

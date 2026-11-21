@@ -22,10 +22,12 @@ constexpr u32 kWhite = 0xFFFFFFFF;     // the selected row's label, text on red,
 constexpr u32 kText = 0xFFEDEDEE;      // --text
 constexpr u32 kMuted = 0xFFA1A1A8;     // --muted: descriptions, labels of buttons that are not chosen
 constexpr u32 kFaint = 0xFF8A8A92;     // --faint: key hints, versions, secondary columns
-// The one accent. Red text (headings, a focused value) uses the lighter one: the darker red is a fill colour, as text on the
-// panel it would fall under 3.5:1.
+// The one accent, in three tints. kAccent and kAccentHi are fill colours. As text even kAccentHi is only 3.9:1 on the panel
+// and 3.4:1 on the selected row, and the 13 px headings need 4.5:1 (WCAG for small text), so red text has its own lighter
+// tint: 5.9:1 on the panel, 5.2:1 on the selected row. Changing kAccentHi instead would also lighten the focused buttons.
 constexpr u32 kAccent = 0xFFC4192B;    // --accent: a switch that is on, the chosen button, selection bars
-constexpr u32 kAccentHi = 0xFFD92A3C;  // --accent-hi: red text, a pressed or focused button
+constexpr u32 kAccentHi = 0xFFD92A3C;  // --accent-hi: a pressed or focused button, a hovered chosen one
+constexpr u32 kAccentText = 0xFFF0606C;  // red text: headings, a focused value
 // Status, kept for what they say and nothing else.
 constexpr u32 kWarn = 0xFFE5A83A;      // amber: only the "restart" tag, what waits for a restart, the mark of a warning notice
 constexpr u32 kError = 0xFFFF8A80;     // coral: only failures (also the mark of a notice that reports one)
