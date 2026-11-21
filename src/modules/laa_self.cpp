@@ -1,6 +1,6 @@
 // Four gigabytes of address space without a separate program. The "large address aware" bit of the PE header is read by
 // Windows when it starts DP.exe, so the running game cannot change its own limit; the mod prepares the next start instead:
-//   1. a copy of DP.exe gets the bit (only the 2 bytes of the header change, as ufx_laa.exe does),
+//   1. a copy of DP.exe gets the bit (only the 2 bytes of the header change, as the old ufx_laa.exe did),
 //   2. the running DP.exe is renamed (Windows allows renaming a running program) to DP.exe.bak, or to DP.exe.old when a
 //      backup is already there (deleted at the next start),
 //   3. the copy takes the name DP.exe.
@@ -109,10 +109,10 @@ void LargeAddressFrame() {
         ShowNotice(L"4 ГБ пам'яті увімкнено", L"4 GB of memory switched on",
                    L"Гра отримає 4 ГБ адресного простору замість 2 з наступного запуску. Оригінал DP.exe збережено як DP.exe.bak.",
                    L"The game gets 4 GB of address space instead of 2 from the next start. The original DP.exe is kept as DP.exe.bak.", 12);
-    else
+    else  // ufx_laa.exe is no longer in the archive; the worker runs again at every start while the flag is missing
         ShowNotice(L"4 ГБ не ввімкнено", L"4 GB not switched on",
-                   L"Мод не зміг підготувати DP.exe (тека гри без права запису?). Можна запустити ufx_laa.exe з архіву. Подробиці в ufx.log.",
-                   L"The mod could not prepare DP.exe (the game folder is not writable?). You can run ufx_laa.exe from the archive. Details in ufx.log.", 12, kNoticeError);
+                   L"Мод не зміг підготувати DP.exe (тека гри без права запису?). Запустіть гру раз від імені адміністратора: мод спробує знову. Подробиці в ufx.log.",
+                   L"The mod could not prepare DP.exe (the game folder is not writable?). Start the game once as administrator: the mod tries again. Details in ufx.log.", 12, kNoticeError);
 }
 
 }  // namespace ufx

@@ -104,6 +104,10 @@ static const char kDefaultIni[] =
     "\r\n"
     "; Windowed Reset() after Alt+Tab no longer fails (the game used to freeze).\r\n"
     "ResetRefreshFix=1\r\n"
+    "; A frame of zero length (a long Windows uptime, hundreds of frames per second, the mod's own pauses) made the toolbox drop back\r\n"
+    "; to the WEAPONS/ITEMS choice (\"cannot take items out\"), and the side missions list or the map's mission view hang on an empty\r\n"
+    "; screen with dead buttons: a panel that was just opening was taken for closed. 1 = it waits for the next frame. Restart needed.\r\n"
+    "ZeroFrameMenus=1\r\n"
     "; A packed game file that does not unpack (damaged, or the disk cannot read it) was read again without end: a silent hang on a\r\n"
     "; loading screen. 1 = it is read 5 times at most, then reported to the game as missing and named in the log; the game may then\r\n"
     "; go on without it or stop with a crash report, but it does not hang silently. Unpacking also stops at the end of its buffer\r\n"
@@ -164,8 +168,13 @@ static const char kDefaultIni[] =
     "; SMAA only: how far along an edge its end is looked for. 0 = low (about 8 pixels), 1 = medium (16), 2 = high (32:\r\n"
     "; the smoothest nearly horizontal and nearly vertical lines). Changes at once.\r\n"
     "SmaaQuality=2\r\n"
-    "; Sharpen the final picture (unsharp mask), percent 0..100. 0 = off, 50 by default. Changes at once.\r\n"
+    "; Sharpen the final picture, percent 0..100. 0 = off, 50 by default. Changes at once.\r\n"
     "Sharpen=50\r\n"
+    "; How Sharpen works. 1 = contrast-adaptive (our own code of AMD FidelityFX RCAS, MIT): soft, low-contrast detail gets\r\n"
+    "; the full strength and contrasty edges only a little, so a dark branch against the sky gets no bright halo, and noise\r\n"
+    "; is not raised; best with RenderScale 150..200. When its shader cannot start, the log says so and 0 is used.\r\n"
+    "; 0 = the old unsharp mask, the same push on every edge. Changes at once.\r\n"
+    "SharpenMode=1\r\n"
     "; 1 = smoothing, sharpening and GameLook go onto the 3D picture only, before the game draws its interface: subtitles,\r\n"
     "; icons, the map and the game's menus stay sharp (the console never filtered them either). The TV gamma and the photo\r\n"
     "; mode sliders still cover the whole frame. Frames without the game's 3D picture (title, loading screens, videos) are\r\n"
@@ -294,7 +303,7 @@ static const char kDefaultIni[] =
     "; 1 = bypass the test at the first place (what ZachFix does), 2 = at both places.\r\n"
     "InteriorVisibility=1\r\n"
     "; Far objects that the game shows as a low detail package get their full model from farther away: 1 = as the game,\r\n"
-    "; 2 = one more ring of cells, 3 = the whole streamed area. Costs memory (use ufx_laa.exe). Changes at once.\r\n"
+    "; 2 = one more ring of cells, 3 = the whole streamed area. Costs memory (the 4 GB flag, AutoLargeAddress). Changes at once.\r\n"
     "Alternate3DScale=1\r\n"
     "\r\n"
     "[Gameplay]\r\n"
@@ -478,6 +487,10 @@ static const char kDefaultIni[] =
     "; camera should change, then send UltimateFix\\ufx.log. Off by default (every line is written on the game thread).\r\n"
     "; With it on, Numpad 2 writes a \"camera mark\" line at the moment the camera goes wrong.\r\n"
     "TraceCamera=0\r\n"
+    "; Test switch for ZeroFrameMenus: N = every Nth frame the game gets the same time as the frame before (a frame of zero length).\r\n"
+    "; With ZeroFrameMenus=0 the toolbox and the side missions list then break the way they do after days of Windows uptime; with\r\n"
+    "; ZeroFrameMenus=1 they must not. 0 = off (always leave it at 0 for play). 2..600, read at the start.\r\n"
+    "ForceZeroFrame=0\r\n"
     "\r\n"
     "[Menu]\r\n"
     "; 1 = a small card in the top right corner for the first seconds of a start: the mod's settings are on F10.\r\n"
@@ -684,6 +697,11 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.removeExtraJoyPoll = (int)GetPrivateProfileIntW(L"Fixes", L"RemoveExtraJoyPoll", 1, ini);
     g_cfg.skipIntro = (int)GetPrivateProfileIntW(L"Fixes", L"SkipIntro", 1, ini);
     g_cfg.resetRefreshFix = (int)GetPrivateProfileIntW(L"Fixes", L"ResetRefreshFix", 1, ini);
+    g_cfg.zeroFrameMenus = GetPrivateProfileIntW(L"Fixes", L"ZeroFrameMenus", 1, ini) ? 1 : 0;
+    g_cfg.forceZeroFrame = (int)GetPrivateProfileIntW(L"Debug", L"ForceZeroFrame", 0, ini);
+    if (g_cfg.forceZeroFrame < 0) g_cfg.forceZeroFrame = 0;
+    if (g_cfg.forceZeroFrame == 1) g_cfg.forceZeroFrame = 2;  // every frame would stop the game's time altogether
+    if (g_cfg.forceZeroFrame > 600) g_cfg.forceZeroFrame = 600;
     g_cfg.borderless = (int)GetPrivateProfileIntW(L"Display", L"Borderless", 1, ini);
     g_cfg.hideCursor = (int)GetPrivateProfileIntW(L"Display", L"HideCursor", 1, ini);
     g_cfg.dpiAware = (int)GetPrivateProfileIntW(L"Display", L"DpiAware", 1, ini);
@@ -788,6 +806,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.sharpen = (int)GetPrivateProfileIntW(L"Graphics", L"Sharpen", 50, ini);
     if (g_cfg.sharpen < 0) g_cfg.sharpen = 0;
     if (g_cfg.sharpen > 100) g_cfg.sharpen = 100;
+    g_cfg.sharpenMode = GetPrivateProfileIntW(L"Graphics", L"SharpenMode", 1, ini) == 0 ? 0 : 1;
     g_cfg.filtersUnderHud = GetPrivateProfileIntW(L"Graphics", L"FiltersUnderHud", 1, ini) != 0 ? 1 : 0;
     g_cfg.gameAlias = (int)GetPrivateProfileIntW(L"Graphics", L"GameAliasFilter", 0, ini);
     if (g_cfg.gameAlias < 0 || g_cfg.gameAlias > 2) g_cfg.gameAlias = 0;

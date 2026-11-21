@@ -40,6 +40,8 @@ struct Config {
     int removeExtraJoyPoll;  // drop the per-frame joyGetPosEx call that passes uninitialised memory
     int skipIntro;           // skip publisher logos
     int resetRefreshFix;     // windowed Reset() no longer fails after Alt+Tab
+    int zeroFrameMenus;      // a zero-length frame no longer closes the toolbox, side missions list or map mission view (restart needed)
+    int forceZeroFrame;      // [Debug] every Nth frame the game gets the time of the frame before (dt == 0), to reproduce the menu hangs; 0 = off
     int borderless;          // borderless window that fills the monitor (the picture is scaled keeping 16:9 with scaleToWindow)
     int hideCursor;          // hide the mouse cursor over the game window
     int dpiAware;            // do not let Windows scale the window (blurry on 125%/150% displays)
@@ -94,6 +96,7 @@ struct Config {
     int antialiasMode;       // how the edges are smoothed: 0 the FXAA-like pass, 1 SMAA 1x (falls back to 0 when it cannot run)
     int smaaQuality;         // SMAA: 0 low, 1 medium, 2 high (how far along an edge its end is looked for)
     int sharpen;             // sharpening of the final picture in percent (0 = off)
+    int sharpenMode;         // how it sharpens: 0 the plain unsharp mask, 1 contrast-adaptive (AMD FidelityFX RCAS; falls back to 0)
     int filtersUnderHud;     // smoothing, sharpening and the in-game look run after the game's composite, under its 2D layer
     int gameAlias;           // the game's own unused 4-tap filter in the composite: 0 off (as on PC), 1 the game's offset, 2 a quarter of an output pixel
     int screenshotKey;       // virtual key code for a PNG screenshot, 0 = off
@@ -221,6 +224,16 @@ HWND GameWindowHandle();
 // log.cpp
 void LogInit(const wchar_t* path);
 void Log(const char* fmt, ...);
+// Timing for the log only (no behaviour depends on it). The ticks are the real QueryPerformanceCounter of kernel32: the hook
+// of RelativeQpc sits in DP.exe's import table, not in ours. wsprintf has no %f, so a time is printed as "%u.%u ms" from
+// MsWhole and MsTenth of a span in microseconds.
+u64 TickNow();
+u32 TickMicros(u64 from, u64 to);  // saturates at about 71 minutes
+inline u32 MsWhole(u32 micros) { return micros / 1000; }
+inline u32 MsTenth(u32 micros) { return micros / 100 % 10; }
+// "shader <name>: compiled in N ms (<profile>)", or that no profile compiled when `profile` is null. Every shader of the
+// mod is compiled at its first use on the render thread and kept for the run, so each name is logged once.
+void LogShaderTime(const char* name, const char* profile, u64 started);
 
 // config.cpp
 void LoadConfig(const wchar_t* iniFile);
@@ -253,6 +266,7 @@ bool InstallJoyPoll();
 bool InstallSkipIntro();
 bool InstallLanguageSlot();
 bool InstallResetRefreshFix();
+bool InstallZeroFrameMenus();
 bool InstallDisplay();
 bool InstallGraphicsTweaks();
 bool InstallD3dTrace(bool full);
@@ -295,6 +309,11 @@ void ApplySurround();      // follows [Audio] Surround (also called from the men
 bool InstallMapFix();
 void ApplyMapFix();
 bool InstallTextureOverride();
+// texture_override.cpp: what the texture loads cost (log only). Per kind of load: 0 = mipmaps made by D3DX (GenerateMips),
+// 1 = as the game gave it, 2 = a file of a pack or a mod. False when the texture hook is not in (then nothing is counted).
+constexpr int kLoadKinds = 3;
+bool TextureLoadTotals(u32* loads, u32* micros);  // both kLoadKinds long, counted since the start (wrapping)
+void TextureLoadFrame();                          // once per frame from the Present hook: ends a run of loads in the log
 void* GlyphAtlasFor(void* device, void* texture);  // SetTexture hook: the pad icons instead of the keyboard atlas
 bool SonyPadActive();
 bool InstallWorldExtra();
@@ -425,6 +444,15 @@ bool DrawNoticeInBox(float x, float y, float w, float h, int context);
 bool DrawNoticeBelow(float centreX, float top, float maxW);
 void OpenLogFolder();          // the F10 menu: Explorer on the UltimateFix folder
 void WriteDiagnosticReport();  // the F10 menu: UltimateFix\ufx_report.txt
+
+// 2 to the power of tenths: 2^(t/10) for t in -30..30 without a C runtime (exposure in ssao.cpp, sharpness in overlay.cpp).
+inline float Pow2Tenths(int t) {
+    const float step = 1.0717735f;  // 2^0.1
+    float v = 1.0f;
+    if (t > 0) for (int i = 0; i < t; ++i) v *= step;
+    else for (int i = 0; i < -t; ++i) v /= step;
+    return v;
+}
 
 namespace ui {
 bool Install();                      // input blocking hooks; returns true if the menu is available

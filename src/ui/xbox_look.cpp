@@ -419,7 +419,11 @@ void* CopyShader(void* dev, int kind) {
     }
     __builtin_memcpy(p, kLookSource, sizeof(kLookSource));  // with its terminating zero
     const size_t length = (size_t)(p - g_copySource) + sizeof(kLookSource) - 1;
-    if (!BuildPixelShader(dev, g_copySource, length, &g_copies[kind], kProfilesLook, "xboxlook")) {
+    // Each kind is its own compile, so the timing line names the defines it was built with.
+    char name[64];
+    wsprintfA(name, "xboxlook copy%s%s%s", (kind & kCopyAlias) ? " +alias" : "", (kind & kCopySmooth) ? " +smooth" : "",
+              (kind & kCopyDither) ? " +dither" : "");
+    if (!BuildPixelShader(dev, g_copySource, length, &g_copies[kind], kProfilesLook, name)) {
         g_copies[kind] = nullptr;
         g_copyFailed[kind] = true;
         if (kind)

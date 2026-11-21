@@ -213,6 +213,118 @@ void NoteAtlas(void* tex) {
     }
 }
 
+// ---- Load timing (log only) -------------------------------------------------------------------------------------
+// What a texture load costs in this hook (the hash when a pack or the dump needs it, then D3DX), so that the slow pause map
+// and the cost of GenerateMips can be read from the log: with mipmaps made D3DX decodes the DXT data, filters every level
+// and encodes it again on the CPU of the thread that loads.
+// Three kinds (kLoadKinds): mipmaps made, as the game gave it, a file of a pack or a mod. A window starts at a load and is
+// written once it is a second old (by the next load or by the Present hook), so there is at most one line a second and none
+// while nothing loads. A run of loads ends after 2 s without one; a run that took more than one window gets a summary line.
+// Loads come from the game's loading thread and the window thread, so the counters sit behind a small spin lock.
+struct LoadWindow {
+    u64 first, last;            // ticks of the first and the last load in it
+    u32 loads[kLoadKinds];
+    u32 micros[kLoadKinds];
+    u32 worstUs, worstW, worstH;
+    int worstKind;
+    DWORD worstThread;
+    bool otherThreads;          // some load in it ran on another thread than the worst one
+    u32 windows;                // windows it took (only the run uses this)
+};
+const char* const kKindNames[kLoadKinds] = {"with mipmaps made", "as given", "from a pack"};
+constexpr u32 kWindowUs = 1000000, kRunGapUs = 2000000;
+constexpr u32 kMaxWindowLines = 600, kMaxRunLines = 300;
+volatile LONG g_statLock = 0;
+volatile LONG g_statBusy = 0;  // a window is open
+volatile LONG g_runOpen = 0;   // a run has loads: the Present hook takes the lock only while one of the two is set
+bool g_statHooked = false;     // the texture hook is in
+LoadWindow g_window, g_run;
+u32 g_totalLoads[kLoadKinds], g_totalUs[kLoadKinds];  // since the start, wrapping (map_fix.cpp takes differences)
+u32 g_windowLines = 0, g_runLines = 0;
+
+void StatLock() {
+    while (InterlockedExchange(&g_statLock, 1)) Sleep(0);
+}
+void StatUnlock() { InterlockedExchange(&g_statLock, 0); }
+
+void Add(LoadWindow& win, int kind, u64 started, u64 now, u32 us, u32 width, u32 height, DWORD thread) {
+    if (!win.loads[0] && !win.loads[1] && !win.loads[2]) win.first = started;
+    win.last = now;
+    ++win.loads[kind];
+    win.micros[kind] += us;
+    if (us >= win.worstUs) {
+        if (win.worstThread && win.worstThread != thread) win.otherThreads = true;
+        win.worstUs = us;
+        win.worstW = width;
+        win.worstH = height;
+        win.worstKind = kind;
+        win.worstThread = thread;
+    } else if (win.worstThread != thread) {
+        win.otherThreads = true;
+    }
+}
+
+// Writes one window or run; `what` begins the line. Called outside the lock with a copy.
+void LogLoads(const char* what, const LoadWindow& win) {
+    const u32 span = TickMicros(win.first, win.last);
+    char parts[kLoadKinds][64];
+    for (int k = 0; k < kLoadKinds; ++k)
+        wsprintfA(parts[k], "%u %s %u.%u ms", win.loads[k], kKindNames[k], MsWhole(win.micros[k]), MsTenth(win.micros[k]));
+    const HWND window = GameWindowHandle();
+    const DWORD windowThread = window ? GetWindowThreadProcessId(window, nullptr) : 0;
+    Log("textures: %s %u.%u s: %s, %s, %s; worst %u.%u ms (%ux%u %s) on thread %u (%s%s)", what, span / 1000000, span / 100000 % 10,
+        parts[0], parts[1], parts[2], MsWhole(win.worstUs), MsTenth(win.worstUs), win.worstW, win.worstH, kKindNames[win.worstKind],
+        (u32)win.worstThread, !windowThread ? "no game window yet" : win.worstThread == windowThread ? "the window thread" : "not the window thread",
+        win.otherThreads ? ", other threads loaded too" : "");
+}
+
+// Under the lock: takes the window when it is a second old at `now`, and the run when its last load is 2 s before `now`
+// (the window is older still, so it has gone first). Logs outside the lock, from copies.
+void FlushLoads(u64 now) {
+    LoadWindow window = {}, run = {};
+    bool logWindow = false, logRun = false;
+    StatLock();
+    if (g_statBusy && TickMicros(g_window.first, now) >= kWindowUs) {
+        window = g_window;
+        g_window = LoadWindow{};
+        g_statBusy = 0;
+        ++g_run.windows;
+        logWindow = g_windowLines < kMaxWindowLines;
+        if (logWindow) ++g_windowLines;
+    }
+    if (g_runOpen && !g_statBusy && TickMicros(g_run.last, now) >= kRunGapUs) {
+        run = g_run;
+        g_run = LoadWindow{};
+        g_runOpen = 0;
+        logRun = run.windows > 1 && g_runLines < kMaxRunLines;  // one window: its own line said it all
+        if (logRun) ++g_runLines;
+    }
+    StatUnlock();
+    if (logWindow) LogLoads("loads in", window);
+    if (logWindow && g_windowLines == kMaxWindowLines) Log("textures: no more per-second load lines this run (%u), runs of loads are still summed up", kMaxWindowLines);
+    if (logRun) LogLoads("a run of loads ended, in all over", run);
+}
+
+void NoteLoad(int kind, u64 started, const void* data, UINT size) {
+    const u64 now = TickNow();
+    const u32 us = TickMicros(started, now);
+    u32 width = 0, height = 0;
+    if (data && size >= 128 && size != 0x7FFFFFFFu && ((const u32*)data)[0] == 0x20534444u /*"DDS "*/) {  // the size marker: no header
+        width = ((const u32*)data)[4];
+        height = ((const u32*)data)[3];
+    }
+    const DWORD thread = GetCurrentThreadId();
+    FlushLoads(started);  // a window a second old, or a run 2 s quiet, ends before this load (the Present hook may not run in a loading screen)
+    StatLock();
+    Add(g_window, kind, started, now, us, width, height, thread);
+    Add(g_run, kind, started, now, us, width, height, thread);
+    g_statBusy = 1;
+    g_runOpen = 1;
+    ++g_totalLoads[kind];
+    g_totalUs[kind] += us;
+    StatUnlock();
+}
+
 HRESULT FromMemoryInner(void* dev, const void* data, UINT size, UINT w, UINT h, UINT mips, DWORD usage, DWORD fmt, DWORD pool,
                         DWORD filter, DWORD mipFilter, DWORD colorKey, void* info, void* palette, void** out);
 
@@ -242,12 +354,15 @@ HRESULT WINAPI H_FromMemoryEx(void* dev, const void* data, UINT size, UINT w, UI
 
 HRESULT FromMemoryInner(void* dev, const void* data, UINT size, UINT w, UINT h, UINT mips, DWORD usage, DWORD fmt, DWORD pool,
                         DWORD filter, DWORD mipFilter, DWORD colorKey, void* info, void* palette, void** out) {
+    // One start for every path below: a file that cannot be loaded and the original made after it are one load to the game.
+    const u64 started = TickNow();
     if (data && size != 0x7FFFFFFFu) {  // a texture of an XPC by name from a mod (game_files.cpp), exact size from the file
         wchar_t named[MAX_PATH + 16];
         if (GameFileNextTexture(named)) {
             HRESULT hr = g_fromFile(dev, named, 0xFFFFFFFEu /*D3DX_DEFAULT_NONPOW2*/, 0xFFFFFFFEu, mips, usage, fmt, pool, filter,
                                     mipFilter, colorKey, info, palette, out);
             if (hr >= 0) {
+                NoteLoad(2, started, data, size);  // the size of the game's own picture, as for a pack below
                 Log("textures: %S used by name", named);
                 return hr;
             }
@@ -269,6 +384,7 @@ HRESULT FromMemoryInner(void* dev, const void* data, UINT size, UINT w, UINT h, 
             HRESULT hr = g_fromFile(dev, path, 0xFFFFFFFFu, 0xFFFFFFFFu, mips, usage, fmt, pool, filter, mipFilter, colorKey,
                                     info, palette, out);
             if (hr >= 0) {
+                NoteLoad(2, started, data, size);  // the size of the game's picture: a pack's PNG has no DDS header to read
                 if (++g_applied <= 20 || g_applied % 500 == 0) Log("textures: override %08x applied (%u so far)", hash, g_applied);
                 return hr;
             }
@@ -286,6 +402,7 @@ HRESULT FromMemoryInner(void* dev, const void* data, UINT size, UINT w, UINT h, 
             HRESULT hr = g_real(dev, data, size, w, h, 0 /*all levels*/, usage, fmt, pool, filter, 5 /*D3DX_FILTER_BOX*/, colorKey, info,
                                 palette, out);
             if (hr >= 0) {
+                NoteLoad(0, started, data, size);
                 static u32 made = 0;
                 if (++made <= 5 || made % 200 == 0) Log("textures: mipmaps made for a %ux%u texture without them (%u so far)", width, height, made);
                 return hr;
@@ -293,6 +410,7 @@ HRESULT FromMemoryInner(void* dev, const void* data, UINT size, UINT w, UINT h, 
         }
     }
     HRESULT real = g_real(dev, data, size, w, h, mips, usage, fmt, pool, filter, mipFilter, colorKey, info, palette, out);
+    NoteLoad(1, started, data, size);
     if (real >= 0 && out && *out && g_cfg.glyphTheme && !g_keyboardAtlas && size != 0x7FFFFFFFu) NoteAtlas(*out);
     return real;
 }
@@ -302,6 +420,22 @@ void* GlyphAtlasForImpl(void* dev, void* tex);
 }  // namespace
 
 void* GlyphAtlasFor(void* dev, void* tex) { return GlyphAtlasForImpl(dev, tex); }
+
+bool TextureLoadTotals(u32* loads, u32* micros) {
+    if (!g_statHooked) return false;
+    StatLock();
+    for (int k = 0; k < kLoadKinds; ++k) {
+        loads[k] = g_totalLoads[k];
+        micros[k] = g_totalUs[k];
+    }
+    StatUnlock();
+    return true;
+}
+
+void TextureLoadFrame() {
+    if (!g_statHooked || (!g_statBusy && !g_runOpen)) return;  // nothing to write: no lock taken in the common frame
+    FlushLoads(TickNow());
+}
 
 namespace {
 
@@ -425,7 +559,9 @@ bool InstallTextureOverride() {
         }
     }
     if (!SwapImport(slot, (void*)H_FromMemoryEx, nullptr)) return false;
-    Log("textures: %d replacement files indexed, texture loading hooked", g_count);
+    g_statHooked = true;
+    Log("textures: %d replacement files indexed, texture loading hooked (what the loads cost is logged once a second while they run)",
+        g_count);
     return true;
 }
 

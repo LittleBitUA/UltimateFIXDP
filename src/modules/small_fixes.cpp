@@ -1,6 +1,7 @@
-// Small byte-level fixes: HOUSE_LIST.NOD byte order, the stray joyGetPosEx call, skip intro.
+// Small byte-level fixes: HOUSE_LIST.NOD byte order, the stray joyGetPosEx call, skip intro, menus that survive a zero-length frame.
 #include "../base.h"
 #include "../sites.h"
+#include "../stubs.h"
 
 namespace ufx {
 
@@ -163,6 +164,55 @@ bool InstallResetRefreshFix() {
     if (!WriteCode(s.va, nops, s.len)) return false;
     Log("reset-refresh: desktop refresh rate no longer copied into the Reset parameters");
     return true;
+}
+
+}  // namespace ufx
+
+namespace ufx {
+
+// ZeroFrameMenus (docs/crashes/13, V1, V1b, V2, V3): a frame of zero length no longer makes the toolbox, the side missions list
+// or the map's mission view take a panel that is just opening for one that has closed. Every other frame runs exactly as
+// before: the changes only decide the case alpha == 0 with a positive speed, which a frame with dt > 0 never reaches. Each
+// place is checked and patched on its own, so a changed exe loses only the place that differs.
+bool InstallZeroFrameMenus() {
+    int done = 0;
+    // V1, V1b: the hold during the start delay looks at the speed itself, not at speed * dt
+    const SiteDef* const holds[2][2] = {{&kSiteToolboxHold, &kSiteToolboxHoldAround}, {&kSiteMenuHold, &kSiteMenuHoldAround}};
+    for (const auto& h : holds) {
+        static const u8 nops[2] = {0x90, 0x90};
+        if (BytesMatch(h[1]->va, h[1]->bytes, h[1]->len) && WriteCode(h[0]->va, nops, 2))
+            ++done;
+        else
+            Log("zero-frame menus: the %s at %08X differs from DP.exe 1.01b, left as it is", h[0]->name, h[0]->va);
+    }
+    const bool exitOk = BytesMatch(kSiteMapPageExit.va, kSiteMapPageExit.bytes, kSiteMapPageExit.len);
+    // V2: the side missions list
+    {
+        const SiteDef& s = kSiteSideListClose;
+        u8* stub = exitOk && BytesMatch(s.va, s.bytes, s.len) && BytesMatch(kSiteSideListResume.va, kSiteSideListResume.bytes, kSiteSideListResume.len)
+                       ? AllocStub(32) : nullptr;
+        if (stub) BuildSideListHold(stub, (u32)(uintptr_t)stub, kSideListSpeedOffset, kSideListCallFn, kSiteSideListResume.va, kSiteMapPageExit.va);
+        if (stub && PatchJump(s.va, s.bytes, s.len, stub))
+            ++done;
+        else
+            Log("zero-frame menus: the %s at %08X differs from DP.exe 1.01b, left as it is", s.name, s.va);
+    }
+    // V3: the mission view of the map; only the jump offset of the jnp changes, its condition stays
+    {
+        const SiteDef& s = kSiteMissionViewClose;
+        u8* stub = exitOk && BytesMatch(s.va, s.bytes, s.len) &&
+                           BytesMatch(kSiteMissionViewClosed.va, kSiteMissionViewClosed.bytes, kSiteMissionViewClosed.len)
+                       ? AllocStub(32) : nullptr;
+        if (stub) BuildMissionViewHold(stub, (u32)(uintptr_t)stub, kMapPanelSpeedOffset, kSiteMissionViewClosed.va, kSiteMapPageExit.va);
+        u8 rel[4];
+        if (stub) PutRel32(rel, s.va + s.len, (u32)(uintptr_t)stub);
+        if (stub && WriteCode(s.va + 2, rel, 4))
+            ++done;
+        else
+            Log("zero-frame menus: the %s at %08X differs from DP.exe 1.01b, left as it is", s.name, s.va);
+    }
+    if (done) Log("zero-frame menus: a frame of zero length no longer closes an opening panel (toolbox, side missions list, map mission view; %d of 4 places)", done);
+    return done > 0;
 }
 
 }  // namespace ufx

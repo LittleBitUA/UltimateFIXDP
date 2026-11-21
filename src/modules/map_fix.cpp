@@ -25,7 +25,99 @@ namespace {
 typedef int(__cdecl* LoadResourceFn)(int id, int flags, int mode);
 typedef void*(__fastcall* FindResourceFn)(void* mgr, void* edx, const char* name, int zero);
 
-void LoadTile(int index) { ((LoadResourceFn)(uintptr_t)kLoadResourceFn)((int)kMapTileFirstId + index, 0x18, 1); }
+// 1 = queued for the loading thread now, -1 = asked for before (loaded, or still on its way): FUN_0040B4C0 with mode 1 only
+// queues a resource whose state byte (+2Fh of its record) is still 0, and for any other counts one more user.
+int LoadTile(int index) { return ((LoadResourceFn)(uintptr_t)kLoadResourceFn)((int)kMapTileFirstId + index, 0x18, 1); }
+
+// ---- Tile timing (log only) ---------------------------------------------------------------------------------------
+// Why the pause map can be slow to fill in: the tiles are queued at the open and made by the game's loading thread, and the
+// map draws each one only once FindResource finds it. From the open we watch the draw's lookups (main thread, every frame,
+// all 64 tiles in order) until each tile has been found once, then write how long that took and what the texture loads
+// cost meanwhile (texture_override.cpp; with GenerateMips every tile is a texture whose mipmaps D3DX makes on load).
+constexpr int kMaxOpenLines = 60;     // opens logged per run
+constexpr u32 kGiveUpUs = 60000000;   // a watch that has not seen all tiles after a minute says so and stops
+bool g_watching = false;
+u64 g_openTick = 0;
+u64 g_lastSweep = 0;                  // when the draw last looked up tile 63: the map was on screen until then
+u64 g_seen = 0;                       // bit n: tile n was found since the open
+int g_firstFrame = -1;                // tiles found in the first frame's sweep, -1 = that sweep has not ended yet
+int g_askedLater = 0;                 // tiles the draw had to queue again (not even asked for since the open)
+int g_opens = 0;
+u32 g_loadsAtOpen[kLoadKinds], g_usAtOpen[kLoadKinds];
+bool g_haveLoads = false;             // the texture hook is in, the numbers above mean something
+
+int CountTiles(u64 bits) {
+    int n = 0;
+    for (; bits; bits &= bits - 1) ++n;
+    return n;
+}
+
+// `how` begins the line ("all 64 tiles drawable", "closed with ..."), then the time from the open to `end` and the loads.
+void EndWatch(const char* how, u64 end) {
+    g_watching = false;
+    const u32 us = TickMicros(g_openTick, end);
+    char loads[256] = "the texture hook is off, no load times";
+    u32 n[kLoadKinds], t[kLoadKinds];
+    if (g_haveLoads && TextureLoadTotals(n, t)) {
+        for (int k = 0; k < kLoadKinds; ++k) {
+            n[k] -= g_loadsAtOpen[k];
+            t[k] -= g_usAtOpen[k];
+        }
+        wsprintfA(loads, "textures made meanwhile: %u with mipmaps made %u.%u ms, %u as given %u.%u ms, %u from packs %u.%u ms", n[0],
+                  MsWhole(t[0]), MsTenth(t[0]), n[1], MsWhole(t[1]), MsTenth(t[1]), n[2], MsWhole(t[2]), MsTenth(t[2]));
+    }
+    Log("map: %s %u.%u ms after the open (%d of 64 in the first frame, %d queued anew by the draw); %s", how, MsWhole(us),
+        MsTenth(us), g_firstFrame < 0 ? CountTiles(g_seen) : g_firstFrame, g_askedLater, loads);
+}
+
+void StartWatch(u64 opened, int queued, u32 askUs) {
+    if (g_watching) {  // the map was closed before every tile came: the time is up to its last frame
+        char how[48];
+        wsprintfA(how, "closed with %d of 64 tiles drawable", CountTiles(g_seen));
+        EndWatch(how, g_lastSweep ? g_lastSweep : g_openTick);
+    }
+    if (g_opens >= kMaxOpenLines) return;
+    ++g_opens;
+    g_watching = true;
+    g_openTick = opened;
+    g_seen = 0;
+    g_lastSweep = 0;
+    g_firstFrame = -1;
+    g_askedLater = 0;
+    g_haveLoads = TextureLoadTotals(g_loadsAtOpen, g_usAtOpen);
+    Log("map: opened, %d of the 64 tiles queued for loading now, %d asked for before (asked in %u.%u ms)%s", queued, 64 - queued,
+        MsWhole(askUs), MsTenth(askUs), g_opens == kMaxOpenLines ? "; the last open timed this run" : "");
+}
+
+// The draw looked tile `index` up: `found` = it is there. Main thread.
+void WatchTile(int index, bool found) {
+    if (found) g_seen |= (u64)1 << index;
+    if (g_seen == ~(u64)0) {
+        if (g_firstFrame < 0) g_firstFrame = 64;
+        EndWatch("all 64 tiles drawable", TickNow());
+        return;
+    }
+    if (index != 63) return;  // the clock is read once per frame, at the end of the sweep
+    if (g_firstFrame < 0) g_firstFrame = CountTiles(g_seen);
+    g_lastSweep = TickNow();
+    if (TickMicros(g_openTick, g_lastSweep) >= kGiveUpUs) {
+        char how[64];
+        wsprintfA(how, "still only %d of 64 tiles drawable", CountTiles(g_seen));
+        EndWatch(how, g_lastSweep);
+    }
+}
+
+// "SMAP00_00_0" + up to three digits: the tile index, -1 when the name is not a tile's or the index is out of 0..63.
+int TileIndex(const char* name) {
+    if (!name) return -1;
+    const char* p = "SMAP00_00_0";
+    int i = 0;
+    while (p[i] && name[i] == p[i]) ++i;
+    if (p[i] != 0) return -1;
+    int n = 0, digits = 0;
+    for (const char* d = name + i; *d >= '0' && *d <= '9' && digits < 3; ++d, ++digits) n = n * 10 + (*d - '0');
+    return digits > 0 && n >= 0 && n < 64 ? n : -1;
+}
 
 }  // namespace
 }  // namespace ufx
@@ -45,25 +137,23 @@ void __cdecl MapZoomClampWorker(void* map) {
 void __cdecl MapZoomInitWorker(void* map) {
     if (!map) return;
     *(volatile float*)((char*)map + 0x8EE0) = g_mapDefaultZoom;
-    for (int i = 0; i < 64; ++i) ufx::LoadTile(i);
+    const ufx::u64 opened = ufx::TickNow();
+    int queued = 0;
+    for (int i = 0; i < 64; ++i)
+        if (ufx::LoadTile(i) == 1) ++queued;
+    ufx::StartWatch(opened, queued, ufx::TickMicros(opened, ufx::TickNow()));
 }
 
 // FindResourceByName for the map tiles: a tile that is not there yet is requested and looked up again.
 void* __cdecl MapFindTileWorker(void* mgr, const char* name) {
     void* res = ((ufx::FindResourceFn)(uintptr_t)ufx::kFindResourceFn)(mgr, nullptr, name, 0);
-    if (!res && name) {
-        const char* p = "SMAP00_00_0";
-        int i = 0;
-        while (p[i] && name[i] == p[i]) ++i;
-        if (p[i] == 0) {  // "SMAP00_00_0" + two digits
-            int n = 0, digits = 0;
-            for (const char* d = name + i; *d >= '0' && *d <= '9' && digits < 3; ++d, ++digits) n = n * 10 + (*d - '0');
-            if (digits > 0 && n >= 0 && n < 64) {
-                ufx::LoadTile(n);
-                res = ((ufx::FindResourceFn)(uintptr_t)ufx::kFindResourceFn)(mgr, nullptr, name, 0);
-            }
-        }
+    if (res && !ufx::g_watching) return res;  // the common frame: no name to read
+    const int n = ufx::TileIndex(name);
+    if (!res && n >= 0) {
+        if (ufx::LoadTile(n) == 1) ++ufx::g_askedLater;  // it was not even queued: released since the open?
+        res = ((ufx::FindResourceFn)(uintptr_t)ufx::kFindResourceFn)(mgr, nullptr, name, 0);
     }
+    if (ufx::g_watching && n >= 0) ufx::WatchTile(n, res != nullptr);
     return res;
 }
 
@@ -340,7 +430,8 @@ bool InstallMapFix() {
         return false;
     }
     g_mapFixInstalled = 1;
-    Log("map: all 64 tiles, zoom down to %d%%, orientation %d, pan inside Greenvale", g_cfg.mapMinZoom, g_cfg.mapOrientation);
+    Log("map: all 64 tiles, zoom down to %d%%, orientation %d, pan inside Greenvale; how long the tiles take is logged at each open",
+        g_cfg.mapMinZoom, g_cfg.mapOrientation);
     return true;
 }
 

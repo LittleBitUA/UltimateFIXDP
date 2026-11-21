@@ -111,7 +111,11 @@ bool BuildShader(void* dev, const char* name, const char* source, size_t length,
     CompileFn compile = d3dx ? (CompileFn)(void*)GetProcAddress(d3dx, "D3DXCompileShader") : nullptr;
     if (!compile) return Fail("D3DXCompileShader of d3dx9_43.dll was not found");
     void *code = nullptr, *errors = nullptr, *table = nullptr;
+    const u64 started = TickNow();
     HRESULT hr = compile(source, (UINT)length, nullptr, nullptr, "main", "ps_3_0", 0, &code, &errors, &table);
+    char timed[48];  // the weight texts differ only in their walk length: the length is part of the name
+    wsprintfA(timed, "smaa %s", name);
+    LogShaderTime(timed, SUCCEEDED(hr) && code ? "ps_3_0" : nullptr, started);
     char message[400] = "";
     if (errors) {  // also holds warnings when the shader compiled
         const char* text = (const char*)Method<BufPtrFn>(errors, kBufferPointer)(errors);
@@ -216,7 +220,8 @@ bool SmaaFrame(void* dev, int percent) {
     for (int i = 0; i < 3; ++i)
         if (kWeightSources[i].steps == preset.steps) walk = i;
     if (!g_weightShaders[walk] &&
-        !BuildShader(dev, "weight", kWeightSources[walk].text, kWeightSources[walk].length, &g_weightShaders[walk]))
+        !BuildShader(dev, walk == 0 ? "weight (walk 4)" : walk == 1 ? "weight (walk 8)" : "weight (walk 16)", kWeightSources[walk].text,
+                     kWeightSources[walk].length, &g_weightShaders[walk]))
         return false;
 
     UINT w, h, fmt;

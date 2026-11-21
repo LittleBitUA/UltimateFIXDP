@@ -415,6 +415,41 @@ int main(int argc, char** argv) {
         Check(kSiteGameFileStore.va + 8 + Rd32(kSiteGameFileStore.bytes + 4) == kSiteGameFileHave.va, "game files", "the CAddon read goes to the common check");
     }
 
+    // ZeroFrameMenus: the side missions list and the map mission view wait at alpha 0 while their speed is positive
+    {
+        uint8_t zl[32], zm[32];
+        const uint32_t zlVa = 0xC0000600, zmVa = 0xC0000700;
+        const size_t nzl = BuildSideListHold(zl, zlVa, kSideListSpeedOffset, kSideListCallFn, kSiteSideListResume.va, kSiteMapPageExit.va);
+        const size_t nzm = BuildMissionViewHold(zm, zmVa, kMapPanelSpeedOffset, kSiteMissionViewClosed.va, kSiteMapPageExit.va);
+        printf("zero-frame menu stubs %zu %zu bytes (at %08X, %08X)\n", nzl, nzm, zlVa, zmVa);
+        Save(argc, argv, 20, zl, nzl);
+        Save(argc, argv, 21, zm, nzm);
+        Check(nzl == 28, "side list hold", "size 28 (the module allocates 32)");
+        Check(memcmp(zl, kSiteSideListClose.bytes, 4) == 0, "side list hold", "the two replaced fstp st0 first");
+        Check(zl[4] == 0x83 && zl[5] == 0xBE && Rd32(zl + 6) == 0x9524 && zl[10] == 0x00, "side list hold", "cmp dword [esi+9524h],0");
+        Check(zl[11] == 0x7F && Rel8To(zl, 11, 23), "side list hold", "jg wait");
+        Check(Rel32To(zl, zlVa, 13, kSideListCallFn), "side list hold", "call 00405360");
+        Check(Rel32To(kSiteSideListClose.bytes, kSiteSideListClose.va, 4, kSideListCallFn), "side list hold", "the replaced call went to 00405360");
+        Check(Rel32To(zl, zlVa, 18, kSiteSideListResume.va), "side list hold", "jmp to the instruction after the replaced call");
+        Check(kSiteSideListResume.va == kSiteSideListClose.va + kSiteSideListClose.len, "side list hold", "resume right behind the site");
+        Check(Rel32To(zl, zlVa, 23, kSiteMapPageExit.va), "side list hold", "wait: jmp to the common exit");
+        Check(nzm == 21, "mission view hold", "size 21 (the module allocates 32)");
+        Check(zm[0] == 0x83 && zm[1] == 0xBE && Rd32(zm + 2) == 0x951C && zm[6] == 0x00, "mission view hold", "cmp dword [esi+951Ch],0");
+        Check(zm[7] == 0x7F && Rel8To(zm, 7, 14), "mission view hold", "jg wait");
+        Check(Rel32To(zm, zmVa, 9, kSiteMissionViewClosed.va), "mission view hold", "jmp to the game's closed branch");
+        Check(Rel32To(kSiteMissionViewClose.bytes, kSiteMissionViewClose.va, 0, kSiteMissionViewClosed.va) && kSiteMissionViewClose.bytes[1] == 0x8B,
+              "mission view hold", "the patched jnp went to 00658B38");
+        Check(zm[14] == 0xDD && zm[15] == 0xD8, "mission view hold", "wait: fstp st0");
+        Check(Rel32To(zm, zmVa, 16, kSiteMapPageExit.va), "mission view hold", "wait: jmp to the common exit");
+        // the speed the game's branch stores at 00658B38 is the one the stub tests
+        Check(Rd32(kSiteMissionViewClosed.bytes + 5) == kMapPanelSpeedOffset, "mission view hold", "00658B38 stores [esi+951Ch]");
+        // the fade holds: the two bytes replaced by NOPs are the fmul between the speed load and the compare with 0.0
+        Check(memcmp(kSiteToolboxHoldAround.bytes + 7, kSiteToolboxHold.bytes, 2) == 0 && kSiteToolboxHoldAround.va + 7 == kSiteToolboxHold.va,
+              "toolbox hold", "fmul st,st(1) inside the checked run");
+        Check(memcmp(kSiteMenuHoldAround.bytes + 7, kSiteMenuHold.bytes, 2) == 0 && kSiteMenuHoldAround.va + 7 == kSiteMenuHold.va,
+              "pause menu hold", "fmul st,st(1) inside the checked run");
+    }
+
     printf("%s\n", g_failures ? "STUB CHECKS FAILED" : "all stub checks passed");
     return g_failures ? 1 : 0;
 }

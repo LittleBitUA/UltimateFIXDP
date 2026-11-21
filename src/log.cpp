@@ -25,4 +25,28 @@ void Log(const char* fmt, ...) {
     WriteFile(g_log, buf, (DWORD)n, &written, nullptr);
 }
 
+u64 TickNow() {
+    LARGE_INTEGER q;
+    QueryPerformanceCounter(&q);
+    return (u64)q.QuadPart;
+}
+
+u32 TickMicros(u64 from, u64 to) {
+    static u64 freq = 0;  // fixed while Windows runs; two threads that read it at once write the same value
+    if (!freq) {
+        LARGE_INTEGER f;
+        QueryPerformanceFrequency(&f);
+        freq = f.QuadPart > 0 ? (u64)f.QuadPart : 1;
+    }
+    if (to <= from) return 0;
+    const u64 us = (to - from) * 1000000 / freq;
+    return us > 0xFFFFFFFFull ? 0xFFFFFFFFu : (u32)us;
+}
+
+void LogShaderTime(const char* name, const char* profile, u64 started) {
+    const u32 us = TickMicros(started, TickNow());
+    if (profile) Log("shader %s: compiled in %u.%u ms (%s)", name, MsWhole(us), MsTenth(us), profile);
+    else Log("shader %s: no profile compiled, %u.%u ms spent", name, MsWhole(us), MsTenth(us));
+}
+
 }  // namespace ufx

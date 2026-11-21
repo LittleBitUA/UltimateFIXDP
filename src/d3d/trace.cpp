@@ -563,7 +563,11 @@ void* CompileSmokePs(void* dev, const char* text, UINT size, const char* what) {
     HMODULE d3dx = GetModuleHandleW(L"d3dx9_43.dll");
     CompileFn compile = d3dx ? (CompileFn)(void*)GetProcAddress(d3dx, "D3DXCompileShader") : nullptr;
     void *code = nullptr, *errors = nullptr;
+    const u64 started = TickNow();
     const HRESULT c = compile ? compile(text, size, nullptr, nullptr, "main", "ps_3_0", 0, &code, &errors, nullptr) : E_FAIL;
+    char timed[48];
+    wsprintfA(timed, "smoke %s", what);
+    LogShaderTime(timed, SUCCEEDED(c) && code ? "ps_3_0" : nullptr, started);
     if (errors) {
         char msg[300];
         const char* t = (const char*)((PtrFn)(*(void***)errors)[3])(errors);

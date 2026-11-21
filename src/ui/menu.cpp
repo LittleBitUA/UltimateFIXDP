@@ -63,6 +63,7 @@ struct Item {
 
 const Tr kGlyphTr[4] = {{L"Вимк.", L"Off"}, {L"Авто", L"Auto"}, {L"Xbox", L"Xbox"}, {L"PlayStation", L"PlayStation"}};
 const Tr kAntialiasModeTr[2] = {{L"FXAA", L"FXAA"}, {L"SMAA", L"SMAA"}};
+const Tr kSharpenModeTr[2] = {{L"Звичайна", L"Unsharp mask"}, {L"Адаптивна (AMD RCAS)", L"Adaptive (AMD RCAS)"}};
 const Tr kSmaaQualityTr[3] = {{L"Низька", L"Low"}, {L"Середня", L"Medium"}, {L"Висока", L"High"}};
 const Tr kGameAliasTr[3] = {{L"Вимк. (як на PC)", L"Off (as on PC)"}, {L"Як у шейдері гри", L"As in the game's shader"}, {L"Під роздільність 3D", L"For the 3D resolution"}};
 const Tr kMapOrientTr[3] = {{L"Обертається", L"Rotates"}, {L"Північ угорі", L"North up"}, {L"Південь угорі", L"South up"}};
@@ -206,7 +207,7 @@ Item g_pageDisplay[] = {
      {L"Система", L"System"}},
     {{L"Журнал показу (діагностика)", L"Display log (diagnostics)"}, &g_cfg.displayDebug, kBool, 0, 1, 1, false, L"Display", L"Debug", nullptr, nullptr,
      {L"У режимі без рамки пише в журнал перші кадри й кожну зміну способу показу (з розміром буфера), а завжди: розміри вікна протягом 4 секунд після кожного натискання Esc. Для пошуку проблем із показом.", L"In the borderless window, writes the first frames and every change of the way the picture is presented (with the buffer size) to the log, and always the window geometry for 4 seconds after each Esc press. For tracking down display problems."}, NOTR},
-    {{L"Прозорість панелі меню, %", L"Menu panel opacity, %"}, &g_cfg.menuOpacity, kInt, 20, 100, 5, false, L"Menu", L"Opacity", nullptr, nullptr,
+    {{L"Непрозорість панелі меню, %", L"Menu panel opacity, %"}, &g_cfg.menuOpacity, kInt, 20, 100, 5, false, L"Menu", L"Opacity", nullptr, nullptr,
      {L"Чим менше, тим більше крізь меню видно гру. Текст лишається чітким. Змінюється одразу.", L"The lower, the more of the game shows through the menu. The text stays sharp. Changes at once."},
      {L"Вигляд меню", L"Look of the menu"}},
     {{L"Анімація меню", L"Menu animation"}, &g_cfg.menuAnimations, kBool, 0, 1, 1, false, L"Menu", L"Animations", nullptr, nullptr,
@@ -238,8 +239,8 @@ Item g_pageGraphics[] = {
       L"The real resolution of the picture and the sharp interface: by default the size of your monitor, and more than the monitor is not allowed (otherwise a white strip appears at the bottom in loading screens). For a sharper picture choose the 3D resolution (multiple): the scene is computed bigger and shrunk to the monitor.\nTo type your own value, press Enter on this row and type a width (or a height, e.g. 1080). Off = as the game (1280×720)."},
      {L"Роздільність", L"Resolution"}, kResPresets, 5, kResNames, FormatResolution, true, RunningOutput},
     {{L"Роздільність 3D", L"3D resolution"}, &g_cfg.renderScale, kInt, 100, 400, 25, true, L"Graphics", L"RenderScale", nullptr, nullptr,
-     {L"Суперсемплінг сцени: 1× = рівно розмір виходу, 2× = вдвічі більше за шириною й висотою (при виході 1920 це точно 2×2, найчистіше), 3× дуже важко. Поруч із назвою видно, який розмір сцени вийде.\nСцена обмежена 7680 пікселями завширшки. Іншого множника: клік по останній кнопці й число у відсотках (100–400).",
-      L"Supersampling of the scene: 1x = exactly the output size, 2x = twice the width and height (with a 1920 output exactly 2x2, the cleanest), 3x is very heavy. Next to the name you can see the size of the scene that comes out.\nThe scene is limited to 7680 pixels wide. Another multiple: click the last button and type a percentage (100-400)."},
+     {L"Суперсемплінг сцени: 1× = рівно розмір виходу, 2× = вдвічі більше за шириною й висотою (при виході 1920 це точно 2×2, найчистіше), 3× дуже важко. 2× — це 4 відліки на кожен піксель екрана: та сама ідея, що в DLAA, але без шлейфів за рухомим. Поруч із назвою видно, який розмір сцени вийде.\nСцена обмежена 7680 пікселями завширшки. Іншого множника: клік по останній кнопці й число у відсотках (100–400).",
+      L"Supersampling of the scene: 1x = exactly the output size, 2x = twice the width and height (with a 1920 output exactly 2x2, the cleanest), 3x is very heavy. 2x means 4 samples for every screen pixel: the idea behind DLAA, without trails behind moving things. Next to the name you can see the size of the scene that comes out.\nThe scene is limited to 7680 pixels wide. Another multiple: click the last button and type a percentage (100-400)."},
      {L"Множник від виходу", L"Multiple of the output"}, kScalePresets, 4, kScaleNames, FormatScale, false, RunningScene},
     {{L"Збільшувати буфери розмиття й свічення", L"Enlarge blur and bloom buffers"}, &g_cfg.scalePostBuffers, kBool, 0, 1, 1, true, L"Graphics", L"ScalePostBuffers", nullptr, nullptr,
      {L"Розмиття та свічення (bloom) рахуються в тій самій роздільності, що й сцена, а не в оригінальній.", L"Blur and bloom are computed at the resolution of the scene, not the original one."}, NOTR},
@@ -273,8 +274,11 @@ Item g_pageGraphics[] = {
      {L"Власний фільтр самої гри, який вона ніколи не вмикає: у шейдера фінальної картинки є варіант, що бере кожен піксель сцени з чотирьох точок навскіс навколо нього й усереднює їх (м'якші краї, менше мерехтіння). PC-версія досі щокадру рахує для нього зсув, але вибирає варіант без нього. Чи малювала з ним версія для Xbox 360, не підтверджено. Вимк. = як на PC. Як у шейдері гри: зсув, який рахує гра, картинка трохи м'якша. Під роздільність 3D: ті самі чотири точки на чверть пікселя екрана; найбільше дає з «Роздільністю 3D» понад 1× (менше мерехтять дроти, паркани й краї дахів), на 1× картинка лише трохи м'якшає. Працює і з «Виглядом Xbox 360». Змінюється одразу. У грі ще не перевірено.",
       L"The game's own filter that it never switches on: the shader of the final picture has a variant that takes every scene pixel from four diagonal points around it and averages them (softer edges, less shimmer). The PC version still computes its offset every frame but picks the variant without it. Whether the Xbox 360 version drew with it is not confirmed. Off = as on PC. As in the game's shader: the offset the game computes, a slightly softer picture. For the 3D resolution: the same four points a quarter of a screen pixel apart; it does the most with a '3D resolution' above 1x (wires, fences and roof edges shimmer less), at 1x the picture only gets slightly softer. Works with the 'Xbox 360 look' too. Changes at once. Not yet verified in the game."}, NOTR},
     {{L"Різкість фінальної картинки, %", L"Sharpening of the final picture, %"}, &g_cfg.sharpen, kInt, 0, 100, 10, false, L"Graphics", L"Sharpen", nullptr, nullptr,
-     {L"Підвищення різкості готового кадру. Починайте з 30–50, більше дає ореоли. Змінюється одразу.", L"Sharpens the finished frame. Start with 30–50, more gives halos. Changes at once."},
+     {L"Підвищення різкості готового кадру. Спосіб обирається рядком нижче. Починайте з 30–50; звичайна різкість понад це дає ореоли, з адаптивною вони значно слабші. Змінюється одразу.", L"Sharpens the finished frame. The method is chosen in the row below. Start with 30–50; the unsharp mask gives halos above that, the adaptive one keeps them much weaker. Changes at once."},
      {L"Чіткість і вигляд", L"Sharpness and look"}},
+    {{L"Спосіб різкості", L"Sharpening method"}, &g_cfg.sharpenMode, kInt, 0, 1, 1, false, L"Graphics", L"SharpenMode", nullptr, kSharpenModeTr,
+     {L"Адаптивна (типово): наш код алгоритму RCAS з AMD FidelityFX FSR 1. Нерізкі дрібні деталі підсилює на повну, а контрастні краї (гілки на тлі неба, дроти) лише трохи, тож навколо них немає світлих ореолів, а шум і зерно не підсилюються. Найкраще разом із «Роздільністю 3D» 150–200%. Звичайна: стара різкість, однаково підсилює всі краї. Сила: рядок вище. Якщо адаптивна не запуститься на вашій відеокарті, мод сам повернеться до звичайної (цей рядок теж перемкнеться) і запише причину в журнал. Змінюється одразу. У грі ще не перевірено.",
+      L"Adaptive (default): our own code of the RCAS algorithm from AMD FidelityFX FSR 1. Soft fine detail gets the full strength and contrasty edges (branches against the sky, wires) only a little, so they get no bright halos, and noise and grain are not raised. Best with a '3D resolution' of 150–200%. Unsharp mask: the old sharpening, it pushes every edge the same. Strength: the row above. If the adaptive one cannot start on your video card, the mod goes back to the unsharp mask by itself (this row switches too) and writes the reason to the log. Changes at once. Not yet verified in the game."}, NOTR},
     {{L"Фільтри під інтерфейсом", L"Filters under the interface"}, &g_cfg.filtersUnderHud, kBool, 0, 1, 1, false, L"Graphics", L"FiltersUnderHud", nullptr, nullptr,
      {L"Згладжування, різкість і «Вигляд кадру в грі» діють лише на 3D-картинку, ще до того, як гра малює свій інтерфейс: субтитри, значки, мапа й меню гри лишаються чіткими, без ореолів і розмиття (на консолі інтерфейс теж не фільтрувався). Гамма телевізора й повзунки фоторежиму, як і раніше, діють на весь кадр. Кадри без 3D-картинки гри (титульний екран, завантаження, відео) фільтруються цілими, як раніше. Вимкнено: усе на готовому кадрі разом з інтерфейсом. Змінюється одразу. У грі ще не перевірено.",
       L"Smoothing, sharpening and 'Look of the picture in play' apply to the 3D picture only, before the game draws its interface: subtitles, icons, the map and the game's menus stay sharp, with no halos or blur (the console never filtered its interface either). The TV gamma and the photo mode sliders still cover the whole frame. Frames without the game's 3D picture (title screen, loading, videos) are filtered whole as before. Off: everything on the finished frame with the interface. Changes at once. Not yet verified in the game."}, NOTR},
@@ -492,6 +496,9 @@ Item g_pageFixes[] = {
      {L"Лікує падіння FPS після днів роботи ПК: гра тримала час у єдиній точності.", L"Cures the FPS drop after days of uptime: the game kept time in single precision."}, NOTR},
     {{L"Захист від нульової дельти кадру", L"Zero frame delta guard"}, &g_cfg.zeroDeltaGuard, kBool, 0, 1, 1, true, L"Fixes", L"ZeroDeltaGuard", nullptr, nullptr,
      {L"Нульовий крок кадру ставив швидкість у NaN і вішав гру.", L"A zero frame step turned speed into NaN and froze the game."}, {L"Помилки гри", L"Game bugs"}},
+    {{L"Меню й ящик без зависань на нульовому кадрі", L"Menus and the toolbox survive a zero frame"}, &g_cfg.zeroFrameMenus, kBool, 0, 1, 1, true, L"Fixes", L"ZeroFrameMenus", nullptr, nullptr,
+     {L"Панель, що відкривається, починає з нульової непрозорості. Кадр нульової тривалості (дні роботи Windows без перезавантаження, сотні FPS, пауза мода) лишав її на нулі, і гра вважала панель закритою: ящик повертав до вибору WEAPONS/ITEMS («не беруться речі»), а список побічних завдань і перегляд «mission» на карті зависали на порожньому екрані з мертвими кнопками. Тепер панель просто чекає наступного кадру. Потрібен перезапуск. У грі ще не перевірено.",
+      L"A panel that opens starts at zero opacity. A frame of zero length (days of Windows uptime, hundreds of FPS, the mod's own pause) left it at zero, and the game took the panel for closed: the toolbox fell back to the WEAPONS/ITEMS choice (\"cannot take items out\"), and the side missions list and the map's mission view hung on an empty screen with dead buttons. Now the panel just waits for the next frame. Restart needed. Not yet checked in the game."}, NOTR},
     {{L"Захист від зависання на NaN", L"Guard against the NaN freeze"}, &g_cfg.nanTrapGuard, kBool, 0, 1, 1, true, L"Fixes", L"NanTrapGuard", nullptr, nullptr,
      {L"Порт навмисно зациклюється назавжди, якщо кут стає «не числом» (так висла катсцена після лікарні). Тепер кут стає 0, гра йде далі, а в ufx.log з'являється рядок, звідки прийшло погане число.",
       L"The port loops forever on purpose when an angle is not a number (that is how the cutscene after the hospital hung). Now the angle becomes 0, the game goes on, and ufx.log names where the bad number came from."}, NOTR},
@@ -861,7 +868,7 @@ void DoCamera() { g_cheatPick = 0; CheatYorkToCamera(); }
 
 Item g_pageCheats[] = {
     {{L"Гроші", L"Money"}, &g_cheatPick, kInt, 0, 3, 1, false, nullptr, nullptr, DoMoney, nullptr,
-     {L"Додає гроші (до 99999). Змінюється одразу. Деякі розділи можуть змінювати їх самі.", L"Adds money (up to 99999). Applies at once."},
+     {L"Додає гроші (до 99999). Змінюється одразу. Деякі розділи можуть змінювати їх самі.", L"Adds money (up to 99999). Applies at once. Some chapters may change it themselves."},
      {L"Гроші й здоров'я", L"Money and health"}, kMoneyValues, 3, kMoneyNames, nullptr, false},
     {{L"Невразливість (повне здоров'я)", L"Invulnerability (full health)"}, &g_cfg.cheatGod, kBool, 0, 1, 1, false, nullptr, nullptr, nullptr, nullptr,
      {L"Здоров'я щокадру повертається до максимуму. Анімація смерті від падіння чи вибуху може все одно відіграти.", L"Health is put back to the maximum every frame. A death animation from a fall or an explosion may still play."}, NOTR},
@@ -1742,6 +1749,18 @@ bool g_dragScroll = false;
 constexpr float kLangChipW = 84;
 void SetLanguage(int language);
 
+// The About page's one button, "Open the log folder": where it was last drawn (x, y, w, h; DrawAbout sets it every frame
+// and HandleInput reads it), so a person looking for help finds the logs where they look, not only in Fixes > Diagnostics.
+float g_aboutLogs[4] = {0, 0, 0, 0};
+DWORD g_aboutLogsAt = 0;  // when it was drawn: a click on another page at the same place does nothing
+
+bool AboutClick(float mx, float my) {
+    if (GetTickCount() - g_aboutLogsAt > 500) return false;
+    if (mx < g_aboutLogs[0] || mx >= g_aboutLogs[0] + g_aboutLogs[2] || my < g_aboutLogs[1] || my >= g_aboutLogs[1] + g_aboutLogs[3]) return false;
+    DoOpenLogs();
+    return true;
+}
+
 // Clicks in the sidebar: a section, the restart button or the language. Returns true when the click was used.
 bool SidebarClick(float mx, float my) {
     if (g_restartShown && mx >= kPx + 24 && mx < kPx + 24 + kRestartW && my >= kRestartY && my < kRestartY + kRestartH) {
@@ -1921,7 +1940,7 @@ void HandleInput(bool foreground) {
             for (int i = 0; (pad & (kPadPageUp | kPadPageDown)) && i < PageRows(); ++i)
                 ModsPageInput((pad & kPadPageUp) != 0, (pad & kPadPageDown) != 0, false, false, false, false, false, 0, 0);
         } else if (click) {
-            SidebarClick(mx, my);
+            if (!SidebarClick(mx, my) && !pg.custom && !pg.residents) AboutClick(mx, my);  // only the About text has a button
         }
         g_wheel = 0;
         return;
@@ -2386,7 +2405,7 @@ void DrawItemRow(Item& it, float y, bool sel) {
     if (it.names) {
         wsprintfW(value, L"‹  %s  ›", Tx(it.names[*it.value - it.lo]));
         float w = TextWidth(value, 18);
-        DrawText(value, kCr - w, y + 10, sel ? kAccentHi : kText, 18);
+        DrawText(value, kCr - w, y + 10, sel ? kAccentText : kText, 18);
         return;
     }
     if (it.presets) {  // buttons: the presets and one for a value of one's own
@@ -2492,7 +2511,7 @@ void DrawAbout() {
     // Everything below fits between the top of the list and the closing hint: on a small panel the gaps shrink (never the letters)
     // and long lines are cut to the panel's width.
     const float top = kListTop - 4, bottom = kPy + kPh - 40, width = kCr - kCx;
-    const float natural = 84 + 64 + 62 + 22 + 5 * 24 + 10 + 44;
+    const float natural = 84 + 64 + 62 + 22 + 5 * 24 + 10 + 44 + 26;
     float s = (bottom - top) / natural;
     if (s > 1.f) s = 1.f;
     const float line = 24 * s < 18 ? 18 : 24 * s;
@@ -2503,15 +2522,15 @@ void DrawAbout() {
     const float vw = DrawText(ver, kCx, y + 40 * s, kFaint, 15);
     DrawUpdateLine(kCx + vw + 24, y + 40 * s, width - vw - 24, en);
     y += 84 * s;
-    DrawText(en ? L"Author" : L"Автор", kCx, y, kAccentHi, 13, kSemibold);
+    DrawText(en ? L"Author" : L"Автор", kCx, y, kAccentText, 13, kSemibold);
     DrawFitted(en ? L"Dmytro Bydlov, the \"Little Bit\" team" : L"Дмитро Бидлов, команда «Little Bit»", kCx, y + 20, kText, 20, width);
     y += 64 * s;
-    DrawText(en ? L"Licence" : L"Ліцензія", kCx, y, kAccentHi, 13, kSemibold);
+    DrawText(en ? L"Licence" : L"Ліцензія", kCx, y, kAccentText, 13, kSemibold);
     DrawFitted(en ? L"MIT: use and change it freely. All code is our own; other projects gave ideas, facts and addresses."
                   : L"MIT: користуйтесь і змінюйте вільно. Увесь код наш власний; інші проєкти дали ідеї, факти й адреси.",
                kCx, y + 20, kText, 15, width);
     y += 62 * s;
-    DrawText(en ? L"Thanks" : L"Подяки", kCx, y, kAccentHi, 13, kSemibold);
+    DrawText(en ? L"Thanks" : L"Подяки", kCx, y, kAccentText, 13, kSemibold);
     const wchar_t* credits[5] = {
         en ? L"ZachFix (h714je): research of the port and many ideas" : L"ZachFix (h714je): дослідження порту й багато ідей",
         en ? L"DPStabilityFix (Cesario67): saves, timing, DualSense layout" : L"DPStabilityFix (Cesario67): збереження, час, розкладка DualSense",
@@ -2521,10 +2540,25 @@ void DrawAbout() {
     };
     for (int i = 0; i < 5; ++i) DrawFitted(credits[i], kCx, y + 20 + (float)i * line, kMuted, 15, width);
     y += 20 + 5 * line + 10 * s;
-    DrawText(en ? L"Testers" : L"Тестувальники", kCx, y, kAccentHi, 13, kSemibold);
+    DrawText(en ? L"Testers" : L"Тестувальники", kCx, y, kAccentText, 13, kSemibold);
     DrawFitted(L"Gold flin, Tree Fan, EliParker", kCx, y + 20, kMuted, 15, width);
-    if (g_padMode) DrawPadLineImpl(en ? L"{B} close     {LB} {RB} section" : L"{B} закрити     {LB} {RB} розділ", kCx, kPy + kPh - 30, kFaint, 13, width);
+    y += 44 * s;
+    DrawFitted(en ? L"Website, guides and releases: ultimatefixdp.github.io" : L"Сайт, інструкції й випуски: ultimatefixdp.github.io",
+               kCx, y + 6, kFaint, 15, width);
+    // A quiet button on the line of the closing hint, at the right; the mouse lights it as the other buttons of the menu.
+    const wchar_t* logs = en ? L"Open the log folder" : L"Відкрити теку журналів";
+    const float bw = TextWidth(logs, 13) + 28, bh = 28, bx = kCr - bw, by = kPy + kPh - 36;
+    if (g_padMode) DrawPadLineImpl(en ? L"{B} close     {LB} {RB} section" : L"{B} закрити     {LB} {RB} розділ", kCx, kPy + kPh - 30, kFaint, 13, width - bw - 16);
     else DrawText(en ? L"F10 or Esc close" : L"F10 або Esc закрити", kCx, kPy + kPh - 30, kFaint, 13);
+    float mx = 0, my = 0;
+    const bool hover = MousePosition(&mx, &my) && mx >= bx && mx < bx + bw && my >= by && my < by + bh;
+    FillRoundFramed(bx, by, bw, bh, 6, hover ? kHover : kRaised, hover ? kFaint : kLine2);
+    DrawText(logs, bx + 14, by + 6, hover ? kWhite : kText, 13);
+    g_aboutLogs[0] = bx;
+    g_aboutLogs[1] = by;
+    g_aboutLogs[2] = bw;
+    g_aboutLogs[3] = bh;
+    g_aboutLogsAt = GetTickCount();
 }
 
 // True when `size` bytes at `p` can be read: committed pages that allow reading, over the whole range. The Story page reads
@@ -2637,7 +2671,7 @@ void DrawStory() {
     }
     wchar_t line[400];
 
-    DrawText(en ? L"Progress" : L"Прогрес", kCx, y, kAccentHi, 13, kSemibold);
+    DrawText(en ? L"Progress" : L"Прогрес", kCx, y, kAccentText, 13, kSemibold);
     if (st.episode > 0) wsprintfW(line, en ? L"Episode %d  ·  chapter %d  ·  step %d" : L"Епізод %d  ·  розділ %d  ·  крок %d", st.episode, st.chapter, st.step);
     else wsprintfW(line, en ? L"Before the first episode (chapter %d, step %d)" : L"Ще до першого епізоду (розділ %d, крок %d)", st.chapter, st.step);
     DrawText(line, kCx, y + 20, kText, 20);
@@ -2645,7 +2679,7 @@ void DrawStory() {
              kCx, y + 48, st.finished ? kText : kFaint, 15);
     y += 80;
 
-    DrawText(en ? L"Side quests" : L"Побічні завдання", kCx, y, kAccentHi, 13, kSemibold);
+    DrawText(en ? L"Side quests" : L"Побічні завдання", kCx, y, kAccentText, 13, kSemibold);
     if (!st.sideKnown) {
         DrawText(en ? L"No data: the game's flag table has no such group." : L"Немає даних: у таблиці прапорів гри немає такої групи.", kCx, y + 20, kFaint, 15);
         y += 52;
@@ -2661,7 +2695,7 @@ void DrawStory() {
         y += 12;
     }
 
-    DrawText(en ? L"Current destination" : L"Поточна ціль", kCx, y, kAccentHi, 13, kSemibold);
+    DrawText(en ? L"Current destination" : L"Поточна ціль", kCx, y, kAccentText, 13, kSemibold);
     if (!st.destKnown) {
         lstrcpyW(line, en ? L"No data: the game's flag table has no such group." : L"Немає даних: у таблиці прапорів гри немає такої групи.");
     } else if (st.destIndex < 0) {
@@ -2685,7 +2719,7 @@ void DrawStory() {
     if (points >= 0) y += 19.f * (float)DrawLines(line, kCx, y, kMuted, 15, 19, w, 3, true);  // not with the waypoint switched off
     y += 12;
 
-    DrawText(en ? L"Story flags" : L"Сюжетні прапори", kCx, y, kAccentHi, 13, kSemibold);
+    DrawText(en ? L"Story flags" : L"Сюжетні прапори", kCx, y, kAccentText, 13, kSemibold);
     wsprintfW(line, en ? L"Raised %d of %d" : L"Піднято %d з %d", st.flagsRaised, st.flagsTotal);
     DrawText(line, kCx, y + 20, kText, 17);
 }
@@ -2916,7 +2950,7 @@ void Draw() {
         float h = RowHeight(g_rows[r]);
         if (y + h > kListBottom) break;
         if (g_rows[r].item < 0) {
-            DrawText(Tx(g_rows[r].heading), kCx, y + 11, kAccentHi, 13, kSemibold);
+            DrawText(Tx(g_rows[r].heading), kCx, y + 11, kAccentText, 13, kSemibold);
             float w = TextWidth(Tx(g_rows[r].heading), 13, kSemibold);  // the same weight, or the hairline runs into the text
             FillRect(kCx + w + 12, y + 19, kCr - kCx - w - 12, 1, kLine);
         } else {
@@ -3612,7 +3646,8 @@ void StartHint(void* device) {
         lstrcpyW(line, en ? L"Settings, photo mode and mods" : L"Налаштування, фоторежим і моди");
         if (pad) wsprintfW(sub, en ? L"on the gamepad: %s together" : L"на ґеймпаді: %s разом", PadWord(3));
     }
-    const float w = 520, h = sub[0] ? 104 : 84, x = 1280 - w - 28, y = 28;
+    // The frame statistics panel (overlay.cpp) owns the top right corner down to 204; with it on, the card goes under it.
+    const float w = 520, h = sub[0] ? 104 : 84, x = 1280 - w - 28, y = g_cfg.frameStats ? 216.f : 28.f;
     // A raised card with a hairline border and rounded corners, as the cards of the site; the red mark sits inside it
     FillRound(x + 3, y + 4, w, h, 10, alpha(0x60000000));  // shadow
     FillRoundFramed(x, y, w, h, 10, alpha(kRaised), alpha(kLine2));

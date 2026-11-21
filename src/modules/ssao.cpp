@@ -16,15 +16,6 @@ namespace {
 typedef HRESULT(WINAPI* GetPsConstFn)(void*, UINT, float*, UINT);
 typedef HRESULT(WINAPI* SetPsConstFn)(void*, UINT, const float*, UINT);
 
-// 2 to the power of tenths: 2^(t/10) for t in -30..30 without a C runtime.
-float Pow2Tenths(int t) {
-    const float step = 1.0717735f;  // 2^0.1
-    float v = 1.0f;
-    if (t > 0) for (int i = 0; i < t; ++i) v *= step;
-    else for (int i = 0; i < -t; ++i) v /= step;
-    return v;
-}
-
 // The game's own bloom and exposure, as the composite uses them: c9.x = bloom force, c10.x = the exposure key (the scene is
 // multiplied by key / average luminance). Changed for this one draw and put back after it.
 bool TuneComposite(void* dev, float saved[8]) {
