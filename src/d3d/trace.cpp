@@ -199,6 +199,26 @@ int g_reflKeyCount = 0;
 u32 g_smallKeys[32];  // draws that read a small square render target (64/128/256) in s0..s3: the Xbox fills such targets with an
 int g_smallKeyCount = 0;  // animated water/fog picture every frame, a pass the PC port does not have (they stay empty or black)
 
+// Saves a texture as UltimateFix\target_<side>_<shader>_<caller>.png (D3DXSaveTextureToFileW of the game's d3dx9_43), so
+// what such a target holds at the moment of the draw can be seen: an empty one is black.
+void SaveTargetPng(void* tex, UINT side, u32 shader, u32 from) {
+    typedef HRESULT(WINAPI * SaveFn)(const wchar_t*, DWORD, void*, const void*);
+    static SaveFn save = nullptr;
+    static bool tried = false;
+    static int saved = 0;
+    if (!tried) {
+        tried = true;
+        HMODULE d3dx = GetModuleHandleW(L"d3dx9_43.dll");
+        save = d3dx ? (SaveFn)(void*)GetProcAddress(d3dx, "D3DXSaveTextureToFileW") : nullptr;
+    }
+    if (!save || saved >= 16) return;
+    wchar_t path[MAX_PATH + 64];
+    wsprintfW(path, L"%sUltimateFix\\target_%u_%08X_%08X.png", g_paths.gameDir, side, shader, from);
+    const HRESULT hr = save(path, 3 /*D3DXIFF_PNG*/, tex, nullptr);
+    ++saved;
+    Log("water:   saved as %S (%s)", path, SUCCEEDED(hr) ? "ok" : "failed");
+}
+
 // The side of a square render target of 64, 128 or 256, else 0.
 UINT SmallSquareTarget(void* tex) {
     if (!tex) return 0;
@@ -306,6 +326,7 @@ bool NoteWaterDraw(UINT count, u32 from) {
                 DescribeTexture(g_stageTex[3], t3);
                 Log("water: a %s draw (shader %08X, %u triangles from %08X) reads a %ux%u target in s%d: s0 %s | s1 %s | s2 %s | s3 %s",
                     water ? "water" : "non-water", (u32)(uintptr_t)g_curPs, count, from, side, side, stage, t0, t1, t2, t3);
+                SaveTargetPng(g_stageTex[stage], side, (u32)(uintptr_t)g_curPs, from);
             }
         }
     }
