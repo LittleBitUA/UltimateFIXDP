@@ -2219,6 +2219,9 @@ void Draw() {
         else if (pg.residents) ResidentsPage(kCx, kListTop, kCr, kPy + kPh - 44);
         else if (pg.mods) ModsPage(kCx, kListTop, kCr, kPy + kPh - 44);
         else DrawAbout();
+        // These pages have no description box: a notice floats over the top of the content, under the page's title (the
+        // floating box of the closed menu would land right on it). It is drawn last, over the page.
+        DrawNoticeBelow((kCx + kCr) / 2, kPy + 108, kCr - kCx - 32);
         return;
     }
     // The row highlight first, under the rows: it glides from the row before (relative to the top of the list) and jumps
@@ -2265,7 +2268,11 @@ void Draw() {
     FillRound(kCx - 12, kListBottom + 18, kCr - kCx + 24, hintBottom - kListBottom - 16, 10, Fade(kRaised));  // as the site's hint
     Item& cur = pg.items[g_sel];
     const bool en = g_cfg.language == 1;
-    if (g_editing) {
+    // A notice (the answer to a button of this page, a failure, a warning) takes the box for its few seconds, so it appears
+    // right under the row that caused it and never over the page's title. Selecting another row after 1.5 s ends it early.
+    if (DrawNoticeInBox(kCx - 12, kListBottom + 18, kCr - kCx + 24, hintBottom - kListBottom - 16, g_page * 100000 + g_sel)) {
+        // the selected row's description comes back when the notice is over
+    } else if (g_editing) {
         wchar_t line[256];
         wsprintfW(line, en ? L"Type a value for \"%s\" (from %d to %d) and press Enter. Esc cancels." : L"Введіть значення для «%s» (від %d до %d) і натисніть Enter. Esc скасовує.",
                   Tx(cur.label), cur.lo, cur.hi);

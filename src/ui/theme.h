@@ -27,8 +27,8 @@ constexpr u32 kFaint = 0xFF8A8A92;     // --faint: key hints, versions, secondar
 constexpr u32 kAccent = 0xFFC4192B;    // --accent: a switch that is on, the chosen button, selection bars
 constexpr u32 kAccentHi = 0xFFD92A3C;  // --accent-hi: red text, a pressed or focused button
 // Status, kept for what they say and nothing else.
-constexpr u32 kWarn = 0xFFE5A83A;      // amber: only the "restart" tag and what waits for a restart
-constexpr u32 kError = 0xFFFF8A80;     // coral: only failures
+constexpr u32 kWarn = 0xFFE5A83A;      // amber: only the "restart" tag, what waits for a restart, the mark of a warning notice
+constexpr u32 kError = 0xFFFF8A80;     // coral: only failures (also the mark of a notice that reports one)
 
 // The same colour with another alpha byte (0..255).
 constexpr u32 Alpha(u32 argb, u32 alpha) { return (argb & 0x00FFFFFFu) | (alpha << 24); }

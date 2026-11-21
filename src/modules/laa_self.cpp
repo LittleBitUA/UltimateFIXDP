@@ -112,7 +112,7 @@ void LargeAddressFrame() {
     else
         ShowNotice(L"4 ГБ не ввімкнено", L"4 GB not switched on",
                    L"Мод не зміг підготувати DP.exe (тека гри без права запису?). Можна запустити ufx_laa.exe з архіву. Подробиці в ufx.log.",
-                   L"The mod could not prepare DP.exe (the game folder is not writable?). You can run ufx_laa.exe from the archive. Details in ufx.log.", 12);
+                   L"The mod could not prepare DP.exe (the game folder is not writable?). You can run ufx_laa.exe from the archive. Details in ufx.log.", 12, kNoticeError);
 }
 
 }  // namespace ufx
