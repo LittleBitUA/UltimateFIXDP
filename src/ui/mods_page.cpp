@@ -357,16 +357,20 @@ void Card(const ModInfo& m, int index, float x, float y, float w, float h) {
         else if (m.enabled && shadowed) source = T(L"текст перекрито модом вище", L"text overridden by a mod above");
         else if (m.enabled) source = T(L"текст — з наступного запуску", L"text from the next start");
     }
+    // On its own line the note wraps rather than being cut: the column beside a full cover is about 208 wide, and most notes
+    // are wider than that less the dot's indent. Its lines are counted for both places, since Place may move it under the cover
     const float stateW = 15 + TextWidth(state, 15), sourceW = source ? TextWidth(source, 15) + 18 : 0;
-    Place(f, stateW + sourceW <= f.w ? 22 : 44, stateW + sourceW <= f.wideW ? 22 : 44);
+    const int besideLines = source && stateW + sourceW > f.w ? DrawLines(source, 0, 0, 0, 15, 22, f.w - 15, 2, false) : 0;
+    const int underLines = source && stateW + sourceW > f.wideW ? DrawLines(source, 0, 0, 0, 15, 22, f.wideW - 15, 2, false) : 0;
+    Place(f, 22 + 22.f * (float)besideLines, 22 + 22.f * (float)underLines);
     FillRound(f.x, f.y + 8, 7, 7, 3.5f, m.enabled ? kAccent : kLine2);  // on the middle of the capitals of 15 px
     DrawText(state, f.x + 15, f.y, m.enabled ? kText : kMuted, 15);
-    if (source && stateW + sourceW <= f.w) {
+    if (source && stateW + sourceW <= f.w) {  // f.w as Place left it
         wsprintfW(line, L"·  %s", source);
         DrawText(line, f.x + stateW + 8, f.y, kFaint, 15);
     } else if (source) {
         f.y += 22;
-        DrawFitted(source, f.x + 15, f.y, kFaint, 15, f.w - 15);
+        f.y += 22.f * (float)(DrawLines(source, f.x + 15, f.y, kFaint, 15, 22, f.w - 15, 2, true) - 1);
     }
     f.y += 30;
 
