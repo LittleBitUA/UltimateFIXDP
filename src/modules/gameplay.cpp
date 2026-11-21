@@ -187,27 +187,12 @@ bool InstallLockOnAim() {
     return true;
 }
 
-bool InstallRiverReflections() {
-    const SiteDef& g = kSiteRiverWeightGate;
-    const SiteDef& f = kSiteRiverWeightFloor;
-    if (!BytesMatch(g.va, g.bytes, g.len) || !BytesMatch(f.va, f.bytes, f.len)) {
-        Log("water: the river reflection weight at %08X / %08X differs from DP.exe 1.01b, left as it is", g.va, f.va);
-        return false;
-    }
-    const u8 jmp[2] = {0xEB, 0x0E};
-    const u8 floor100[5] = {0xBA, 0x64, 0x00, 0x00, 0x00};
-    if (!WriteCode(g.va, jmp, 2) || !WriteCode(f.va, floor100, 5)) return false;
-    Log("water: rivers keep their reflection outside cutscenes (weight 1.0)");
-    return true;
-}
-
 bool InstallGameplay() {
     int n = 0;
     if (g_cfg.difficultyEnabled && InstallDifficulty()) ++n;
     if (InstallWetGate()) ++n;
     if (g_cfg.aimTolerance && InstallAimTolerance()) ++n;
     if (g_cfg.lockOnAim && InstallLockOnAim()) ++n;
-    if (g_cfg.riverReflections && InstallRiverReflections()) ++n;
     ApplyGameplay();
     return n > 0;
 }

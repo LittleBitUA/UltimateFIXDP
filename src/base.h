@@ -118,7 +118,6 @@ struct Config {
     int difficulty;          // 0 easy, 1 normal, 2 hard: where the new-game selection screen opens, and the menu writes it at any time
     int difficultyDialog;    // show the game's own selection screen before a new game
     int keepSavedDifficulty; // do not reset the difficulty to easy when a slot is loaded
-    int riverReflections;    // rivers keep their reflection outside cutscenes (weight 1.0 instead of 0)
     int wetReflections;      // the wet-surface reflection gate of the renderer
     int aimTolerance;        // camera angle limits compare with a tolerance
     int activationScale;     // object activation radius multiplier 1..3 (game: 1)
