@@ -598,6 +598,7 @@ int MiddleBrightness(void* dev) {
     return result;
 }
 
+// Note: wsprintfA (Log) has no '+' flag; "%+d" shifted the arguments and a %s read a number as a string (a crash at the end of a scan).
 void NoteEffect(const ScanHit& h) {
     const int cap = kMaxGroups / 4;
     int at = g_scan.allCount;
@@ -616,7 +617,7 @@ void ScanFinish() {
         g_groupCount, g_scan.frames, g_scan.measured, g_scan.first, g_scan.base, g_scan.hits);
     for (int i = 0; i < g_scan.allCount && i < 10; ++i) {
         const ScanHit& h = g_scan.all[i];
-        Log("hunt: top %d: %+d without %d draws from %08X, shader %08X (first: %u primitives): s0 %s | s1 %s | s2 %s | s3 %s", i + 1, h.gain,
+        Log("hunt: top %d: brighter by %d without %d draws from %08X, shader %08X (first: %u primitives): s0 %s | s1 %s | s2 %s | s3 %s", i + 1, h.gain,
             h.draws, h.from, h.shader, h.count, h.tex[0], h.tex[1], h.tex[2], h.tex[3]);
     }
     g_scan.explainCount = 0;
@@ -683,7 +684,7 @@ void HuntFrame(bool k3, bool, bool, bool) {
                 NoteEffect(h);
                 if (h.gain >= 12) {
                     ++g_scan.hits;
-                    Log("hunt: group %d left out (%d draws): middle %d (baseline %d, %+d): from %08X, shader %08X", h.group, h.draws, m, g_scan.base,
+                    Log("hunt: group %d left out (%d draws): middle %d (baseline %d, brighter by %d): from %08X, shader %08X", h.group, h.draws, m, g_scan.base,
                         h.gain, h.from, h.shader);
                 }
             }
