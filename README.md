@@ -26,8 +26,8 @@ _Універсальний фікс для_ **Deadly Premonition: The Director'
 One DLL in the game folder instead of DPfix, a stability fix, a map fix and a crash fix.
 No installer: press **F10** in game and everything is there. The mod also gives the game 4 GB of memory by itself (from the second start).
 
-> **Version 0.7.4.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
-> <br>New in 0.7.4: **York can fly** (cheats, F3), the lock-on aims at the chest instead of the hips — see [What's new](#whats-new-in-074). In 0.7.3: a mod's name, author and version in a plain `mod.txt`. In 0.7.2: **updates itself** (F9 on the start card), a much smaller archive — see [What's new](#whats-new-in-072). In 0.7.1: fixes for the **thread races** behind the crashes and hangs on entering buildings, the **QTE at high FPS**, **4 GB of memory by itself**, checked and compressed save backups, the game's own Xbox icons — see [What's new](#whats-new-in-071).
+> **Version 0.7.5.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
+> <br>New in 0.7.5: **texture replacements in mod folders work** — see [What's new](#whats-new-in-075). In 0.7.4: **York can fly** (cheats, F3), the lock-on aims at the chest instead of the hips. In 0.7.3: a mod's name, author and version in a plain `mod.txt`. In 0.7.2: **updates itself** (F9 on the start card), a much smaller archive — see [What's new](#whats-new-in-072). In 0.7.1: fixes for the **thread races** behind the crashes and hangs on entering buildings, the **QTE at high FPS**, **4 GB of memory by itself**, checked and compressed save backups, the game's own Xbox icons — see [What's new](#whats-new-in-071).
 
 ### Features
 
@@ -100,6 +100,10 @@ port with the Xbox 360 original:
   next start, the original kept as `DP.exe.bak`).
 - 🧍 **Residents walking into nowhere** — a failed route lookup moved the
   resident to (0, 0, 0); now the resident stays where it stood.
+
+### What's new in 0.7.5
+
+- **Texture replacements from mods work.** A texture in a mod folder (`UltimateFix\mods\<mod>\textures\<hash>.dds` or `.png`) was found but never loaded (`could not be loaded (88760B59)` in the log): the mod looked for the file in the wrong folder. With a mod that carried textures, the own folders (`UltimateFix\textures\override\`, the DPfix and ZachFix folders) failed the same way. Fixed.
 
 ### What's new in 0.7.4
 
@@ -270,8 +274,8 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 Одна DLL у теці гри замість DPfix, фіксу стабільності, фіксу мапи й фіксу вильотів.
 Без інсталятора: натисніть **F10** у грі, і все там. Мод також сам дає грі 4 ГБ пам'яті (з другого запуску).
 
-> **Версія 0.7.4.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
-> <br>Нове в 0.7.4: **Йорк літає** (читкоди, F3), автоприціл цілиться в груди, а не в стегна — див. [Що нового](#що-нового-в-074). У 0.7.3: назва, автор і версія мода у звичайному `mod.txt`. У 0.7.2: **оновлюється сам** (F9 на стартовій плашці), значно менший архів — див. [Що нового](#що-нового-в-072). У 0.7.1: виправлено **гонки потоків**, через які гра падала й зависала при вході в будівлі, **QTE на високому FPS**, **4 ГБ пам'яті самі собою**, перевірені й стиснені копії збережень, оригінальні іконки Xbox — див. [Що нового](#що-нового-в-071).
+> **Версія 0.7.5.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
+> <br>Нове в 0.7.5: **заміни текстур у теках модів працюють** — див. [Що нового](#що-нового-в-075). У 0.7.4: **Йорк літає** (читкоди, F3), автоприціл цілиться в груди, а не в стегна. У 0.7.3: назва, автор і версія мода у звичайному `mod.txt`. У 0.7.2: **оновлюється сам** (F9 на стартовій плашці), значно менший архів — див. [Що нового](#що-нового-в-072). У 0.7.1: виправлено **гонки потоків**, через які гра падала й зависала при вході в будівлі, **QTE на високому FPS**, **4 ГБ пам'яті самі собою**, перевірені й стиснені копії збережень, оригінальні іконки Xbox — див. [Що нового](#що-нового-в-071).
 
 ### Можливості
 
@@ -343,6 +347,10 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
   запуску, оригінал лишається як `DP.exe.bak`).
 - 🧍 **Жителі, що йдуть «в нікуди»** — невдалий пошук маршруту переносив жителя
   в (0, 0, 0); тепер він лишається там, де стояв.
+
+### Що нового в 0.7.5
+
+- **Заміни текстур із модів працюють.** Текстуру в теці мода (`UltimateFix\mods\<мод>\textures\<хеш>.dds` або `.png`) мод знаходив, але не завантажував (`could not be loaded (88760B59)` у журналі): файл шукався не в тій теці. Якщо був мод із текстурами, так само не працювали й власні теки (`UltimateFix\textures\override\`, теки DPfix і ZachFix). Виправлено.
 
 ### Що нового в 0.7.4
 
