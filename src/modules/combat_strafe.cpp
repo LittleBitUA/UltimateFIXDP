@@ -447,6 +447,8 @@ typedef void(__attribute__((cdecl)) * FaceLinkFn)(void* entry);
 typedef void(__attribute__((thiscall)) * ObjDeleteFn)(void* mgr, void* obj);
 typedef void*(__attribute__((thiscall)) * ObjLookupFn)(void* mgr, u32 handle);
 typedef void*(__attribute__((cdecl)) * ResMgrFn)();
+extern void* g_dollMotion;
+extern int g_dollMotionKey;
 volatile int g_dollRequest = 0;
 u8* g_doll = nullptr;
 u32 g_dollHandle = 0;
@@ -568,6 +570,9 @@ void DollSpawn(u8* player) {
     }
     g_doll = obj;
     g_dollHandle = *(volatile u32*)(obj + 0x3C);
+    g_dollMotion = nullptr;
+    g_dollMotionKey = -1;
+    g_cfg.dollBodyNo = 0;
     g_cfg.dollMoveX = g_cfg.dollMoveY = g_cfg.dollMoveZ = g_cfg.dollTurn = 0;
     Log("doll: resident %d stands at %d %d %d (object %08X, handle %08X, idle motion %s)", id, (int)g_dollBase[0], (int)g_dollBase[1],
         (int)g_dollBase[2], (u32)(uintptr_t)obj, g_dollHandle, idle ? "played" : "not in memory");
@@ -600,6 +605,54 @@ void PlayAsTick(u8* player, bool free) {
     ((PlayerKindFn)(uintptr_t)kPlayerKindFn)(game, want);
 }
 
+// The doll's body motion: the same motion sets as York's rows, played through the doll's own virtual slot +54h
+void* g_dollMotion = nullptr;
+int g_dollMotionKey = -1;
+void DollMotionTick(u8* doll) {
+    const int no = g_cfg.dollBodyNo;
+    void* mgr = ((ResourceMgrFn)(uintptr_t)kResourceMgrFn)();
+    const u32 play = (*(u32* volatile*)doll)[0x54 / 4];
+    if (!no) {
+        if (g_dollMotion) {  // back to the residents' idle
+            g_dollMotion = nullptr;
+            g_dollMotionKey = -1;
+            *(volatile float*)(doll + 0x1F8) = 1.f;
+            void* idle = mgr ? ((MotionByIdFn)(uintptr_t)kMotionByIdFn)(mgr, kNpcIdleMotion, 1) : nullptr;
+            if (idle) ((PlayMotionFn)(uintptr_t)play)(doll, idle, 0.f, 0.f, 0, 0);
+        }
+        return;
+    }
+    const int set = g_cfg.dollBodySet & 3, key = set * 1000 + no;
+    if (key != g_dollMotionKey) {
+        g_dollMotionKey = key;
+        g_dollMotion = nullptr;
+        int id = kBodySets[set].first + no - 1;
+        if (id > kBodySets[set].last) id = kBodySets[set].last;
+        u8* m = mgr ? (u8*)((MotionByIdFn)(uintptr_t)kMotionByIdFn)(mgr, id, 1) : nullptr;
+        const u8* cur = *(u8* volatile*)(doll + 0x18C);
+        if (!m || (uintptr_t)m < 0x10000) {
+            Log("doll motion: resource %04X is not in memory here, skipped", id);
+            return;
+        }
+        const int bones = *(const u16*)(m + 8), frames = *(const u16*)(m + 0xA);
+        if (cur && (uintptr_t)cur > 0x10000 && *(const u16*)(cur + 8) != bones) {
+            Log("doll motion: resource %04X has %d bones, the doll's motion has %d, skipped", id, bones, *(const u16*)(cur + 8));
+            return;
+        }
+        ((PlayMotionFn)(uintptr_t)play)(doll, m, 0.f, 0.f, 0, 0);
+        g_dollMotion = m;
+        Log("doll motion: resource %04X on the doll (%d frames)", id, frames);
+    }
+    if (!g_dollMotion) return;
+    if (g_cfg.dollPlay) {
+        *(volatile float*)(doll + 0x1F8) = 1.f;
+    } else {
+        const int frames = *(const u16*)((const u8*)g_dollMotion + 0xA);
+        *(volatile float*)(doll + 0x194) = frames > 1 ? (float)(frames - 1) * (float)g_cfg.dollFrame / 100.f : 0.f;
+        *(volatile float*)(doll + 0x1F8) = 0.f;
+    }
+}
+
 void DollTick(void* playerPtr) {
     u8* player = (u8*)playerPtr;
     const bool scene = (*(volatile u32*)(uintptr_t)kEventModeVa & 0x80000000u) != 0;
@@ -624,6 +677,7 @@ void DollTick(void* playerPtr) {
     *(volatile float*)(doll + 0x5C) = g_dollBase[1] + (float)g_cfg.dollMoveY * 0.1f;
     *(volatile float*)(doll + 0x60) = g_dollBase[2] + c * fwd - s * right;
     *(volatile float*)(doll + 0x7C) = *(volatile float*)(doll + 0x6C) = g_dollYaw + (float)g_cfg.dollTurn * (3.14159265f / 180.f);
+    DollMotionTick(doll);
 }
 
 void __attribute__((thiscall)) H_DollFaceWeights(void* actor, float* w, int n) {

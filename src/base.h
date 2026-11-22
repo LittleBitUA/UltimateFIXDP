@@ -163,6 +163,7 @@ struct Config {
     int photoPlayAs;         // photo mode: which of the game's playable characters York's place shows (0 York, 1 Emily, 2 York as a child (CNC01), 3 CBS02, 4 Zach)
     int photoDollId;         // photo mode: which resident (1..49 of the game's NPC list) the doll is
     int photoFaceTarget;     // whose face the photo page's expression goes to: 0 York, 1 the doll
+    int dollBodySet, dollBodyNo, dollFrame, dollPlay;  // the doll's body motion: set, number (0 = its idle), held frame in %, 1 = runs
     int dollMoveX, dollMoveY, dollMoveZ, dollTurn;  // the doll moved right / up / forward (tenths of a unit) and turned (degrees) from where it was put
     int photoFaceAdd;        // 1 = over the game's own face of the frame instead of in its place
     int photoFaceW[58];      // weight of face channel i+2 in percent (-100..150; channels 0 and 1 scale the blink and the darts)
