@@ -504,12 +504,49 @@ bool NoteWaterDraw(UINT count, u32 from) {
 // [Debug] WaterTest, for the water draw only: c10.z is the bias of the river's own texture over the reflection
 // (out = lerp(reflection, s0, saturate(s0.a + c10.z))). The river came with 1.0 (texture only, the flat blue), the rippled
 // water with -0.75 at times. 1 = -0.75 (reflection mostly), 2 = 0 (the texture by its own alpha).
+// 3 = the river as its own record says. The game keeps a record named "_river" among its 16 water records (mix 1.00, weight
+// 1.00, a colour), but the river's draws arrive with the defaults of an object that has no record (c10 = 2, 0, 1, 1: mix 0 and
+// the flat texture only), so the reflection, the lighting of the rippled normal map and its specular sparkle (all scaled by
+// c10.y in the game's shader) never show. With 3 a water draw that came with mix 0 and bias 1 gets what the record gives an
+// object that has it: c10 = (x, mix, 1 - weight, w) and c13 = the record's colour.
+bool RiverRecord(float* mix, float* weight, float* colour) {
+    u8* game = *(u8**)(uintptr_t)kGameManagerPtrVa;
+    if (!game || (uintptr_t)game < 0x10000) return false;
+    const u8* rec = *(u8* volatile*)(game + 0x835004);
+    if (!rec || (uintptr_t)rec < 0x10000 || IsBadReadPtr(rec, 16 * 0x2C)) return false;
+    for (int i = 0; i < 16; ++i) {
+        const u8* r = rec + i * 0x2C;
+        if (r[4] != '_' || r[5] != 'r' || r[6] != 'i' || r[7] != 'v' || r[8] != 'e' || r[9] != 'r') continue;
+        const short* w = (const short*)r;
+        *mix = (float)w[16] * 0.01f;
+        *weight = (float)w[17] * 0.01f;
+        for (int k = 0; k < 4; ++k) colour[k] = (float)w[18 + k] * 0.01f;
+        return true;
+    }
+    return false;
+}
 template <typename Draw> HRESULT WaterDraw(void* dev, bool water, Draw draw) {
-    if (!water || (g_cfg.waterTest != 1 && g_cfg.waterTest != 2) || !r_SetPsConstF) return draw();
+    if (!water || g_cfg.waterTest < 1 || g_cfg.waterTest > 3 || !r_SetPsConstF) return draw();
     float v[4] = {g_psC[10][0], g_psC[10][1], g_cfg.waterTest == 1 ? -0.75f : 0.0f, g_psC[10][3]};
+    float c13[4] = {g_psC[13][0], g_psC[13][1], g_psC[13][2], g_psC[13][3]};
+    if (g_cfg.waterTest == 3) {
+        float mix = 0, weight = 0, colour[4];
+        if (g_psC[10][1] != 0.f || g_psC[10][2] != 1.f || !RiverRecord(&mix, &weight, colour)) return draw();  // not a record-less water draw
+        v[1] = mix;
+        v[2] = 1.f - weight;
+        for (int k = 0; k < 4; ++k) c13[k] = colour[k];
+        static bool told = false;
+        if (!told) {
+            told = true;
+            Log("water: the river drawn as its record says: c10 %d %d %d %d, c13 %d %d %d %d (thousandths)", Milli(v[0]), Milli(v[1]), Milli(v[2]),
+                Milli(v[3]), Milli(c13[0]), Milli(c13[1]), Milli(c13[2]), Milli(c13[3]));
+        }
+        r_SetPsConstF(dev, 13, c13, 1);
+    }
     r_SetPsConstF(dev, 10, v, 1);
     const HRESULT hr = draw();
     r_SetPsConstF(dev, 10, g_psC[10], 1);
+    if (g_cfg.waterTest == 3) r_SetPsConstF(dev, 13, g_psC[13], 1);
     return hr;
 }
 // One draw explained, once per caller address of interest (the prologue fog at 006D6E1B): the pixel shader disassembled into
@@ -2202,16 +2239,13 @@ void WaterFrame() {
         held6 = d6;
     }
     if (now && !was) {
-        g_cfg.waterTest = (g_cfg.waterTest + 1) % 3;
-        Log("water: WaterTest %d (Numpad 1): c10.z %s", g_cfg.waterTest, g_cfg.waterTest == 1 ? "-0.75" : g_cfg.waterTest == 2 ? "0" : "as the game sets it");
-        if (g_cfg.waterTest == 1)
-            ShowNotice(L"Тест води: 1 з 2, відбиття", L"Water test: 1 of 2, reflection", L"c10.z = -0.75: більше відбиття. Numpad 1 далі.",
-                       L"c10.z = -0.75: mostly reflection. Numpad 1 for the next.", 3);
-        else if (g_cfg.waterTest == 2)
-            ShowNotice(L"Тест води: 2 з 2, за прозорістю", L"Water test: 2 of 2, by alpha", L"c10.z = 0: текстура за власною прозорістю. Numpad 1 вимикає.",
-                       L"c10.z = 0: the texture by its own alpha. Numpad 1 turns it off.", 3);
+        g_cfg.waterTest = g_cfg.waterTest == 3 ? 0 : 3;
+        Log("water: WaterTest %d (Numpad 1): %s", g_cfg.waterTest, g_cfg.waterTest == 3 ? "the river as its record says" : "as the game draws it");
+        if (g_cfg.waterTest == 3)
+            ShowNotice(L"Вода: за записом річки", L"Water: by the river's record", L"Річка отримує параметри зі свого запису «_river». Numpad 1 вимикає.",
+                       L"The river gets the values of its \"_river\" record. Numpad 1 turns it off.", 4);
         else
-            ShowNotice(L"Тест води: вимкнено", L"Water test: off", L"Вода як у грі. Numpad 1 вмикає.", L"Water as the game draws it. Numpad 1 turns the test on.", 3);
+            ShowNotice(L"Вода: як у грі", L"Water: as the game draws it", L"Numpad 1 вмикає запис річки.", L"Numpad 1 turns the river's record on.", 3);
     }
     was = now;
 }  // display.cpp, at the first Present
