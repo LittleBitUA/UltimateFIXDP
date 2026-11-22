@@ -107,6 +107,28 @@ port with the Xbox 360 original:
   side missions list and the map's mission view hung on an empty screen. The
   panel now waits for the next frame (`[Fixes] ZeroFrameMenus`; not yet checked
   in the game, `[Debug] ForceZeroFrame` reproduces the bug).
+- 🌊 **The river that was a flat blue strip** (in the next version, 0.7.10) —
+  on the Xbox 360 the river is grey-teal, covered with moving ripples and
+  glints. On PC it is a smooth blue ribbon, as if the water were missing.
+  The water itself is there, two things are lost on the way to the screen:
+  - **The river's own settings are never applied.** The game's water table
+    has an entry named `_river`: reflection 100 %, weight 100 %. The PC port
+    draws the river with the values of an object that has no entry at all:
+    reflection 0. The game's water shader multiplies the reflection, the
+    lighting of the waves and the glints by that number, so all three come
+    out as zero and only the river's 4×4 one-colour texture is left. The mod
+    hands the river's draws the values of the `_river` entry. Why the port
+    does not find the entry by itself is not known yet.
+  - **The waves are smaller than a pixel.** The Xbox 360 renders a wave
+    texture for each water object; the PC port replaced that with one wave
+    map shared by all water, and on the river it repeats so often that the
+    waves turn into white noise. The mod draws it 16 times larger. That
+    number was picked by eye against Xbox 360 footage, the console's own
+    value has not been measured.
+
+  On by default, `[Fixes] RiverWater`, switched in the F10 menu at once.
+  Checked in the game at the river; other water (the lake, puddles,
+  interiors) has not been compared yet.
 
 ### What's new in 0.7.9
 
@@ -456,6 +478,26 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
   порожньому екрані. Тепер панель чекає наступного кадру (`[Fixes]
   ZeroFrameMenus`; у грі ще не перевірено, `[Debug] ForceZeroFrame` відтворює
   ваду).
+- 🌊 **Річка, що була пласкою синьою смугою** (у наступній версії, 0.7.10) —
+  на Xbox 360 річка сіро-бірюзова, вкрита рухомими брижами й відблисками.
+  На ПК це гладка синя стрічка, наче води немає. Сама вода на місці, дорогою
+  до екрана губляться дві речі:
+  - **Власні налаштування річки не застосовуються.** У таблиці води гри є
+    запис `_river`: відбиття 100 %, вага 100 %. PC-порт малює річку зі
+    значеннями об'єкта, який не має запису взагалі: відбиття 0. Шейдер води
+    множить на це число відбиття, освітлення хвиль і відблиски, тож усі три
+    дають нуль і лишається тільки однотонна текстура річки 4×4. Мод дає
+    малюванню річки значення із запису `_river`. Чому порт сам не знаходить
+    цей запис, поки не з'ясовано.
+  - **Хвилі дрібніші за піксель.** Xbox 360 малює текстуру хвиль окремо для
+    кожного водного об'єкта; PC-порт замінив це однією картою хвиль на всю
+    воду, і на річці вона повторюється так густо, що хвилі перетворюються
+    на білий шум. Мод малює її у 16 разів більшою. Це число підібрано на
+    око за записами з Xbox 360, значення самої консолі не виміряно.
+
+  Увімкнено типово, `[Fixes] RiverWater`, перемикається в меню F10 одразу.
+  Перевірено у грі біля річки; іншу воду (озеро, калюжі, приміщення) ще не
+  порівнювали.
 
 ### Що нового в 0.7.9
 

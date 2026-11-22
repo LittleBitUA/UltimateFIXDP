@@ -59,6 +59,9 @@ static const char kDefaultIni[] =
     "\r\n"
     "\r\n"
     "[Fixes]\r\n"
+    "; 1 = the river is drawn with the values of the game's own \"_river\" water record (reflection, lit waves, sparkle), which\r\n"
+    "; the PC version never applies (flat blue water), and with a wave map 16 times larger. Changes at once.\r\n"
+    "RiverWater=1\r\n"
     "; Muzzle flashes, splashes and hits take a fixed step: at the console's 30 frames/s that is half the speed of the other\r\n"
     "; effects, at the PC's 60 it is full speed, so they play twice as fast as on the console. 1 = console speed. Restart needed.\r\n"
     "HalveFlashEffects=1\r\n"
@@ -219,9 +222,6 @@ static const char kDefaultIni[] =
     "; 1 = the far sun shadow cascade (from about 200 units out) is filtered with the same four taps the game uses for the\r\n"
     "; two near ones: no hard, stair-stepped shadow edges crawling in the distance. Not a console feature. Changes at once.\r\n"
     "FarShadowFilter=1\r\n"
-    "; 1 = the river is drawn with the values of the game's own \"_river\" water record (reflection, lit waves, sparkle), which\r\n"
-    "; the PC version never applies (flat blue water), and with a wave map 16 times larger. Changes at once.\r\n"
-    "RiverWater=1\r\n"
     "; 1 = world textures stored without mipmaps get them built when they load: far textures stop shimmering. Restart needed.\r\n"
     "GenerateMips=1\r\n"
     "; A photo mode filter applied all the time: 0 none, 1 warm, 2 cold, 3 B&W, 4 cinema, 5 vintage, 6 sepia, 7 noir, 8 film,\r\n"
@@ -836,7 +836,7 @@ void LoadConfig(const wchar_t* ini) {
     if (g_cfg.nearPlane < 10) g_cfg.nearPlane = 10;
     if (g_cfg.nearPlane > 200) g_cfg.nearPlane = 200;
     g_cfg.shadowBiasFix = GetPrivateProfileIntW(L"Graphics", L"ShadowBiasFix", 1, ini) ? 1 : 0;
-    g_cfg.riverWater = GetPrivateProfileIntW(L"Graphics", L"RiverWater", 1, ini) ? 1 : 0;
+    g_cfg.riverWater = GetPrivateProfileIntW(L"Fixes", L"RiverWater", 1, ini) ? 1 : 0;
     g_cfg.farShadowFilter = GetPrivateProfileIntW(L"Graphics", L"FarShadowFilter", 1, ini) ? 1 : 0;
     g_cfg.generateMips = GetPrivateProfileIntW(L"Graphics", L"GenerateMips", 1, ini) ? 1 : 0;
     g_cfg.gameLook = (int)GetPrivateProfileIntW(L"Graphics", L"GameLook", 0, ini);

@@ -525,7 +525,7 @@ bool RiverRecord(float* mix, float* weight, float* colour) {
     }
     return false;
 }
-// RiverWater ([Graphics] RiverWater=1) is that as an option, plus the scale of the wave map: with the game's UV the map repeats
+// RiverWater ([Fixes] RiverWater=1) is that as an option, plus the scale of the wave map: with the game's UV the map repeats
 // below a pixel on the river (white noise instead of waves; on the Xbox the cells are tens of pixels wide), so its UV is
 // scaled by 1/16, the value picked by eye in the game against the Xbox pictures (the Xbox's own number is not known yet).
 // With TraceWater the river's mesh goes to the log once.
