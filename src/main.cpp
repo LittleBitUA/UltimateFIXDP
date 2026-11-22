@@ -134,11 +134,14 @@ static void Startup() {
     // stays in for those even when ZeroDeltaGuard=0.
     if (!g_cfg.zeroDeltaGuard) Log("zero-delta: ZeroDeltaGuard=0 is not followed: the mod's own pause makes frames of zero length, the guard stays");
     if (InstallZeroDelta()) ++on;
-    if (InstallStability()) ++on;
+    const int bis = g_cfg.bisect;  // 1 stability, 2 world distance and extras, 4 house list, 8 game files, textures and mods,
+                                   // 16 alternate 3D, 32 crash and resource guards, 64 physics, 128 save guard, 256 map, 512 the player bridge
+    if (bis) Log("bisect: mask %d: the groups named by its bits are not installed in this run", bis);
+    if (!(bis & 1) && InstallStability()) ++on;
     InstallAutoLargeAddress();
     InstallUpdater();
-    if (g_cfg.saveGuard && InstallSaveGuard()) ++on;
-    if (g_cfg.houseListFix && InstallHouseList()) ++on;
+    if (!(bis & 128) && g_cfg.saveGuard && InstallSaveGuard()) ++on;
+    if (!(bis & 4) && g_cfg.houseListFix && InstallHouseList()) ++on;
     if (g_cfg.removeExtraJoyPoll && InstallJoyPoll()) ++on;
     if (g_cfg.skipIntro && InstallSkipIntro()) ++on;
     if ((g_cfg.forceUsSlot || g_cfg.defaultPadBindings) && InstallLanguageSlot()) ++on;
@@ -146,30 +149,30 @@ static void Startup() {
     if (g_cfg.zeroFrameMenus && InstallZeroFrameMenus()) ++on;
     // Always: the Present hook carries the whole per-frame layer, not only the borderless window.
     if (InstallDisplay()) ++on;
-    if (InstallWorldDistance()) ++on;
+    if (!(bis & 2) && InstallWorldDistance()) ++on;
     if (InstallOutputResolution()) ++on;
     if (InstallRenderScale()) ++on;
     if (InstallShadowScale()) ++on;
     if (InstallGraphicsTweaks()) ++on;
     if (InstallGameplay()) ++on;
     if (InstallStickProfile()) ++on;
-    if (g_cfg.crashGuards && InstallCrashGuards()) ++on;
-    if (g_cfg.resourceReadGuard && !g_cfg.safeMode && InstallResourceGuard()) ++on;
-    if (g_cfg.mapFix && InstallMapFix()) ++on;
-    ScanMods();  // before the overlays that read the mods' folders
-    if (InstallGameFiles()) ++on;
-    if ((g_cfg.textureOverride || g_cfg.dumpTextures || g_cfg.glyphTheme || GameFileTextures() || g_cfg.generateMips) && InstallTextureOverride()) ++on;
+    if (!(bis & 32) && g_cfg.crashGuards && InstallCrashGuards()) ++on;
+    if (!(bis & 32) && g_cfg.resourceReadGuard && !g_cfg.safeMode && InstallResourceGuard()) ++on;
+    if (!(bis & 256) && g_cfg.mapFix && InstallMapFix()) ++on;
+    if (!(bis & 8)) ScanMods();  // before the overlays that read the mods' folders
+    if (!(bis & 8) && InstallGameFiles()) ++on;
+    if (!(bis & 8) && (g_cfg.textureOverride || g_cfg.dumpTextures || g_cfg.glyphTheme || GameFileTextures() || g_cfg.generateMips) && InstallTextureOverride()) ++on;
     if (g_cfg.nativeDualSense && InstallDualSense()) ++on;
     // The writer also carries SynthHaptics and the menu's trigger test, which work with AdaptiveTriggers and Vibration off.
     if ((g_cfg.adaptiveTriggers || g_cfg.vibration || g_cfg.synthHaptics || g_cfg.menu) && InstallDualSenseOutput()) ++on;
     if (InstallInputExtras()) ++on;
     if (InstallVehicleTriggers()) ++on;
-    if (InstallWorldExtra()) ++on;
+    if (!(bis & 2) && InstallWorldExtra()) ++on;
     if (!g_cfg.safeMode && InstallFreeCam()) ++on;
-    if (!g_cfg.safeMode && InstallAlternate3D()) ++on;
-    if (!g_cfg.safeMode && InstallPhysicsFreeze()) ++on;
-    if (!g_cfg.safeMode && InstallHighFpsPhysics()) ++on;
-    if (!g_cfg.safeMode && InstallCombatStrafe()) ++on;
+    if (!(bis & 16) && !g_cfg.safeMode && InstallAlternate3D()) ++on;
+    if (!(bis & 64) && !g_cfg.safeMode && InstallPhysicsFreeze()) ++on;
+    if (!(bis & 64) && !g_cfg.safeMode && InstallHighFpsPhysics()) ++on;
+    if (!(bis & 512) && !g_cfg.safeMode && InstallCombatStrafe()) ++on;
     if (!g_cfg.safeMode && InstallQuickTurn()) ++on;
     if (!g_cfg.safeMode && g_cfg.waypoint && InstallWaypoint()) ++on;
     if (!g_cfg.safeMode && InstallNpcMap()) ++on;  // after the waypoint: its map pass draws the residents

@@ -671,6 +671,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.frameStats = (int)GetPrivateProfileIntW(L"Debug", L"FrameStats", 0, ini);
     g_cfg.triggerFire = (int)GetPrivateProfileIntW(L"Input", L"TriggerFire", 1, ini);
     g_cfg.safeMode = (int)GetPrivateProfileIntW(L"Debug", L"SafeMode", 0, ini);
+    g_cfg.bisect = (int)GetPrivateProfileIntW(L"Debug", L"Bisect", 0, ini);
     g_cfg.traceStates = (int)GetPrivateProfileIntW(L"Debug", L"TraceStates", 0, ini);
     g_cfg.combatStrafe = (int)GetPrivateProfileIntW(L"Input", L"CombatStrafe", 0, ini);
     g_cfg.quickTurn = (int)GetPrivateProfileIntW(L"Input", L"QuickTurn", 1, ini);

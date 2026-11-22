@@ -195,6 +195,7 @@ struct Config {
     int frameStats;          // separate panel: frame time split (game, physics, Present), worst frame, graph
     int perfOverlay;         // FPS, frame time and the GPU time of the mod's passes on the screen
     int triggerFire;         // aim on L2 and fire on R2 (run on L1, hold breath on R1) instead of the shoulder buttons
+    int bisect;              // [Debug] Bisect: a bit mask of hook groups left out for this run, to find which one breaks something (see main.cpp)
     int safeMode;            // skips some newer hooks (free camera, physics, player update bridge, alternate 3D, waypoint, icon index, effect step,
                              // SSAO, blur look) and zeroes the newest settings in LoadConfig; the rest stays on (see the ini text)
     int traceStates;         // log every change of the player state
