@@ -8,6 +8,7 @@
 #include "../base.h"
 #include "../sites.h"
 #include "../stubs.h"
+#include "../lab_dsb.h"
 
 namespace ufx {
 bool PadIsRawSony(unsigned id);  // sony_layout.cpp
@@ -177,6 +178,104 @@ void PhotoAnimTick(void* player) {
     }
 }
 
+// ---- Mission lab ([Debug] MissionLab=1): the first experiment for a mission creator (from static analysis, untested) ----
+// The game's event scripts are DSB buffers in 384 slots (0BE06A0h, 10h each; +4 = the buffer). An event is found by the number
+// inside the buffer, not by a file name, so a buffer of the mod's own with a free number (900) can be registered with the
+// game's loader FUN_0070DD40 (thiscall on CEvCore [0BD9FE8h]: buffer, tag; ret 8; it relocates the name pointers in place, so
+// it gets a fresh writable copy that is never freed) and started with CEvent::RunEvent FUN_0043C140 (thiscall on CEvent
+// [0BD9E58h]: group 0, script, event, 0, 0, flags; ret 18h). Numpad 7 runs event 3 of that script: fade out, wait, fade in.
+constexpr u32 kEvCorePtrVa = 0xBD9FE8, kEventPtrVa = 0xBD9E58, kEvSlotsVa = 0xBE06A0, kEvProcessesVa = 0xBDBEE0;
+constexpr u32 kEvLoadFn = 0x70DD40, kRunEventFn = 0x43C140, kMovieFlagVa = 0x8A721C, kEventBlockVa = 0x1470F24;
+typedef u32(__attribute__((thiscall)) * EvLoadFn)(void* core, void* buffer, u32 tag);
+typedef int(__attribute__((thiscall)) * RunEventFn)(void* event, u32 group, u32 script, u32 id, int a, u32 b, int flags);
+u8* g_labBuf = nullptr;
+int g_labPid = -1;
+u32 g_labFrames = 0;
+
+bool LabRegistered() {
+    if (!g_labBuf) return false;
+    for (int i = 0; i < 384; ++i)
+        if (*(u8* volatile*)(uintptr_t)(kEvSlotsVa + i * 0x10 + 4) == g_labBuf) return *(const u32*)(g_labBuf + 8) == 11;
+    return false;
+}
+bool LabRegister() {
+    static const u8 kLoad[8] = {0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x89, 0x4D}, kRun[8] = {0x83, 0xEC, 0x18, 0x66, 0x8B, 0x54, 0x24, 0x20};
+    if (!BytesMatch(kEvLoadFn, kLoad, 8) || !BytesMatch(kRunEventFn, kRun, 8)) {
+        Log("lab: the event functions differ from DP.exe 1.01b, nothing done");
+        return false;
+    }
+    u8* core = *(u8* volatile*)(uintptr_t)kEvCorePtrVa;
+    if (!core || *(volatile u32*)(core + 0xAEC) != kEvSlotsVa) {  // the slot table is bound when the game's events start up
+        Log("lab: the event system is not ready yet (core %08X)", (u32)(uintptr_t)core);
+        return false;
+    }
+    u8* buf = (u8*)VirtualAlloc(nullptr, kLabDsbSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);  // never freed: threads point into it
+    if (!buf) return false;
+    for (u32 i = 0; i < kLabDsbSize; ++i) buf[i] = kLabDsb[i];
+    const u32 slot = ((EvLoadFn)(uintptr_t)kEvLoadFn)(core, buf, 4) & 0xFFFFu;
+    if (slot == 0xFFFFu) {
+        Log("lab: the game has no free script slot");
+        return false;
+    }
+    g_labBuf = buf;
+    Log("lab: script %u registered in slot %u (buffer %08X, %u bytes, %u events)", kLabDsbNo, slot, (u32)(uintptr_t)buf, kLabDsbSize, kLabDsbEventCount);
+    return true;
+}
+// The process running one of our events, -1 when none: its event record (+48h) lies inside our buffer
+int LabProcess() {
+    if (!g_labBuf) return -1;
+    for (int i = 0; i < 32; ++i) {
+        const u8* p = (const u8*)(uintptr_t)(kEvProcessesVa + i * 0x54);
+        const u8* rec = *(const u8* volatile*)(p + 0x48);
+        if (*(volatile int*)(p + 8) != -1 && rec >= g_labBuf && rec < g_labBuf + kLabDsbSize) return i;
+    }
+    return -1;
+}
+void LabTick(void* player) {
+    if (!g_cfg.missionLab || !player) return;
+    if (g_labPid != -1) {  // one of ours was started: say when it is over
+        ++g_labFrames;
+        if (LabProcess() < 0) {
+            Log("lab: the event is over after %u player updates", g_labFrames);
+            ShowNotice(L"Лабораторія місій: подія завершилась", L"Mission lab: the event is over", L"Власний скрипт мода відпрацював у грі.",
+                       L"The mod's own script ran in the game.", 4);
+            g_labPid = -1;
+        } else if (g_labFrames == 3600) {
+            Log("lab: the event is still running after 3600 player updates");
+        }
+    }
+    static bool held = false;
+    HWND fg = GetForegroundWindow();
+    DWORD pid = 0;
+    if (fg) GetWindowThreadProcessId(fg, &pid);
+    const bool down = pid == GetCurrentProcessId() && !ui::IsOpen() && (GetAsyncKeyState(VK_NUMPAD7) & 0x8000);
+    const bool hit = down && !held;
+    held = down;
+    if (!hit) return;
+    if (g_labPid != -1) {
+        Log("lab: Numpad 7 while the event still runs, ignored");
+        return;
+    }
+    const u8* ev = *(const u8* volatile*)(uintptr_t)kEventPtrVa;
+    const u32 mode = *(volatile u32*)(uintptr_t)kGameplayModeVa;
+    if (!ev || mode != 3 || (*(volatile u32*)(ev + 0x44) & 0x40000) || *(volatile u32*)(ev + 0x34) || (*(volatile u32*)(uintptr_t)kEventModeVa & 0x80000000u) ||
+        (*(volatile u32*)(uintptr_t)kMovieFlagVa & 0x80000000u) || *(volatile u32*)(uintptr_t)kEventBlockVa) {
+        Log("lab: not now (gameplay mode %u, event %08X: needs free play outside any scene or video)", mode, (u32)(uintptr_t)ev);
+        ShowNotice(L"Лабораторія місій: не зараз", L"Mission lab: not now", L"Потрібна вільна гра: не сцена, не відео, не меню.",
+                   L"It needs free play: no scene, no video, no menu.", 4);
+        return;
+    }
+    if (!LabRegistered() && !LabRegister()) return;
+    const int r = ((RunEventFn)(uintptr_t)kRunEventFn)((void*)ev, 0, kLabDsbNo, kLabEvMin, 0, 0, 0);
+    Log("lab: RunEvent(script %u, event %u) returned %d; our process slot %d", kLabDsbNo, kLabEvMin, r, LabProcess());
+    if (r == -1) {
+        ShowNotice(L"Лабораторія місій: гра відмовила", L"Mission lab: the game refused", L"RunEvent повернув -1. Деталі в ufx.log.", L"RunEvent returned -1. See ufx.log.", 5);
+        return;
+    }
+    g_labPid = r;
+    g_labFrames = 0;
+}
+
 // Logs every change of the player state (Debug.TraceStates=1): the labelled table that static analysis cannot give.
 void __cdecl StateTrace(void* player, int newState) {
     if (!g_cfg.traceStates || !player) return;
@@ -265,7 +364,7 @@ volatile DWORD g_playerTickMs = 0;  // when the player object was last updated: 
 
 void __cdecl StrafeWorker(void* player) {
     if (player) { g_playerTickMs = GetTickCount(); g_playerObject = (u32)(uintptr_t)player; }
-    if (player) { SuitTick(player); PhotoAnimTick(player); PoseTick(player); CheatsTick(player); LayoutTick(player); }
+    if (player) { SuitTick(player); PhotoAnimTick(player); LabTick(player); PoseTick(player); CheatsTick(player); LayoutTick(player); }
     if (!player || !g_cfg.combatStrafe) return;
     unsigned now = PadButtons() & 0x30;  // buttons 4 (LB) and 5 (RB)
     unsigned rising = now & ~g_prevShoulders;

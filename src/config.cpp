@@ -480,6 +480,9 @@ static const char kDefaultIni[] =
     "; render target, states and textures; every shader disassembled once; every texture up to 1024 as PNG once; the picture).\r\n"
     "; A tool like RenderDoc for this Direct3D 9 game. A capture takes some seconds.\r\n"
     "FrameCapture=0\r\n"
+    "; Experiments for the mission creator, off: 1 = Numpad 7 registers the mod's own event script (number 900) with the game's\r\n"
+    "; interpreter and runs its smallest event (the screen fades out and in). Save first.\r\n"
+    "MissionLab=0\r\n"
     "; Unfinished, off: the prologue smoke drawn the Xbox 360 way (work in progress, not yet like the console). Changes at once.\r\n"
     "SmokeFix=0\r\n"
     "; 1 = log the player state changes, the game's camera mode changes, scripted camera requests and sudden camera (eye) jumps, each\r\n"
@@ -945,6 +948,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.traceResources = (int)GetPrivateProfileIntW(L"Debug", L"TraceResources", 0, ini);
     g_cfg.traceWater = (int)GetPrivateProfileIntW(L"Debug", L"TraceWater", 0, ini);
     g_cfg.frameCapture = (int)GetPrivateProfileIntW(L"Debug", L"FrameCapture", 0, ini);
+    g_cfg.missionLab = (int)GetPrivateProfileIntW(L"Debug", L"MissionLab", 0, ini);
     g_cfg.waterTest = (int)GetPrivateProfileIntW(L"Debug", L"WaterTest", 0, ini);
     g_cfg.menu = (int)GetPrivateProfileIntW(L"Menu", L"Enabled", 1, ini);
     g_cfg.startHint = (int)GetPrivateProfileIntW(L"Menu", L"StartHint", 1, ini);

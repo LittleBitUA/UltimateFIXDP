@@ -52,6 +52,7 @@ struct Config {
     int menuPadControl;      // [Menu] PadControl: the F10 menu on a gamepad (View + Menu opens it), the game does not see the pad meanwhile
     int language;            // language of the menu: 0 Ukrainian, 1 English
     int menu;                // F10 settings menu inside the game
+    int missionLab;          // [Debug] MissionLab: experiments for the mission creator (Numpad 7 runs the mod's own event script)
     int frameCapture;        // [Debug] FrameCapture: Numpad 0 writes one frame, draw by draw, into a capture folder under UltimateFix
     int traceWater;
     int waterTest;           // experiment: 1 = the river's own texture shows at least 60 % (c10.z) on water draws          // log what every distinct water draw has bound (textures, c10/c13) (diagnostic)
