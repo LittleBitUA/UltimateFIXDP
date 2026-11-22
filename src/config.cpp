@@ -423,6 +423,15 @@ static const char kDefaultIni[] =
     "; 1 = behind the wheel the brake (and reverse) is on L2 and the gas on R2, as on the console; the car's other buttons stay\r\n"
     "; where the game has them. 0 = the game's layout in the car (brake L1, gas R1). Changes at once.\r\n"
     "TriggerDrive=1\r\n"
+    "; DualSense adaptive triggers behind the wheel (with TriggerDrive and AdaptiveTriggers), each trigger on its own:\r\n"
+    "; Effect: 0 = off, 1 = resistance, 2 = a click (a wall that gives way), 3 = vibration. Strength in percent.\r\n"
+    "; Start: where along the trigger's travel it begins, 0 (at once) .. 8 (near the end). Changes at once.\r\n"
+    "CarGasEffect=1\r\n"
+    "CarGasStrength=30\r\n"
+    "CarGasStart=2\r\n"
+    "CarBrakeEffect=1\r\n"
+    "CarBrakeStrength=60\r\n"
+    "CarBrakeStart=3\r\n"
     "; Strafe with LB / RB in combat while locked on (the console had it, the PC code lost it). Both buttons are also bound (LB aim,\r\n"
     "; RB fire; with TriggerFire=1 L1 run, R1 hold breath and lock-on), so pressing either while locked on also sidesteps. Changes at once.\r\n"
     "CombatStrafe=0\r\n"
@@ -741,6 +750,15 @@ void LoadConfig(const wchar_t* ini) {
     if (g_cfg.adaptiveStrength < 0) g_cfg.adaptiveStrength = 0;
     if (g_cfg.adaptiveStrength > 100) g_cfg.adaptiveStrength = 100;
     g_cfg.adaptiveAim = (int)GetPrivateProfileIntW(L"Input", L"AdaptiveAim", 1, ini);
+    {
+        struct { int* v; const wchar_t* key; int def, hi; } car[6] = {
+            {&g_cfg.carGasEffect, L"CarGasEffect", 1, 3},     {&g_cfg.carGasStrength, L"CarGasStrength", 30, 100},     {&g_cfg.carGasStart, L"CarGasStart", 2, 8},
+            {&g_cfg.carBrakeEffect, L"CarBrakeEffect", 1, 3}, {&g_cfg.carBrakeStrength, L"CarBrakeStrength", 60, 100}, {&g_cfg.carBrakeStart, L"CarBrakeStart", 3, 8}};
+        for (auto& c : car) {
+            int v = (int)GetPrivateProfileIntW(L"Input", c.key, c.def, ini);
+            *c.v = v < 0 ? 0 : v > c.hi ? c.hi : v;
+        }
+    }
     g_cfg.triggerTest = 0;
     g_cfg.vibration = (int)GetPrivateProfileIntW(L"Input", L"Vibration", 1, ini);
     g_cfg.vibrationStrength = (int)GetPrivateProfileIntW(L"Input", L"VibrationStrength", 100, ini);

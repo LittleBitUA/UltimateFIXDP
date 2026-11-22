@@ -21,6 +21,16 @@ int Scaled(int base) {
     return v;
 }
 
+// A trigger behind the wheel, as the player set it: the kind, the strength in percent (1..8 for the pad) and where it begins.
+TriggerEffect CarEffect(int kind, int percent, int start) {
+    int s = (percent * 8 + 50) / 100;
+    if (percent > 0 && s < 1) s = 1;
+    if (kind <= 0 || s <= 0) return EffectOff();
+    if (kind == 1) return EffectFeedback(start, s);
+    if (kind == 2) return EffectWeapon(start, start + 2, s);
+    return EffectVibration(start, s, 25);
+}
+
 }  // namespace
 
 // Called once per frame from the Present hook.
@@ -48,9 +58,14 @@ void AdaptiveTriggerFrame() {
         return;
     }
     if (g_cfg.adaptiveStrength > 0) {
-        if (!ui::IsOpen() && *(volatile u8*)(uintptr_t)0x014810F0) {
-            HWND w = GameWindowHandle();
-            u32 state = 0;
+        HWND w = GameWindowHandle();
+        u32 state = 0;
+        // Behind the wheel with the gas and the brake on the triggers (TriggerDrive): each trigger has its own effect, and it stays
+        // while the F10 menu is open, so that it can be tuned on the road.
+        if (*(volatile u8*)(uintptr_t)0x014810F0 && w && GetForegroundWindow() == w && PlayerStateNow(&state) && state == 0x87 && TriggerLayoutActive()) {
+            right = CarEffect(g_cfg.carGasEffect, g_cfg.carGasStrength, g_cfg.carGasStart);
+            left = CarEffect(g_cfg.carBrakeEffect, g_cfg.carBrakeStrength, g_cfg.carBrakeStart);
+        } else if (!ui::IsOpen() && *(volatile u8*)(uintptr_t)0x014810F0) {
             if (w && GetForegroundWindow() == w && PlayerStateNow(&state)) {
                 bool ranged = true;
                 switch (state) {

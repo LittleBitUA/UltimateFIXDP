@@ -68,6 +68,12 @@ struct Config {
     int sonyLayout;          // convert DualSense/DualShock axes and buttons to the Xbox 360 layout
     int adaptiveTriggers;    // DualSense adaptive trigger effects by weapon
     int adaptiveStrength;    // percent
+    int carGasEffect;        // behind the wheel, the gas trigger: 0 off, 1 resistance, 2 a click (a wall that gives way), 3 vibration
+    int carGasStrength;      // percent
+    int carGasStart;         // where along the travel it begins, 0..8
+    int carBrakeEffect;      // the same three for the brake trigger
+    int carBrakeStrength;
+    int carBrakeStart;
     int adaptiveAim;         // a light resistance on the aim trigger while a weapon is drawn
     int triggerTest;         // menu: play a test effect (not saved)
     int vibration;           // send the game's rumble to the pad: a DualSense over HID when one is open, otherwise XInput
