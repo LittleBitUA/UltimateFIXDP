@@ -1148,6 +1148,9 @@ void SelectPage(int page);
 void MsSlotChanged() { MissionLoad(g_msSlot); }
 void MsOpen();
 void MsBack();
+int g_studioDo[2];
+void StudioOpen();
+void StudioBack();
 void MsFile() { g_msDo[2] = 0; MissionOpenFile(); }
 void MsRead() { g_msDo[3] = 0; MissionLoad(g_msSlot); }
 void MsHere() { g_msDo[4] = 0; MissionRequest(1); }
@@ -1188,6 +1191,15 @@ void FormatMsItem(int v, wchar_t* out) {
 int g_msZero = 0;  // the value of the rows that only show a text
 #define MS_TEXT(uk, en, fmt, dUk, dEn) {{uk, en}, &g_msZero, kInt, 0, 0, 1, false, nullptr, nullptr, nullptr, nullptr, {dUk, dEn}, NOTR, nullptr, 0, nullptr, fmt}
 #define MS_BUTTON(uk, en, slot, fn, names, dUk, dEn) {{uk, en}, &g_msDo[slot], kInt, 0, 1, 1, false, nullptr, nullptr, fn, nullptr, {dUk, dEn}, NOTR, kMsOne, 1, names, nullptr, false}
+#define ST_BUTTON(uk, en, slot, fn, names, dUk, dEn) {{uk, en}, &g_studioDo[slot], kInt, 0, 1, 1, false, nullptr, nullptr, fn, nullptr, {dUk, dEn}, NOTR, kMsOne, 1, names, nullptr, false}
+Item g_pageStudioEntry[] = {
+    ST_BUTTON(L"Відкрити фоторежим", L"Open the photo mode", 0, StudioOpen, kMsOpenNames,
+              L"Фоторежим у власному вікні з розділами: камера і знімок, картинка, костюми, анімації, спавнер. Клавіша фоторежиму (F6) відкриває його одразу.",
+              L"The photo mode in a window of its own with sections: camera and picture, picture look, suits, motions, spawner. The photo mode key (F6) opens it at once."),
+};
+Item g_studioBackRow[] = {
+    ST_BUTTON(L"Назад до меню", L"Back to the menu", 1, StudioBack, kMsBackNames, L"Закриває вікно фоторежиму; сам фоторежим (камера, час) лишається як є.", L"Closes the photo mode's window; the photo mode itself (camera, time) stays as it is."),
+};
 Item g_pageMsEntry[] = {
     MS_BUTTON(L"Відкрити редактор місій", L"Open the mission editor", 0, MsOpen, kMsOpenNames,
               L"Власні маленькі місії: персонаж, його репліки, вибір відповіді, предмет. Місія це текстовий файл у теці UltimateFix\\missions, ним можна ділитися. Перша версія редактора: одна розмова з одним персонажем.",
@@ -1273,13 +1285,21 @@ Page g_pages[] = {
     {{L"Персонаж", L"Character"}, {L"Редактор місій · хто, де стоїть, поза", L"Mission editor · who, where, pose"}, g_pageMsActor, (int)(sizeof(g_pageMsActor) / sizeof(Item)), false},
     {{L"Розмова", L"Talk"}, {L"Редактор місій · репліки, відповіді, предмет", L"Mission editor · lines, answers, item"}, g_pageMsTalk, (int)(sizeof(g_pageMsTalk) / sizeof(Item)), false},
     {{L"Перевірка", L"Test"}, {L"Редактор місій · запустити й подивитися", L"Mission editor · run it and see"}, g_pageMsTest, (int)(sizeof(g_pageMsTest) / sizeof(Item)), false},
+    // the photo mode's own window (shown instead of the menu's sections while g_studio is set); filled in MergePages
+    {{L"Камера і знімок", L"Camera and picture"}, {L"Фоторежим · вільна камера, час, знімок", L"Photo mode · free camera, time, picture"}, nullptr, 0, false},
+    {{L"Картинка", L"Picture look"}, {L"Фоторежим · фільтри, колір, різкість", L"Photo mode · filters, colour, sharpness"}, nullptr, 0, false},
+    {{L"Костюми", L"Suits"}, {L"Фоторежим · костюм Йорка", L"Photo mode · York's suit"}, nullptr, 0, false},
+    {{L"Анімації", L"Motions"}, {L"Фоторежим · поза, анімація тіла, міміка, місце Йорка", L"Photo mode · pose, body motion, face, York's place"}, nullptr, 0, false},
+    {{L"Спавнер", L"Spawner"}, {L"Фоторежим · персонаж поруч із Йорком", L"Photo mode · a character next to York"}, nullptr, 0, false},
 };
-constexpr int kEditorPages = 4;
+constexpr int kEditorPages = 4, kStudioPages = 5;
 constexpr int kPageCount = (int)(sizeof(g_pages) / sizeof(Page));
-constexpr int kMainPages = kPageCount - kEditorPages;
+constexpr int kMainPages = kPageCount - kEditorPages - kStudioPages;
+constexpr int kStudioFirst = kMainPages + kEditorPages;
+bool g_studio = false;  // the photo mode's window is open in place of the menu's sections
 // The sections of the sidebar now: the menu's own, or the mission editor's
-inline int PageLo() { return g_editor ? kMainPages : 0; }
-inline int PageN() { return g_editor ? kEditorPages : kMainPages; }
+inline int PageLo() { return g_studio ? kStudioFirst : g_editor ? kMainPages : 0; }
+inline int PageN() { return g_studio ? kStudioPages : g_editor ? kEditorPages : kMainPages; }
 
 // The sidebar has 8 sections instead of 13: some are several pages of settings put together once at start (each part keeps its heading).
 struct PageSource {
@@ -1293,6 +1313,7 @@ constexpr int kGameMax = Count(sizeof(g_pageWorld)) + Count(sizeof(g_pageGamepla
 constexpr int kFixesMax = Count(sizeof(g_pageFixes)) + Count(sizeof(g_pageSave)) + Count(sizeof(g_pageDiag));
 constexpr int kPhotoMax = Count(sizeof(g_pagePhoto)) + Count(sizeof(g_pageCheats));
 alignas(Item) unsigned char g_photoStore[kPhotoMax * sizeof(Item)];
+alignas(Item) unsigned char g_studioStore[(sizeof(g_pagePhoto) / sizeof(Item) + kStudioPages) * sizeof(Item)];
 alignas(Item) unsigned char g_screenStore[kScreenMax * sizeof(Item)];
 alignas(Item) unsigned char g_gameStore[kGameMax * sizeof(Item)];
 alignas(Item) unsigned char g_fixesStore[kFixesMax * sizeof(Item)];
@@ -1371,12 +1392,40 @@ void MergePages() {
     const PageSource fixes[3] = {{g_pageFixes, (int)(sizeof(g_pageFixes) / sizeof(Item)), {L"Виправлення", L"Fixes"}},
                                  {g_pageSave, (int)(sizeof(g_pageSave) / sizeof(Item)), {L"Збереження", L"Saves"}},
                                  {g_pageDiag, (int)(sizeof(g_pageDiag) / sizeof(Item)), {L"Діагностика", L"Diagnostics"}}};
-    const PageSource photo[2] = {{g_pagePhoto, (int)(sizeof(g_pagePhoto) / sizeof(Item)), {L"Фоторежим", L"Photo mode"}},
+    const PageSource photo[2] = {{g_pageStudioEntry, 1, {L"Фоторежим", L"Photo mode"}},
                                  {g_pageCheats, (int)(sizeof(g_pageCheats) / sizeof(Item)), {L"Читкоди", L"Cheats"}}};
     MergeInto(g_pages[0], g_screenStore, screen, 2);
     MergeInto(g_pages[2], g_gameStore, game, 3);
     MergeInto(g_pages[kPhotoPage], g_photoStore, photo, 2);
     MergeInto(g_pages[4], g_fixesStore, fixes, 3);
+    {   // The photo mode's window: the photo rows cut into its sections at the rows that begin each, a "back" row at the end of every one
+        static const wchar_t* const starts[kStudioPages] = {L"Вільна камера", L"Фільтр", L"Костюм", L"Поза Йорка (експериментально)", L"Персонаж (експериментально)"};
+        const int total = (int)(sizeof(g_pagePhoto) / sizeof(Item));
+        int section[sizeof(g_pagePhoto) / sizeof(Item)];
+        int cur = 0;
+        for (int i = 0; i < total; ++i) {
+            for (int k = 0; k < kStudioPages; ++k)
+                if (!lstrcmpW(g_pagePhoto[i].label.uk, starts[k])) cur = k;
+            // the rows of York's own place and motions lie behind the character's in the list: they belong to "Motions"
+            if (!lstrcmpW(g_pagePhoto[i].label.uk, L"Йорк: ліворуч / праворуч")) cur = 3;
+            section[i] = cur;
+        }
+        Item* out = (Item*)g_studioStore;
+        for (int k = 0; k < kStudioPages; ++k) {
+            Page& pg = g_pages[kStudioFirst + k];
+            pg.items = out;
+            pg.count = 0;
+            for (int i = 0; i <= total; ++i) {
+                const Item* from = i < total ? (section[i] == k ? &g_pagePhoto[i] : nullptr) : &g_studioBackRow[0];
+                if (!from) continue;
+                const unsigned char* a = (const unsigned char*)from;
+                unsigned char* b = (unsigned char*)out;
+                for (unsigned n = 0; n < sizeof(Item); ++n) b[n] = a[n];
+                ++out;
+                ++pg.count;
+            }
+        }
+    }
     SnapshotBoot();
 }
 
@@ -1883,7 +1932,9 @@ void Change(Item& it, int direction) {
 bool g_editing = false;
 
 void SelectPage(int page);
-void MsOpen() { g_msDo[0] = 0; g_editor = true; MissionLoad(g_msSlot); SelectPage(kMainPages); }
+void MsOpen() { g_msDo[0] = 0; g_studio = false; g_editor = true; MissionLoad(g_msSlot); SelectPage(kMainPages); }
+void StudioOpen() { g_studioDo[0] = 0; g_editor = false; g_studio = true; SelectPage(kStudioFirst); }
+void StudioBack() { g_studioDo[1] = 0; g_studio = false; SelectPage(kPhotoPage); }
 void MsBack() { g_msDo[1] = 0; g_editor = false; SelectPage(kMainPages - 2); }
 
 void SelectPage(int page) {
@@ -2251,7 +2302,7 @@ void HandleInput(bool foreground) {
     // The photo page previews the filters on the live picture, and the panel covers most of it: held, the right mouse button
     // or L3 fades the panel away (OnFrame) and nothing else of the menu reacts meanwhile (a click or a key would act on rows
     // nobody can see). Not over a question: its answer must stay in sight.
-    const bool peeking = g_page == kPhotoPage && !g_confirm && (Down(VK_RBUTTON) || (g_padHeld & kPadPeek));
+    const bool peeking = g_studio && !g_confirm && (Down(VK_RBUTTON) || (g_padHeld & kPadPeek));
     if (peeking != g_peeking) {
         g_peeking = peeking;
         static bool logged = false;
@@ -3234,7 +3285,7 @@ void Draw() {
     if (g_rowCount == 0) BuildRows();  // never an empty page
     // No dimming behind the panel on any page: the photo page must show the real picture (its filters are judged on it), and
     // a dimming on the other pages only made the game's brightness jump when the section changed.
-    const bool photo = g_page == kPhotoPage;
+    const bool photo = g_studio;
     SetOverlayFade(g_openAlpha, g_openRise);
     FillRect(kPx, kPy, kPw, kPh, Fade(kPanelBg));
     // Without the dimming a bright scene shows through a see-through panel and the rows get hard to read: the list, the
@@ -3969,7 +4020,7 @@ void OpenChanged(bool foreground) {
 }  // namespace
 
 static volatile bool g_wantPhoto = false;
-bool PhotoPageOpen() { return g_open && g_page == kPhotoPage; }
+bool PhotoPageOpen() { return g_open && g_studio; }
 void OpenPhotoPage() { g_wantPhoto = true; }
 
 // The hint at the start: a small card in the top right corner that the menu is on F10. It shows for 15 seconds of the first
@@ -4198,7 +4249,9 @@ void OnFrame(void* device) {
     if (g_wantPhoto) {
         g_wantPhoto = false;
         g_open = true;
-        SelectPage(kPhotoPage);
+        g_editor = false;
+        g_studio = true;  // the photo mode opens in its own window
+        SelectPage(kStudioFirst);
     }
     if (foreground && Pressed(VK_F10)) {
         g_open = !g_open;
