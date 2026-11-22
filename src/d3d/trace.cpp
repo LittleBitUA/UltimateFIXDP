@@ -525,15 +525,19 @@ bool RiverRecord(float* mix, float* weight, float* colour) {
     }
     return false;
 }
-// The river's wave map repeats far too often on PC (grain smaller than a pixel; on the Xbox the cells are tens of pixels wide).
-// Numpad 8 / Numpad 2 (TraceWater, with WaterTest 3) scale the river's UV for the test; the river's mesh goes to the log once.
-float g_riverUvScale = 1.f;
+// RiverWater ([Graphics] RiverWater=1) is that as an option, plus the scale of the wave map: with the game's UV the map repeats
+// below a pixel on the river (white noise instead of waves; on the Xbox the cells are tens of pixels wide), so its UV is
+// scaled by 1/16, the value picked by eye in the game against the Xbox pictures (the Xbox's own number is not known yet).
+// With TraceWater the river's mesh goes to the log once.
+constexpr float kRiverUvScale = 1.f / 16.f;
+inline int WaterMode() { return g_cfg.waterTest >= 1 && g_cfg.waterTest <= 3 ? g_cfg.waterTest : g_cfg.riverWater ? 3 : 0; }
 void DumpRiverMesh(void* dev);
 template <typename Draw> HRESULT WaterDraw(void* dev, bool water, Draw draw) {
-    if (!water || g_cfg.waterTest < 1 || g_cfg.waterTest > 3 || !r_SetPsConstF) return draw();
-    float v[4] = {g_psC[10][0], g_psC[10][1], g_cfg.waterTest == 1 ? -0.75f : 0.0f, g_psC[10][3]};
+    const int mode = water ? WaterMode() : 0;
+    if (!mode || !r_SetPsConstF) return draw();
+    float v[4] = {g_psC[10][0], g_psC[10][1], mode == 1 ? -0.75f : 0.0f, g_psC[10][3]};
     float c13[4] = {g_psC[13][0], g_psC[13][1], g_psC[13][2], g_psC[13][3]};
-    if (g_cfg.waterTest == 3) {
+    if (mode == 3) {
         float mix = 0, weight = 0, colour[4];
         if (g_psC[10][1] != 0.f || g_psC[10][2] != 1.f || !RiverRecord(&mix, &weight, colour)) return draw();  // not a record-less water draw
         v[1] = mix;
@@ -542,22 +546,22 @@ template <typename Draw> HRESULT WaterDraw(void* dev, bool water, Draw draw) {
         static bool told = false;
         if (!told) {
             told = true;
-            Log("water: the river drawn as its record says: c10 %d %d %d %d, c13 %d %d %d %d (thousandths)", Milli(v[0]), Milli(v[1]), Milli(v[2]),
+            Log("water: the river drawn as its record says (RiverWater), wave map UV x 1/16: c10 %d %d %d %d, c13 %d %d %d %d (thousandths)", Milli(v[0]), Milli(v[1]), Milli(v[2]),
                 Milli(v[3]), Milli(c13[0]), Milli(c13[1]), Milli(c13[2]), Milli(c13[3]));
         }
         r_SetPsConstF(dev, 13, c13, 1);
-        DumpRiverMesh(dev);
+        if (g_cfg.traceWater) DumpRiverMesh(dev);
     }
-    const bool scaled = g_cfg.waterTest == 3 && g_riverUvScale != 1.f && r_SetVsConstF;
+    const bool scaled = mode == 3 && r_SetVsConstF;
     if (scaled) {
-        const float uv[4] = {g_vsC243[0] * g_riverUvScale, g_vsC243[1] * g_riverUvScale, g_vsC243[2], g_vsC243[3]};
+        const float uv[4] = {g_vsC243[0] * kRiverUvScale, g_vsC243[1] * kRiverUvScale, g_vsC243[2], g_vsC243[3]};
         r_SetVsConstF(dev, 243, uv, 1);
     }
     r_SetPsConstF(dev, 10, v, 1);
     const HRESULT hr = draw();
     if (scaled) r_SetVsConstF(dev, 243, g_vsC243, 1);
     r_SetPsConstF(dev, 10, g_psC[10], 1);
-    if (g_cfg.waterTest == 3) r_SetPsConstF(dev, 13, g_psC[13], 1);
+    if (mode == 3) r_SetPsConstF(dev, 13, g_psC[13], 1);
     return hr;
 }
 // One draw explained, once per caller address of interest (the prologue fog at 006D6E1B): the pixel shader disassembled into
@@ -1932,7 +1936,7 @@ void NoteVsConst(UINT start, const float* data, UINT count) {
 // The shadow pass hands its map size to the pixel shader as register c0 = {512 or 1024, 0, 0, 0}. When the
 // maps are enlarged the value has to follow, or the filtering steps no longer match the texels.
 HRESULT WINAPI H_SetPsConstF(void* dev, UINT start, const float* data, UINT count) {
-    if (g_cfg.traceWater || g_cfg.waterTest) NotePsConst(start, data, count);
+    NotePsConst(start, data, count);
     if (start == 0 && count >= 1 && data && g_cfg.shadowScale > 100) {
         const u32* b = (const u32*)data;
         int base = b[0] == 0x44000000u ? 512 : (b[0] == 0x44800000u ? 1024 : 0);  // 512.0f, 1024.0f
@@ -1948,7 +1952,7 @@ HRESULT WINAPI H_SetPsConstF(void* dev, UINT start, const float* data, UINT coun
 // drawn at the real output resolution the offset has to be half a pixel of THAT viewport, or sprites sample their
 // neighbours in the atlas (icons show a strip of the next icon). Only calls made at the output viewport are changed.
 HRESULT WINAPI H_SetVsConstF(void* dev, UINT start, const float* data, UINT count) {
-    if (g_cfg.traceWater || g_cfg.waterTest) NoteVsConst(start, data, count);
+    NoteVsConst(start, data, count);
     if (start == 0 && count == 1 && data && g_cfg.pixelOffsetFix && g_outputW && g_vpW == (u32)g_outputW &&
         g_vpH == (u32)g_outputH) {
         const u32* b = (const u32*)data;
@@ -2000,7 +2004,7 @@ void PatchDevice(void* dev) {
         const bool e = PatchSlot(vt, kSetPixelShader, (void*)H_SetPs, (void**)&r_SetPs);
         Log("d3d: far shadow filter hooked (%d%d), %s", d, e, g_cfg.farShadowFilter ? "on" : "off for now");
     }
-    if (g_cfg.traceWater || g_cfg.waterTest || g_cfg.fogFix || g_cfg.smokeFix || g_cfg.frameCapture) {
+    {   // always: RiverWater is switched in the menu at once (with everything off the hooks only pass the calls on)
         const bool a = PatchSlot(vt, kSetPixelShaderConstantF, (void*)H_SetPsConstF, (void**)&r_SetPsConstF);
         const bool b = PatchSlot(vt, kSetVertexShaderConstantF, (void*)H_SetVsConstF, (void**)&r_SetVsConstF);
         const bool c = PatchSlot(vt, kSetTexture, (void*)H_SetTexture, (void**)&r_SetTexture);
@@ -2011,7 +2015,7 @@ void PatchDevice(void* dev) {
         if (g_cfg.traceWater || g_cfg.frameCapture) PatchSlot(vt, kSetRenderTarget, (void*)H_SetRt, (void**)&r_SetRt);
         g_waterHooked = a && f && g;
         if (g_cfg.traceWater || g_cfg.waterTest)
-            Log("water: diagnostic hooked (%d%d%d%d%d%d%d): each distinct water draw goes to the log once; Numpad 1 switches WaterTest", a, b,
+            Log("water: diagnostic hooked (%d%d%d%d%d%d%d): each distinct water draw goes to the log once", a, b,
                 c, d, e, f, g);
         else
             Log("fog: draw hooks in (%d%d%d): %s%s", c, d && e, f, g_cfg.smokeFix ? "the smoke is drawn the Xbox way (SmokeFix)" : "",
@@ -2301,12 +2305,10 @@ void WaterFrame() {
             }
         }
     }
-    static bool was = false;
     DWORD pid = 0;
     HWND fg = GetForegroundWindow();
     if (fg) GetWindowThreadProcessId(fg, &pid);
     const bool ours = pid == GetCurrentProcessId() && !ui::IsOpen();  // not while typing a number in F10
-    const bool now = ours && (GetAsyncKeyState(VK_NUMPAD1) & 0x8000);
     if (g_cfg.traceWater) {
         static bool held[4];
         bool hit[4];
@@ -2330,33 +2332,6 @@ void WaterFrame() {
         }
         held6 = d6;
     }
-    if (g_cfg.traceWater && g_cfg.waterTest == 3) {  // Numpad 8 / Numpad 2: the river's wave cells larger / smaller
-        static bool held8 = false, held2 = false;
-        const bool d8 = ours && (GetAsyncKeyState(VK_NUMPAD8) & 0x8000), d2 = ours && (GetAsyncKeyState(VK_NUMPAD2) & 0x8000);
-        if ((d8 && !held8) || (d2 && !held2)) {
-            g_riverUvScale *= d8 && !held8 ? 0.5f : 2.f;
-            if (g_riverUvScale < 1.f / 4096.f) g_riverUvScale = 1.f / 4096.f;
-            if (g_riverUvScale > 16.f) g_riverUvScale = 16.f;
-            const int per = (int)(g_riverUvScale * 100000.f + 0.5f);  // thousandths of a percent
-            Log("water: the river's UV scale is now %d.%03d%% of the game's (Numpad 8 larger cells, Numpad 2 smaller)", per / 1000, per % 1000);
-            wchar_t uk[96], en[96];
-            wsprintfW(uk, L"Хвилі річки: масштаб %d.%03d%%", per / 1000, per % 1000);
-            wsprintfW(en, L"River waves: scale %d.%03d%%", per / 1000, per % 1000);
-            ShowNotice(uk, en, L"Numpad 8 — зерно більше, Numpad 2 — дрібніше.", L"Numpad 8 makes the cells larger, Numpad 2 smaller.", 3);
-        }
-        held8 = d8;
-        held2 = d2;
-    }
-    if (now && !was) {
-        g_cfg.waterTest = g_cfg.waterTest == 3 ? 0 : 3;
-        Log("water: WaterTest %d (Numpad 1): %s", g_cfg.waterTest, g_cfg.waterTest == 3 ? "the river as its record says" : "as the game draws it");
-        if (g_cfg.waterTest == 3)
-            ShowNotice(L"Вода: за записом річки", L"Water: by the river's record", L"Річка отримує параметри зі свого запису «_river». Numpad 1 вимикає.",
-                       L"The river gets the values of its \"_river\" record. Numpad 1 turns it off.", 4);
-        else
-            ShowNotice(L"Вода: як у грі", L"Water: as the game draws it", L"Numpad 1 вмикає запис річки.", L"Numpad 1 turns the river's record on.", 3);
-    }
-    was = now;
 }  // display.cpp, at the first Present
 
 bool InstallD3dTrace(bool full) {

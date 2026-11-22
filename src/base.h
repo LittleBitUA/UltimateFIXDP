@@ -118,6 +118,7 @@ struct Config {
     int gameLook;            // a photo filter applied all the time (0 = none), [Graphics] GameLook
     int generateMips;        // build the mipmaps of world textures stored without them (far shimmer), at load
     int shadowBiasFix;       // more depth bias on the two far sun shadow cascades (crawling stripes far away)
+    int riverWater;          // the river gets the values of its own "_river" water record and a wave map 16 times larger (as on the Xbox)
     int farShadowFilter;     // the far sun shadow cascade gets the game's own 4-tap filter of the near two (patched shader copies)
     int gameFov;             // field of view in play, percent of the game's own (100 = unchanged), 70..150
     int xboxExposure;        // no 0.85 / 0.75 exposure factors, as on the console
