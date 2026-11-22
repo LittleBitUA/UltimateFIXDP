@@ -734,6 +734,28 @@ void ApplyCostumeNow() {
     RequestSuit(g_cfg.photoCostume);
 }
 
+// The suit is worn as it is scrolled to, with no "Wear" button. A suit loads from disk (up to a second), so the one the row
+// has stood on for a third of a second is worn, not every one passed on the way. Called every frame (BatchTick's place).
+void CostumeTick() {
+    static int seenSuit = 0, seenSet = 0, wornSuit = 0, wornSet = 0;
+    static DWORD changedAt = 0;
+    const int suit = g_cfg.photoCostume, set = g_cfg.photoSuitSet;
+    if (suit != seenSuit || set != seenSet) {
+        seenSuit = suit;
+        seenSet = set;
+        changedAt = GetTickCount();
+        return;
+    }
+    if (suit < 1) {  // "untouched" (also after leaving the photo mode): the next choice is worn again
+        wornSuit = 0;
+        return;
+    }
+    if ((suit == wornSuit && set == wornSet) || GetTickCount() - changedAt < 330) return;
+    wornSuit = suit;
+    wornSet = set;
+    ApplyCostumeNow();
+}
+
 void ApplyPoseNow() {
     g_applyPick = 0;
     int i = g_cfg.photoAnim;
@@ -762,6 +784,7 @@ void ApplyShot() {
 
 // Runs every frame from OnFrame (after the screenshot pass of this frame).
 void BatchTick() {
+    CostumeTick();
     if (!g_batch.active) return;
     if (g_batch.wait > 0) {
         if (--g_batch.wait == 0) {
@@ -839,11 +862,9 @@ Item g_pagePhoto[] = {
      {L"Йорк має набори 1 і 2, Зак (коли ви граєте за нього) набори 1, 2 і 3 (у третього один костюм). Який персонаж зараз, видно в журналі.", L"York has sets 1 and 2, Zach (when you play as him) sets 1, 2 and 3 (the third has one suit). The log says which character is current."},
      {L"Персонаж", L"Character"}, nullptr, 0, nullptr, FormatSet},
     {{L"Костюм", L"Suit"}, &g_cfg.photoCostume, kInt, 0, 10, 1, false, nullptr, nullptr, nullptr, nullptr,
-     {L"Виберіть костюм і натисніть «Одягти». ЕКСПЕРИМЕНТАЛЬНО, зробіть збереження. Костюм вантажиться з диска, на це йде до секунди (час гри на цей час запускається). Костюм 2 це слот додаткового пакета DLC і може бути порожнім. Не в катсцені й не в машині.",
-      L"Pick a suit and press \"Wear\". EXPERIMENTAL, save first. The suit loads from disk, which takes up to a second (game time runs for that moment). Suit 2 is the DLC add-on slot and may be empty. Not in a cutscene or a car."},
+     {L"Йорк одягає костюм, щойно ви на ньому зупинилися (за третину секунди), окремої кнопки немає. ЕКСПЕРИМЕНТАЛЬНО, зробіть збереження. Костюм вантажиться з диска, на це йде до секунди (час гри на цей час запускається). Костюм 2 це слот додаткового пакета DLC і може бути порожнім. Не в катсцені й не в машині.",
+      L"York wears the suit as soon as you stop on it (a third of a second), there is no separate button. EXPERIMENTAL, save first. The suit loads from disk, which takes up to a second (game time runs for that moment). Suit 2 is the DLC add-on slot and may be empty. Not in a cutscene or a car."},
      NOTR, nullptr, 0, nullptr, FormatSuit},
-    {{L"Одягти вибраний костюм", L"Wear the chosen suit"}, &g_applyPick, kInt, 0, 1, 1, false, nullptr, nullptr, ApplyCostumeNow, nullptr, {nullptr, nullptr}, NOTR,
-     kApplyValues, 1, kApplyNames, nullptr, false},
     {{L"Поза Йорка (експериментально)", L"York's pose (experimental)"}, &g_cfg.photoAnim, kInt, 0, 9, 1, false, nullptr, nullptr, nullptr, kPoseTr,
      {L"Виберіть позу й натисніть «Застосувати». «Спокій» і «Дія 1–7» не потребують зброї (це стани гри 4–8, 12, 14, назви невідомі). «Зброя в руках» бере стан класу зброї, яку Йорк тримає (потрібна зброя в руках). Зробіть збереження. «Спокій» повертає Йорка як було.",
       L"Pick a pose and press \"Apply\". \"Calm\" and \"Action 1-7\" need no weapon (game states 4-8, 12, 14, names unknown). \"Weapon in hand\" uses the state of the class of the weapon York holds (a weapon must be in his hand). Save first. \"Calm\" puts York back."},
