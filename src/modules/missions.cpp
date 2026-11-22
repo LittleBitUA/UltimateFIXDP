@@ -53,12 +53,6 @@ void CreateFileFor(const wchar_t* path) {
     CloseHandle(f);
 }
 
-void PutInt(const wchar_t* path, const wchar_t* section, const wchar_t* key, int v) {
-    wchar_t num[16];
-    wsprintfW(num, L"%d", v);
-    WritePrivateProfileStringW(section, key, num, path);
-}
-
 // A text of the file as the message language wants it: UTF-8, braces taken out (they would be read as markers), one line
 // with the empty line the game's windows have after a single one
 bool SetMessage(u32 id, const wchar_t* text, const char* before, const char* after) {
@@ -92,7 +86,7 @@ void Run() {
               SetMessage(kMsMsgYes, m.yes, "", "") && SetMessage(kMsMsgNo, m.no, "", "") &&
               SetMessage(kMsMsgAfterYes, m.afterYes, "", "{NEXT_SEGMENT}") && SetMessage(kMsMsgAfterNo, m.afterNo, "", "{NEXT_SEGMENT}");
     if (m.banner[0])
-        ok = ok && SetMessage(kMsMsgBanner, m.banner, "{SET_COLOR color=135, 240, 120}", "{NEXT_SEGMENT}                                 --Start{RESET_COLOR}");
+        ok = ok && SetMessage(kMsMsgBanner, m.banner, "{SET_COLOR color=135, 240, 120}", u8"{NEXT_SEGMENT}                                 --Початок{RESET_COLOR}");
     if (!ok) {
         SetState(L"Місія: текст не закодовано", L"Mission: a text failed", L"Якийсь текст не вдалося закодувати: літера без клітинки у шрифті або задовгий рядок. Деталі в ufx.log.",
                  L"A text could not be encoded: a letter without a cell in the font, or a line too long. See ufx.log.");
@@ -121,6 +115,47 @@ void Run() {
         m.banner[0] ? "yes" : "no");
 }
 
+// The file's text as UTF-16, whatever it was saved as: UTF-16 with a mark, UTF-8 with or without one (Notepad's "Save as"
+// offers all of them, and the Windows profile functions read only the first). The caller frees it with VirtualFree.
+wchar_t* ReadFileText(const wchar_t* path, int* chars) {
+    *chars = 0;
+    HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, nullptr, OPEN_EXISTING, 0, nullptr);
+    if (f == INVALID_HANDLE_VALUE) return nullptr;
+    const DWORD size = GetFileSize(f, nullptr);
+    u8* raw = size && size < 200000 ? (u8*)VirtualAlloc(nullptr, size + 4, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE) : nullptr;
+    DWORD got = 0;
+    if (raw) ReadFile(f, raw, size, &got, nullptr);
+    CloseHandle(f);
+    if (!raw) return nullptr;
+    wchar_t* out = (wchar_t*)VirtualAlloc(nullptr, (got + 4) * sizeof(wchar_t), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (out) {
+        if (got >= 2 && raw[0] == 0xFF && raw[1] == 0xFE) {
+            *chars = (int)(got - 2) / 2;
+            for (int i = 0; i < *chars; ++i) out[i] = (wchar_t)(raw[2 + i * 2] | raw[3 + i * 2] << 8);
+        } else {
+            const int skip = got >= 3 && raw[0] == 0xEF && raw[1] == 0xBB && raw[2] == 0xBF ? 3 : 0;
+            *chars = MultiByteToWideChar(CP_UTF8, 0, (const char*)raw + skip, (int)got - skip, out, (int)got + 2);
+        }
+        out[*chars] = 0;
+    }
+    VirtualFree(raw, 0, MEM_RELEASE);
+    return out;
+}
+
+bool SameText(const wchar_t* a, int n, const wchar_t* b) {
+    for (int i = 0; i < n; ++i)
+        if (!b[i] || (a[i] | 0x20) != (b[i] | 0x20)) return false;
+    return !b[n];
+}
+
+int ToInt(const wchar_t* p) {
+    bool neg = *p == L'-';
+    if (neg) ++p;
+    int v = 0;
+    for (; *p >= L'0' && *p <= L'9'; ++p) v = v * 10 + (*p - L'0');
+    return neg ? -v : v;
+}
+
 }  // namespace
 
 void MissionLoad(int slot) {
@@ -129,51 +164,96 @@ void MissionLoad(int slot) {
     Mission& m = g_mission;
     wchar_t path[MAX_PATH + 40];
     MissionPath(slot, path);
+    m = Mission{};
     m.slot = slot;
-    m.exists = GetFileAttributesW(path) != INVALID_FILE_ATTRIBUTES;
-    auto text = [&](const wchar_t* section, const wchar_t* key, wchar_t* out, int cap) { GetPrivateProfileStringW(section, key, L"", out, cap, path); };
-    text(L"Mission", L"Name", m.name, 64);
-    text(L"Mission", L"Author", m.author, 64);
-    text(L"Mission", L"Banner", m.banner, 96);
-    text(L"Talk", L"Line", m.line, 200);
-    text(L"Talk", L"Question", m.question, 200);
-    text(L"Talk", L"Yes", m.yes, 40);
-    text(L"Talk", L"No", m.no, 40);
-    text(L"Talk", L"AfterYes", m.afterYes, 200);
-    text(L"Talk", L"AfterNo", m.afterNo, 200);
-    m.resident = (int)GetPrivateProfileIntW(L"Actor", L"Resident", 6, path);
-    m.placed = (int)GetPrivateProfileIntW(L"Actor", L"Placed", 0, path);
-    m.x = (int)GetPrivateProfileIntW(L"Actor", L"X", 0, path);
-    m.y = (int)GetPrivateProfileIntW(L"Actor", L"Y", 0, path);
-    m.z = (int)GetPrivateProfileIntW(L"Actor", L"Z", 0, path);
-    m.yaw = (int)GetPrivateProfileIntW(L"Actor", L"Yaw", 0, path);
-    m.motionSet = (int)GetPrivateProfileIntW(L"Actor", L"MotionSet", 1, path) & 3;
-    m.motion = (int)GetPrivateProfileIntW(L"Actor", L"Motion", 0, path);
-    m.giveItem = (int)GetPrivateProfileIntW(L"Talk", L"GiveItem", 0, path);
-    m.giveCount = (int)GetPrivateProfileIntW(L"Talk", L"GiveCount", 1, path);
+    m.resident = 6;
+    m.motionSet = 1;
+    m.giveCount = 1;
+    int chars = 0;
+    wchar_t* text = ReadFileText(path, &chars);
+    m.exists = text != nullptr;
+    struct Field {
+        const wchar_t* section;
+        const wchar_t* key;
+        wchar_t* text;
+        int cap;
+        int* number;
+    };
+    const Field fields[] = {
+        {L"Mission", L"Name", m.name, 64, nullptr}, {L"Mission", L"Author", m.author, 64, nullptr}, {L"Mission", L"Banner", m.banner, 96, nullptr},
+        {L"Talk", L"Line", m.line, 200, nullptr}, {L"Talk", L"Question", m.question, 200, nullptr}, {L"Talk", L"Yes", m.yes, 40, nullptr},
+        {L"Talk", L"No", m.no, 40, nullptr}, {L"Talk", L"AfterYes", m.afterYes, 200, nullptr}, {L"Talk", L"AfterNo", m.afterNo, 200, nullptr},
+        {L"Actor", L"Resident", nullptr, 0, &m.resident}, {L"Actor", L"Placed", nullptr, 0, &m.placed}, {L"Actor", L"X", nullptr, 0, &m.x},
+        {L"Actor", L"Y", nullptr, 0, &m.y}, {L"Actor", L"Z", nullptr, 0, &m.z}, {L"Actor", L"Yaw", nullptr, 0, &m.yaw},
+        {L"Actor", L"MotionSet", nullptr, 0, &m.motionSet}, {L"Actor", L"Motion", nullptr, 0, &m.motion},
+        {L"Talk", L"GiveItem", nullptr, 0, &m.giveItem}, {L"Talk", L"GiveCount", nullptr, 0, &m.giveCount},
+    };
+    wchar_t section[32] = L"";
+    for (int i = 0; text && i < chars;) {
+        int end = i;
+        while (end < chars && text[end] != L'\r' && text[end] != L'\n') ++end;
+        int a = i, b = end;
+        while (a < b && (text[a] == L' ' || text[a] == L'\t' || text[a] == 0xFEFF)) ++a;
+        while (b > a && (text[b - 1] == L' ' || text[b - 1] == L'\t')) --b;
+        if (a < b && text[a] == L'[' && text[b - 1] == L']') {
+            lstrcpynW(section, text + a + 1, b - a - 1 < 31 ? b - a - 1 : 31);
+        } else if (a < b && text[a] != L';') {
+            int eq = a;
+            while (eq < b && text[eq] != L'=') ++eq;
+            int ke = eq, vs = eq + 1;
+            while (ke > a && (text[ke - 1] == L' ' || text[ke - 1] == L'\t')) --ke;
+            while (vs < b && (text[vs] == L' ' || text[vs] == L'\t')) ++vs;
+            if (eq < b)
+                for (const Field& f : fields) {
+                    if (!SameText(section, lstrlenW(section), f.section) || !SameText(text + a, ke - a, f.key)) continue;
+                    wchar_t value[220];
+                    lstrcpynW(value, text + vs, b - vs + 1 < 220 ? b - vs + 1 : 220);
+                    if (vs >= b) value[0] = 0;
+                    if (f.text) lstrcpynW(f.text, value, f.cap);
+                    else *f.number = ToInt(value);
+                }
+        }
+        i = end;
+        while (i < chars && (text[i] == L'\r' || text[i] == L'\n')) ++i;
+    }
+    if (text) VirtualFree(text, 0, MEM_RELEASE);
+    m.motionSet &= 3;
     if (m.resident < 1 || m.resident > 49) m.resident = 6;
     if (m.giveItem < 0 || m.giveItem > 0x16D) m.giveItem = 0;
     if (!m.yes[0]) lstrcpyW(m.yes, L"Так");
     if (!m.no[0]) lstrcpyW(m.no, L"Ні");
 }
 
-// The numbers the editor's rows change go back into the file (the texts are the file's own)
+// The whole mission written back as UTF-16 with a byte order mark (the texts as they were read, the numbers as the editor has them)
 void MissionSave() {
     Mission& m = g_mission;
     wchar_t path[MAX_PATH + 40];
     MissionPath(m.slot, path);
-    if (GetFileAttributesW(path) == INVALID_FILE_ATTRIBUTES) CreateFileFor(path);
-    PutInt(path, L"Actor", L"Resident", m.resident);
-    PutInt(path, L"Actor", L"Placed", m.placed);
-    PutInt(path, L"Actor", L"X", m.x);
-    PutInt(path, L"Actor", L"Y", m.y);
-    PutInt(path, L"Actor", L"Z", m.z);
-    PutInt(path, L"Actor", L"Yaw", m.yaw);
-    PutInt(path, L"Actor", L"MotionSet", m.motionSet);
-    PutInt(path, L"Actor", L"Motion", m.motion);
-    PutInt(path, L"Talk", L"GiveItem", m.giveItem);
-    PutInt(path, L"Talk", L"GiveCount", m.giveCount);
-    m.exists = true;
+    if (!m.exists && !m.name[0]) {  // an empty slot: the example first
+        CreateFileFor(path);
+        const Mission keep = m;
+        MissionLoad(m.slot);
+        m.resident = keep.resident; m.placed = keep.placed; m.x = keep.x; m.y = keep.y; m.z = keep.z; m.yaw = keep.yaw;
+        m.motionSet = keep.motionSet; m.motion = keep.motion;
+        if (keep.giveItem) m.giveItem = keep.giveItem;
+    }
+    wchar_t* out = (wchar_t*)VirtualAlloc(nullptr, 8192 * sizeof(wchar_t), MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!out) return;
+    int n = wsprintfW(out, L"\xFEFF; Місія редактора UltimateFIXDP. Змініть тексти, збережіть файл і в меню F10 -> Редактор місій натисніть «Перечитати файл».\r\n");
+    n += wsprintfW(out + n, L"[Mission]\r\nName=%s\r\nAuthor=%s\r\nBanner=%s\r\n\r\n", m.name, m.author, m.banner);
+    n += wsprintfW(out + n, L"[Actor]\r\nResident=%d\r\nPlaced=%d\r\nX=%d\r\nY=%d\r\nZ=%d\r\nYaw=%d\r\nMotionSet=%d\r\nMotion=%d\r\n\r\n", m.resident, m.placed, m.x,
+                   m.y, m.z, m.yaw, m.motionSet, m.motion);
+    n += wsprintfW(out + n, L"[Talk]\r\nLine=%s\r\nQuestion=%s\r\n", m.line, m.question);
+    n += wsprintfW(out + n, L"Yes=%s\r\nNo=%s\r\nAfterYes=%s\r\n", m.yes, m.no, m.afterYes);
+    n += wsprintfW(out + n, L"AfterNo=%s\r\nGiveItem=%d\r\nGiveCount=%d\r\n", m.afterNo, m.giveItem, m.giveCount);
+    HANDLE f = CreateFileW(path, GENERIC_WRITE, 0, nullptr, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, nullptr);
+    if (f != INVALID_HANDLE_VALUE) {
+        DWORD put;
+        WriteFile(f, out, (DWORD)n * sizeof(wchar_t), &put, nullptr);
+        CloseHandle(f);
+        m.exists = true;
+    }
+    VirtualFree(out, 0, MEM_RELEASE);
 }
 
 // The file in Notepad (made first when the slot is empty)
