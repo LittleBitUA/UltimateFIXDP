@@ -653,13 +653,47 @@ void DollMotionTick(u8* doll) {
     }
 }
 
+// Mission lab, step 3: the character that was put gives something. With [Debug] MissionLab=1, York within a few steps of the
+// doll and the E key: the lab's event 7 runs (a line, a yes / no choice, on yes the game's own give-item command and a line).
+void DollTalkTick(u8* player, u8* doll, bool free) {
+    if (!g_cfg.missionLab || !LabTextsIn()) return;
+    if (g_labPid != -1) return;  // an event of ours runs (LabTick says when it is over)
+    const float dx = *(volatile float*)(doll + 0x58) - *(volatile float*)(player + 0x58), dz = *(volatile float*)(doll + 0x60) - *(volatile float*)(player + 0x60);
+    const bool close = dx * dx + dz * dz < 12.f * 12.f;
+    static bool wasClose = false, held = false;
+    if (close && !wasClose)
+        ShowNotice(L"Натисніть E, щоб заговорити", L"Press E to talk", L"Лабораторія місій: персонаж має для вас дещо.", L"Mission lab: the character has something for you.", 4);
+    wasClose = close;
+    HWND fg = GetForegroundWindow();
+    DWORD pid = 0;
+    if (fg) GetWindowThreadProcessId(fg, &pid);
+    const bool down = pid == GetCurrentProcessId() && !ui::IsOpen() && (GetAsyncKeyState('E') & 0x8000);
+    const bool hit = down && !held;
+    held = down;
+    if (!hit || !close || !free) return;
+    const u8* ev = *(const u8* volatile*)(uintptr_t)kEventPtrVa;
+    if (!ev || (*(volatile u32*)(ev + 0x44) & 0x40000) || *(volatile u32*)(ev + 0x34) || (*(volatile u32*)(uintptr_t)kMovieFlagVa & 0x80000000u) ||
+        *(volatile u32*)(uintptr_t)kEventBlockVa) {
+        Log("lab: talk not now (an event or a video runs)");
+        return;
+    }
+    if (!LabRegistered() && !LabRegister()) return;
+    const int r = ((RunEventFn)(uintptr_t)kRunEventFn)((void*)ev, 0, kLabDsbNo, kLabEvGift, 0, 0, 0);
+    Log("lab: talk with the doll: RunEvent(script %u, event %u) returned %d", kLabDsbNo, kLabEvGift, r);
+    if (r != -1) {
+        g_labPid = r;
+        g_labFrames = 0;
+    }
+}
+
 void DollTick(void* playerPtr) {
     u8* player = (u8*)playerPtr;
     const bool scene = (*(volatile u32*)(uintptr_t)kEventModeVa & 0x80000000u) != 0;
     const bool free = *(volatile u32*)(uintptr_t)kGameplayModeVa == 3 && !scene;
     static bool wasPhoto = false;
     const bool photo = g_cfg.photoActive || g_cfg.photoFreeze;
-    if (g_doll && (scene || (wasPhoto && !photo))) DollRemove(scene ? "a scene began" : "the photo mode ended");
+    // (with the mission lab on the doll stays after the photo mode: it is the one York talks to)
+    if (g_doll && (scene || (wasPhoto && !photo && !g_cfg.missionLab))) DollRemove(scene ? "a scene began" : "the photo mode ended");
     wasPhoto = photo;
     PlayAsTick(player, free);
     const int req = g_dollRequest;
@@ -678,6 +712,7 @@ void DollTick(void* playerPtr) {
     *(volatile float*)(doll + 0x60) = g_dollBase[2] + c * fwd - s * right;
     *(volatile float*)(doll + 0x7C) = *(volatile float*)(doll + 0x6C) = g_dollYaw + (float)g_cfg.dollTurn * (3.14159265f / 180.f);
     DollMotionTick(doll);
+    DollTalkTick(player, doll, free);
 }
 
 void __attribute__((thiscall)) H_DollFaceWeights(void* actor, float* w, int n) {

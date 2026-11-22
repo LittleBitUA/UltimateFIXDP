@@ -521,6 +521,8 @@ const LabText kLabTexts[] = {
     {0x4418, 10, u8"Обрано: ні.{NEXT_SEGMENT}", "Chosen: no.{NEXT_SEGMENT}"},
     {0x4419, 11, u8"{SET_COLOR color=135, 240, 120}Тестове завдання{NEXT_SEGMENT}                                 --Початок{RESET_COLOR}",
      "{SET_COLOR color=135, 240, 120}Test mission{NEXT_SEGMENT}                                 --Start{RESET_COLOR}"},
+    {0x441A, 10, u8"Агенте, хочете вишневого пирога?{NEXT_SEGMENT}", "Agent, would you like a cherry pie?{NEXT_SEGMENT}"},
+    {0x441B, 10, u8"Смачного!{NEXT_SEGMENT}", "Enjoy!{NEXT_SEGMENT}"},
 };
 constexpr u32 kLabTextCount = sizeof(kLabTexts) / sizeof(kLabTexts[0]);
 bool g_labTextsIn = false;
