@@ -93,7 +93,7 @@ void Run() {
         return;
     }
     const bool gift = m.giveItem >= 1 && m.giveItem <= 0x16D;
-    if (gift) LabSetGiveItem(m.giveItem);
+    if (gift) LabSetGiveItem(m.giveItem, m.giveCount);
     if (m.placed) {
         place[0] = (float)m.x / 1000.f;
         place[1] = (float)m.y / 1000.f;

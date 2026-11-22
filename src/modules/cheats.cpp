@@ -262,4 +262,11 @@ void CheatsTick(void* player) {
     }
 }
 
+int GiveItemNow(int id, int count) {
+    static const u8 kGive[8] = {0x83, 0xEC, 0x08, 0x53, 0x55, 0x56, 0x8B, 0xD9};
+    u8* game = *(u8* volatile*)(uintptr_t)kGameManagerPtrVa;
+    if (!game || !BytesMatch(kGiveItemFn, kGive, 8) || id < 1 || id > 0x16D || count < 1) return -1;
+    return ((GiveItemFn)(uintptr_t)kGiveItemFn)(game, id, count, 1, 0, 0);
+}
+
 }  // namespace ufx

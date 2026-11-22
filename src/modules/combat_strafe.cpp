@@ -194,7 +194,9 @@ constexpr u32 kEvLoadFn = 0x70DD40, kRunEventFn = 0x43C140, kMovieFlagVa = 0x8A7
 typedef u32(__attribute__((thiscall)) * EvLoadFn)(void* core, void* buffer, u32 tag);
 typedef int(__attribute__((thiscall)) * RunEventFn)(void* event, u32 group, u32 script, u32 id, int a, u32 b, int flags);
 u8* g_labBuf = nullptr;
-int g_labGiveItem = 100;  // the item of the mission's give command (patched into the loaded copy)
+int g_labGiveItem = 100, g_labGiveCount = 1;  // what the first answer gives (Cherry Pie for the lab's own talk)
+bool g_labGiftSeen = false;                   // the running event reached its "give" branch
+bool g_labGiftWatch = false;                  // the running event is a talk whose first answer gives the item
 int g_labPid = -1;
 u32 g_labFrames = 0;
 
@@ -218,7 +220,6 @@ bool LabRegister() {
     u8* buf = (u8*)VirtualAlloc(nullptr, kLabDsbSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);  // never freed: threads point into it
     if (!buf) return false;
     for (u32 i = 0; i < kLabDsbSize; ++i) buf[i] = kLabDsb[i];
-    *(u16*)(buf + kMsGiveItemOff) = (u16)g_labGiveItem;
     const u32 slot = ((EvLoadFn)(uintptr_t)kEvLoadFn)(core, buf, 4) & 0xFFFFu;
     if (slot == 0xFFFFu) {
         Log("lab: the game has no free script slot");
@@ -242,6 +243,35 @@ void LabTick(void* player) {
     if (!player) return;
     if (g_labPid != -1) {  // one of ours was started: say when it is over
         ++g_labFrames;
+        // The item of the first answer: the script's own give command (84h) gave nothing in the mod's events, so the mod
+        // watches the game's event threads (00BDC960h, 80 x C4h, +18h in use, +14h -> u16 script, u16 event) for the
+        // branch of the first answer and gives the item itself, with the game's give call, when the event is over.
+        for (int i = 0; i < 80 && !g_labGiftSeen; ++i) {
+            const u8* t = (const u8*)(uintptr_t)(0xBDC960 + i * 0xC4);
+            if (!*(volatile u32*)(t + 0x18)) continue;
+            const u16* rec = *(const u16* volatile*)(t + 0x14);
+            if (rec && (uintptr_t)rec > 0x10000 && !IsBadReadPtr(rec, 4) && rec[0] == kLabDsbNo && (rec[1] == kMsEvYesGift || rec[1] == kLabEvTakeGift))
+                g_labGiftSeen = true;
+        }
+        if (LabProcess() < 0 && g_labGiftWatch) {
+            // second sign: the last event a script called (opcode 0Bh keeps its target in the event core, +0Ch..+13h)
+            bool called = false;
+            const u8* core = *(const u8* volatile*)(uintptr_t)kEvCorePtrVa;
+            if (core && !IsBadReadPtr(core + 0xC, 8)) {
+                const u16* w = (const u16*)(core + 0xC);
+                for (int i = 0; i < 3; ++i) called |= w[i] == kLabDsbNo && (w[i + 1] == kMsEvYesGift || w[i + 1] == kLabEvTakeGift);
+                Log("lab: talk over: branch thread seen %d, last called event words %04X %04X %04X %04X", g_labGiftSeen, w[0], w[1], w[2], w[3]);
+            }
+            const bool yes = g_labGiftSeen || called;
+            g_labGiftSeen = false;
+            g_labGiftWatch = false;
+            if (yes && g_labGiveItem > 0) {
+                const int r = GiveItemNow(g_labGiveItem, g_labGiveCount);
+                Log("lab: the first answer was picked: item %d x %d given by the mod (the game answered %d)", g_labGiveItem, g_labGiveCount, r);
+                ShowNotice(r == -3 ? L"Предмет пішов у сховище" : L"Отримано предмет", r == -3 ? L"The item went to the storage" : L"Item obtained",
+                           L"Дивіться інвентар.", L"See the inventory.", 4);
+            }
+        }
         if (LabProcess() < 0) {
             Log("lab: the event is over after %u player updates", g_labFrames);
             ShowNotice(L"Лабораторія місій: подія завершилась", L"Mission lab: the event is over", L"Власний скрипт мода відпрацював у грі.",
@@ -702,6 +732,8 @@ void DollTalkTick(u8* player, u8* doll, bool free) {
     if (r != -1) {
         g_labPid = r;
         g_labFrames = 0;
+        g_labGiftSeen = false;
+        g_labGiftWatch = g_dollTalkEvent == kLabEvGift || g_dollTalkEvent == kMsEvTalkGift;
     }
 }
 
@@ -815,9 +847,9 @@ void ufx::DollPutAt(int resident, const float place[4], int motionSet, int motio
     g_dollPendingMotion = motion;
 }
 void ufx::DollTalkDefault() { g_dollTalkEvent = kLabEvGift; }
-void ufx::LabSetGiveItem(int id) {
+void ufx::LabSetGiveItem(int id, int count) {
     g_labGiveItem = id;
-    if (g_labBuf) *(u16*)(g_labBuf + kMsGiveItemOff) = (u16)id;
+    g_labGiveCount = count < 1 ? 1 : count;
 }
 // Runs an event of the mod's script on the game thread; -1 when the game cannot take it now
 int ufx::LabRunEvent(u32 event) {
@@ -832,6 +864,7 @@ int ufx::LabRunEvent(u32 event) {
     if (r != -1) {
         g_labPid = r;
         g_labFrames = 0;
+        g_labGiftSeen = false;
     }
     return r;
 }

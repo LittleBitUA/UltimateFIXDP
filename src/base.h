@@ -460,7 +460,8 @@ bool PlayerPlace(float out[4]);       // York's position and heading, false when
 void DollPutAt(int resident, const float place[4], int motionSet, int motion, u32 talkEvent);
 void DollTalkDefault();
 bool DollStands();
-void LabSetGiveItem(int id);
+void LabSetGiveItem(int id, int count);
+int GiveItemNow(int id, int count);   // cheats.cpp: the game's give-item call, on the game thread; its answer (-3 = went to the storage)
 int LabRunEvent(u32 event);
 struct Mission {  // one mission of the editor: UltimateFix\missions\missionN.ini
     int slot, exists, resident, placed, x, y, z, yaw, motionSet, motion, giveItem, giveCount;
