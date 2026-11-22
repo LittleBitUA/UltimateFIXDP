@@ -465,6 +465,7 @@ bool DollStands();
 void LabSetGiveItem(int id, int count);
 int GiveItemNow(int id, int count);   // cheats.cpp: the game's give-item call, on the game thread; its answer (-3 = went to the storage)
 int LabRunEvent(u32 event);
+void LabWatchFrame();                 // once a frame: which answer the running talk took
 struct Mission {  // one mission of the editor: UltimateFix\missions\missionN.ini
     int slot, exists, resident, placed, x, y, z, yaw, motionSet, motion, giveItem, giveCount;
     wchar_t name[64], author[64], banner[96], line[200], question[200], yes[40], no[40], afterYes[200], afterNo[200];

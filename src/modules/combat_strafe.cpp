@@ -196,6 +196,9 @@ typedef int(__attribute__((thiscall)) * RunEventFn)(void* event, u32 group, u32 
 u8* g_labBuf = nullptr;
 int g_labGiveItem = 100, g_labGiveCount = 1;  // what the first answer gives (Cherry Pie for the lab's own talk)
 bool g_labGiftSeen = false;                   // the running event reached its "give" branch
+bool g_talkPartnerSet = false;   // CGame+8C57Ch holds the doll for a talk; g_talkPartnerOld is the game's own value
+u32 g_talkPartnerOld = 0;
+bool g_labCallArmed = false;      // this talk has made a call of its own (the core's last target is no longer the talk before's)
 bool g_labGiftWatch = false;                  // the running event is a talk whose first answer gives the item
 int g_labPid = -1;
 u32 g_labFrames = 0;
@@ -255,14 +258,8 @@ void LabTick(void* player) {
         }
         if (LabProcess() < 0 && g_labGiftWatch) {
             // second sign: the last event a script called (opcode 0Bh keeps its target in the event core, +0Ch..+13h)
-            bool called = false;
-            const u8* core = *(const u8* volatile*)(uintptr_t)kEvCorePtrVa;
-            if (core && !IsBadReadPtr(core + 0xC, 8)) {
-                const u16* w = (const u16*)(core + 0xC);
-                for (int i = 0; i < 3; ++i) called |= w[i] == kLabDsbNo && (w[i + 1] == kMsEvYesGift || w[i + 1] == kLabEvTakeGift);
-                Log("lab: talk over: branch thread seen %d, last called event words %04X %04X %04X %04X", g_labGiftSeen, w[0], w[1], w[2], w[3]);
-            }
-            const bool yes = g_labGiftSeen || called;
+            Log("lab: talk over: the first answer's branch %s", g_labGiftSeen ? "was seen" : "was not seen");
+            const bool yes = g_labGiftSeen;
             g_labGiftSeen = false;
             g_labGiftWatch = false;
             if (yes && g_labGiveItem > 0) {
@@ -271,6 +268,11 @@ void LabTick(void* player) {
                 ShowNotice(r == -3 ? L"Предмет пішов у сховище" : L"Отримано предмет", r == -3 ? L"The item went to the storage" : L"Item obtained",
                            L"Дивіться інвентар.", L"See the inventory.", 4);
             }
+        }
+        if (LabProcess() < 0 && g_talkPartnerSet) {
+            u8* game = *(u8* volatile*)(uintptr_t)kGameManagerPtrVa;
+            if (game) *(volatile u32*)(game + 0x8C57C) = g_talkPartnerOld;
+            g_talkPartnerSet = false;
         }
         if (LabProcess() < 0) {
             Log("lab: the event is over after %u player updates", g_labFrames);
@@ -307,7 +309,7 @@ void LabTick(void* player) {
     // Ctrl + Numpad 8: the same lines through the game's own talk wrappers (COMMON 0_0003 events 6 and 74: event mode 1, the
     // framed dialogue). The wrapper takes the talk partner from the process's actor (+30h, RunEvent's fifth argument) and
     // crashed on a missing one (004BA360); the actor 7F64h is the game's own "no partner" case (00439A00), so that is given.
-    const bool framed = pick == 1 && (GetAsyncKeyState(VK_CONTROL) & 0x8000);
+    const bool framed = false;  // (0.7.12-test12 tried it on Ctrl: 7F64h without an object in CGame+8C57Ch crashed at 00417F8B)
     const u32 event = framed ? kLabEvTalk : kEvents[pick];
     const u32 actor = framed ? 0x7F64u : 0u;
     if (event != kLabEvMin && !LabTextsIn()) {
@@ -732,13 +734,28 @@ void DollTalkTick(u8* player, u8* doll, bool free) {
         return;
     }
     if (!LabRegistered() && !LabRegister()) return;
-    const int r = ((RunEventFn)(uintptr_t)kRunEventFn)((void*)ev, 0, kLabDsbNo, g_dollTalkEvent, 0, 0, 0);
-    Log("lab: talk with the doll: RunEvent(script %u, event %u) returned %d", kLabDsbNo, g_dollTalkEvent, r);
+    // The game's talk mode (the frame, York turned to the one he talks to) takes its partner from the process's actor; the
+    // actor 7F64h means "the object in CGame+8C57Ch" (00439A00: it is read for its position, +58h, by FUN_00430F20). The
+    // doll is put there for the talk and the game's own value comes back when the event is over (the field is in the save).
+    u8* game = *(u8* volatile*)(uintptr_t)kGameManagerPtrVa;
+    if (!game) return;
+    if (!g_talkPartnerSet) {
+        g_talkPartnerOld = *(volatile u32*)(game + 0x8C57C);
+        g_talkPartnerSet = true;
+    }
+    *(volatile u32*)(game + 0x8C57C) = (u32)(uintptr_t)doll;
+    const int r = ((RunEventFn)(uintptr_t)kRunEventFn)((void*)ev, 0, kLabDsbNo, g_dollTalkEvent, 0, 0x7F64, 0);
+    Log("lab: talk with the doll: RunEvent(script %u, event %u, actor 7F64, partner %08X) returned %d", kLabDsbNo, g_dollTalkEvent, (u32)(uintptr_t)doll, r);
+    if (r == -1) {
+        *(volatile u32*)(game + 0x8C57C) = g_talkPartnerOld;
+        g_talkPartnerSet = false;
+    }
     if (r != -1) {
         g_labPid = r;
         g_labFrames = 0;
         g_labGiftSeen = false;
         g_labGiftWatch = g_dollTalkEvent == kLabEvGift || g_dollTalkEvent == kMsEvTalkGift;
+        g_labCallArmed = false;
     }
 }
 
@@ -976,3 +993,32 @@ int ufx::LabRunEvent(u32 event) {
     return r;
 }
 bool ufx::DollStands() { return g_doll != nullptr; }
+
+// Once a frame (the player's update hardly runs while an event holds the game): the branch of the first answer shows as an
+// event thread of script 900, event 22 or 13 (00BDC960h, 80 x C4h, +18h in use, +14h -> u16 script, u16 event), or as the
+// target of the last call a script made (the event core, +0Ch..+13h).
+void ufx::LabWatchFrame() {
+    if (g_labPid == -1 || !g_labGiftWatch || g_labGiftSeen) return;
+    for (int i = 0; i < 80; ++i) {
+        const u8* t = (const u8*)(uintptr_t)(0xBDC960 + i * 0xC4);
+        if (!*(volatile u32*)(t + 0x18)) continue;
+        const u16* rec = *(const u16* volatile*)(t + 0x14);
+        if (rec && (uintptr_t)rec > 0x10000 && !IsBadReadPtr(rec, 4) && rec[0] == kLabDsbNo && (rec[1] == kMsEvYesGift || rec[1] == kLabEvTakeGift)) {
+            g_labGiftSeen = true;
+            Log("lab: the first answer's branch seen as an event thread (event %u)", rec[1]);
+            return;
+        }
+    }
+    const u8* core = *(const u8* volatile*)(uintptr_t)kEvCorePtrVa;
+    if (core && !IsBadReadPtr(core + 0xC, 8)) {
+        const u16* w = (const u16*)(core + 0xC);
+        bool match = false;
+        for (int i = 0; i < 3; ++i) match |= w[i] == kLabDsbNo && (w[i + 1] == kMsEvYesGift || w[i + 1] == kLabEvTakeGift);
+        if (!match) {
+            g_labCallArmed = true;  // (the talk's first call is the talk wrapper, COMMON 3 / 6)
+        } else if (g_labCallArmed) {
+            g_labGiftSeen = true;
+            Log("lab: the first answer's branch seen as the last called event (%04X %04X %04X %04X)", w[0], w[1], w[2], w[3]);
+        }
+    }
+}

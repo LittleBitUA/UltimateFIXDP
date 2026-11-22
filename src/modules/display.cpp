@@ -402,6 +402,7 @@ HRESULT WINAPI OurPresent(void* dev, const RECT* src, const RECT* dst, HWND wnd,
     if (windowThread && !src && !dst) WaypointFrame(dev);
     if (windowThread && !src && !dst) TextToolsFrame();
     if (g_cfg.menu && windowThread && !src && !dst) ui::OnFrame(dev);  // laid out in 1280x720 units, scaled to the back buffer
+    if (windowThread && !src && !dst) LabWatchFrame();
     if (windowThread && !src && !dst) SessionFrame(dev);  // after the menu: its notice box is drawn on top
     if (windowThread && !src && !dst) PacerBeforePresent();  // the 60 frames/s limit (mode 1), then the Present time is measured
     // The Present time must cover the scaled path too (the extra swap chain does the waiting for the video card and the screen).
