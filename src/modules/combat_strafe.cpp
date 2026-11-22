@@ -194,6 +194,7 @@ constexpr u32 kEvLoadFn = 0x70DD40, kRunEventFn = 0x43C140, kMovieFlagVa = 0x8A7
 typedef u32(__attribute__((thiscall)) * EvLoadFn)(void* core, void* buffer, u32 tag);
 typedef int(__attribute__((thiscall)) * RunEventFn)(void* event, u32 group, u32 script, u32 id, int a, u32 b, int flags);
 u8* g_labBuf = nullptr;
+int g_labGiveItem = 100;  // the item of the mission's give command (patched into the loaded copy)
 int g_labPid = -1;
 u32 g_labFrames = 0;
 
@@ -217,6 +218,7 @@ bool LabRegister() {
     u8* buf = (u8*)VirtualAlloc(nullptr, kLabDsbSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);  // never freed: threads point into it
     if (!buf) return false;
     for (u32 i = 0; i < kLabDsbSize; ++i) buf[i] = kLabDsb[i];
+    *(u16*)(buf + kMsGiveItemOff) = (u16)g_labGiveItem;
     const u32 slot = ((EvLoadFn)(uintptr_t)kEvLoadFn)(core, buf, 4) & 0xFFFFu;
     if (slot == 0xFFFFu) {
         Log("lab: the game has no free script slot");
@@ -237,7 +239,7 @@ int LabProcess() {
     return -1;
 }
 void LabTick(void* player) {
-    if (!g_cfg.missionLab || !player) return;
+    if (!player) return;
     if (g_labPid != -1) {  // one of ours was started: say when it is over
         ++g_labFrames;
         if (LabProcess() < 0) {
@@ -249,6 +251,7 @@ void LabTick(void* player) {
             Log("lab: the event is still running after 3600 player updates");
         }
     }
+    if (!g_cfg.missionLab) return;  // the Numpad keys are the lab's; the mission editor runs its events itself
     static bool held = false;
     HWND fg = GetForegroundWindow();
     DWORD pid = 0;
@@ -390,7 +393,7 @@ volatile DWORD g_playerTickMs = 0;  // when the player object was last updated: 
 
 void __cdecl StrafeWorker(void* player) {
     if (player) { g_playerTickMs = GetTickCount(); g_playerObject = (u32)(uintptr_t)player; }
-    if (player) { SuitTick(player); PhotoAnimTick(player); DollTick(player); LabTick(player); PoseTick(player); CheatsTick(player); LayoutTick(player); }
+    if (player) { SuitTick(player); PhotoAnimTick(player); MissionTick(player); DollTick(player); LabTick(player); PoseTick(player); CheatsTick(player); LayoutTick(player); }
     if (!player || !g_cfg.combatStrafe) return;
     unsigned now = PadButtons() & 0x30;  // buttons 4 (LB) and 5 (RB)
     unsigned rising = now & ~g_prevShoulders;
@@ -450,6 +453,10 @@ typedef void*(__attribute__((cdecl)) * ResMgrFn)();
 extern void* g_dollMotion;
 extern int g_dollMotionKey;
 volatile int g_dollRequest = 0;
+int g_dollPendingSet = 0, g_dollPendingMotion = 0;
+bool g_dollAtOn = false;   // the next doll goes to g_dollAt (x, y, z, heading) instead of in front of York
+float g_dollAt[4];
+u32 g_dollTalkEvent = kLabEvGift;  // what the E key near the doll runs
 u8* g_doll = nullptr;
 u32 g_dollHandle = 0;
 float g_dollBase[3], g_dollYaw = 0.f;
@@ -554,12 +561,17 @@ void DollSpawn(u8* player) {
     if (nodes) *(volatile u32*)(obj + 0xDC) |= 0x100400u;  // as the game does at 004B04E9
     void* entry = ((ResEntryFn)(uintptr_t)kResEntryFn)(game, (u32)xmd);
     if (entry) ((FaceLinkFn)(uintptr_t)kFaceLinkFn)(entry);  // the model's face set (<name>.XFE)
-    // two units in front of York, facing him
+    // two units in front of York, facing him; or where a mission wants it
     const float yaw = *(volatile float*)(player + 0x7C);
     g_dollBase[0] = *(volatile float*)(player + 0x58) + Sinf(yaw) * 8.f;
     g_dollBase[1] = *(volatile float*)(player + 0x5C);
     g_dollBase[2] = *(volatile float*)(player + 0x60) + Cosf(yaw) * 8.f;
     g_dollYaw = yaw + 3.14159265f;
+    if (g_dollAtOn) {
+        for (int i = 0; i < 3; ++i) g_dollBase[i] = g_dollAt[i];
+        g_dollYaw = g_dollAt[3];
+        g_dollAtOn = false;
+    }
     for (int i = 0; i < 3; ++i) *(volatile float*)(obj + 0x58 + 4 * i) = g_dollBase[i];
     *(volatile float*)(obj + 0x64) = 1.f;
     *(volatile float*)(obj + 0x7C) = *(volatile float*)(obj + 0x6C) = g_dollYaw;
@@ -573,6 +585,13 @@ void DollSpawn(u8* player) {
     g_dollMotion = nullptr;
     g_dollMotionKey = -1;
     g_cfg.dollBodyNo = 0;
+    if (g_dollPendingMotion > 0) {  // a mission's pose
+        g_cfg.dollBodySet = g_dollPendingSet & 3;
+        g_cfg.dollBodyNo = g_dollPendingMotion;
+        g_cfg.dollFrame = 0;
+        g_cfg.dollPlay = 1;
+    }
+    g_dollPendingMotion = 0;
     g_cfg.dollMoveX = g_cfg.dollMoveY = g_cfg.dollMoveZ = g_cfg.dollTurn = 0;
     Log("doll: resident %d stands at %d %d %d (object %08X, handle %08X, idle motion %s)", id, (int)g_dollBase[0], (int)g_dollBase[1],
         (int)g_dollBase[2], (u32)(uintptr_t)obj, g_dollHandle, idle ? "played" : "not in memory");
@@ -656,7 +675,7 @@ void DollMotionTick(u8* doll) {
 // Mission lab, step 3: the character that was put gives something. With [Debug] MissionLab=1, York within a few steps of the
 // doll and the E key: the lab's event 7 runs (a line, a yes / no choice, on yes the game's own give-item command and a line).
 void DollTalkTick(u8* player, u8* doll, bool free) {
-    if (!g_cfg.missionLab || !LabTextsIn()) return;
+    if (!LabTextsIn() || (!g_cfg.missionLab && !MissionActive())) return;
     if (g_labPid != -1) return;  // an event of ours runs (LabTick says when it is over)
     const float dx = *(volatile float*)(doll + 0x58) - *(volatile float*)(player + 0x58), dz = *(volatile float*)(doll + 0x60) - *(volatile float*)(player + 0x60);
     const bool close = dx * dx + dz * dz < 12.f * 12.f;
@@ -678,8 +697,8 @@ void DollTalkTick(u8* player, u8* doll, bool free) {
         return;
     }
     if (!LabRegistered() && !LabRegister()) return;
-    const int r = ((RunEventFn)(uintptr_t)kRunEventFn)((void*)ev, 0, kLabDsbNo, kLabEvGift, 0, 0, 0);
-    Log("lab: talk with the doll: RunEvent(script %u, event %u) returned %d", kLabDsbNo, kLabEvGift, r);
+    const int r = ((RunEventFn)(uintptr_t)kRunEventFn)((void*)ev, 0, kLabDsbNo, g_dollTalkEvent, 0, 0, 0);
+    Log("lab: talk with the doll: RunEvent(script %u, event %u) returned %d", kLabDsbNo, g_dollTalkEvent, r);
     if (r != -1) {
         g_labPid = r;
         g_labFrames = 0;
@@ -693,7 +712,7 @@ void DollTick(void* playerPtr) {
     static bool wasPhoto = false;
     const bool photo = g_cfg.photoActive || g_cfg.photoFreeze;
     // (with the mission lab on the doll stays after the photo mode: it is the one York talks to)
-    if (g_doll && (scene || (wasPhoto && !photo && !g_cfg.missionLab))) DollRemove(scene ? "a scene began" : "the photo mode ended");
+    if (g_doll && (scene || (wasPhoto && !photo && !g_cfg.missionLab && !MissionActive()))) DollRemove(scene ? "a scene began" : "the photo mode ended");
     wasPhoto = photo;
     PlayAsTick(player, free);
     const int req = g_dollRequest;
@@ -777,3 +796,43 @@ bool ufx::DollName(int id, char* out16) {
     out16[n] = 0;
     return n > 0;
 }
+
+// ---- for the mission editor (missions.cpp) ----
+bool ufx::PlayerPlace(float out[4]) {
+    u8* p = (u8*)(uintptr_t)g_playerObject;
+    if (!p || IsBadReadPtr(p, 0x80) || *(volatile u32*)p != kPlayerVtable) return false;
+    for (int i = 0; i < 3; ++i) out[i] = *(volatile float*)(p + 0x58 + 4 * i);
+    out[3] = *(volatile float*)(p + 0x7C);
+    return true;
+}
+void ufx::DollPutAt(int resident, const float place[4], int motionSet, int motion, u32 talkEvent) {
+    g_cfg.photoDollId = resident;
+    for (int i = 0; i < 4; ++i) g_dollAt[i] = place[i];
+    g_dollAtOn = true;
+    g_dollTalkEvent = talkEvent;
+    g_dollRequest = 1;
+    g_dollPendingSet = motionSet;
+    g_dollPendingMotion = motion;
+}
+void ufx::DollTalkDefault() { g_dollTalkEvent = kLabEvGift; }
+void ufx::LabSetGiveItem(int id) {
+    g_labGiveItem = id;
+    if (g_labBuf) *(u16*)(g_labBuf + kMsGiveItemOff) = (u16)id;
+}
+// Runs an event of the mod's script on the game thread; -1 when the game cannot take it now
+int ufx::LabRunEvent(u32 event) {
+    const u8* ev = *(const u8* volatile*)(uintptr_t)kEventPtrVa;
+    if (g_labPid != -1 || !ev || *(volatile u32*)(uintptr_t)kGameplayModeVa != 3 || (*(volatile u32*)(ev + 0x44) & 0x40000) || *(volatile u32*)(ev + 0x34) ||
+        (*(volatile u32*)(uintptr_t)kEventModeVa & 0x80000000u) || (*(volatile u32*)(uintptr_t)kMovieFlagVa & 0x80000000u) ||
+        *(volatile u32*)(uintptr_t)kEventBlockVa)
+        return -1;
+    if (!LabRegistered() && !LabRegister()) return -1;
+    const int r = ((RunEventFn)(uintptr_t)kRunEventFn)((void*)ev, 0, kLabDsbNo, event, 0, 0, 0);
+    Log("lab: RunEvent(script %u, event %u) returned %d", kLabDsbNo, event, r);
+    if (r != -1) {
+        g_labPid = r;
+        g_labFrames = 0;
+    }
+    return r;
+}
+bool ufx::DollStands() { return g_doll != nullptr; }

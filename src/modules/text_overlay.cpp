@@ -523,7 +523,18 @@ const LabText kLabTexts[] = {
      "{SET_COLOR color=135, 240, 120}Test mission{NEXT_SEGMENT}                                 --Start{RESET_COLOR}"},
     {0x441A, 10, u8"Агенте, хочете вишневого пирога?{NEXT_SEGMENT}", "Agent, would you like a cherry pie?{NEXT_SEGMENT}"},
     {0x441B, 10, u8"Смачного!{NEXT_SEGMENT}", "Enjoy!{NEXT_SEGMENT}"},
+    // the mission editor's texts: rewritten in place when a mission starts (LabSetText); every record has a fixed room
+    {0x4420, 11, u8"{SET_COLOR color=135, 240, 120}Місія{NEXT_SEGMENT}                                 --Початок{RESET_COLOR}", "{SET_COLOR color=135, 240, 120}Mission{NEXT_SEGMENT}                                 --Start{RESET_COLOR}"},
+    {0x4421, 10, u8"...{NEXT_SEGMENT}", "...{NEXT_SEGMENT}"},
+    {0x4422, 10, u8"...?{NEXT_SEGMENT}", "...?{NEXT_SEGMENT}"},
+    {0x4423, 15, u8"Так", "Yes"},
+    {0x4424, 16, u8"Ні", "No"},
+    {0x4425, 10, u8"...{NEXT_SEGMENT}", "...{NEXT_SEGMENT}"},
+    {0x4426, 10, u8"...{NEXT_SEGMENT}", "...{NEXT_SEGMENT}"},
 };
+constexpr u32 kLabSlotBytes = 512;  // the room of one lab record (255 words at most and the end word)
+u8* g_labFile = nullptr;            // the bound copy the lab records lie in
+u32 g_labFirstOff = 0;              // where the first of them lies
 constexpr u32 kLabTextCount = sizeof(kLabTexts) / sizeof(kLabTexts[0]);
 bool g_labTextsIn = false;
 
@@ -558,8 +569,10 @@ u8* WithLabRecords(const u8* base, u32 size, const u8* icons) {
         }
         for (u32 i = 0; i < words * 2; ++i) out[pos + i] = g_encoded[i];
         MesWr32(out + 12 + t.id * 4, pos);
-        pos += words * 2;
+        pos += kLabSlotBytes;
     }
+    g_labFile = out;
+    g_labFirstOff = start;
     Log("lab: %u texts added to the game's messages (ids %04X..%04X, %u in Latin letters: no cell for a Ukrainian letter); file %u -> %u bytes",
         kLabTextCount, kLabTexts[0].id, kLabTexts[kLabTextCount - 1].id, latin, size, pos);
     return out;
@@ -1075,3 +1088,25 @@ extern "C" INTEGER_ONLY void __cdecl LocGlyphWorker(ufx::u32 message, const ufx:
 }
 
 bool ufx::LabTextsIn() { return g_labTextsIn; }
+
+// One of the lab's records rewritten in place (the mission editor's texts). `text` is UTF-8 in the marker language of mes.h.
+// False when the id is not one of the lab's, the lab texts are not in, or the text cannot be encoded into the record's room.
+bool ufx::LabSetText(u32 id, const char* text) {
+    if (!g_labTextsIn || !g_labFile || !text) return false;
+    for (u32 k = 0; k < kLabTextCount; ++k) {
+        if (kLabTexts[k].id != id) continue;
+        MesOriginal orig = {};
+        orig.w0 = kLabTexts[k].style;
+        MesErrorInfo info = {0, 0, 0, 0};
+        u32 words = 0;
+        const MesError e = MesEncode(text, text + lstrlenA(text), g_map, orig, nullptr, g_encoded, 250, &words, &info);
+        if (e != kMesOk || !words || words * 2 > kLabSlotBytes - 2) {
+            Log("lab: text %04X not set (error %d, value %u, column %u)", id, (int)e, info.value, info.column);
+            return false;
+        }
+        u8* at = g_labFile + g_labFirstOff + k * kLabSlotBytes;
+        for (u32 i = 0; i < words * 2; ++i) at[i] = g_encoded[i];
+        return true;
+    }
+    return false;
+}

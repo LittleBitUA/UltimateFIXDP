@@ -1046,7 +1046,7 @@ void DoCar() { g_carDo = 0; if (g_carPick >= 0 && g_carPick < 16) CheatSpawnCar(
 void DoItem() { g_itemDo = 0; CheatGiveItem(g_itemPick, g_itemCount); }
 void FormatItem(int v, wchar_t* out) {
     const char* n = v >= 0 && v < kItemNameCount ? kItemNames[v] : "";
-    if (*n) wsprintfW(out, L"%d %S", v, n);
+    if (*n) wsprintfW(out, L"%d %.30S", v, n);  // the rows' value buffers hold 40 characters
     else wsprintfW(out, L"%d (%s)", v, g_cfg.language == 1 ? L"empty" : L"порожньо");
 }
 void DoCamera() { g_cheatPick = 0; CheatYorkToCamera(); }
@@ -1129,6 +1129,113 @@ Item g_pageDiag[] = {
      NOTR, kOneValue, 1, kWriteNames, nullptr, false},
 };
 
+// ---- The mission editor: its own set of sections in place of the menu's (g_editor), opened from the "Mission editor" section ----
+bool g_editor = false;
+int g_msSlot = 1, g_msDo[8];
+const int kMsOne[1] = {1};
+const Tr kMsOpenNames[1] = {{L"Відкрити", L"Open"}}, kMsBackNames[1] = {{L"Назад", L"Back"}}, kMsFileNames[1] = {{L"Блокнот", L"Notepad"}},
+         kMsReadNames[1] = {{L"Перечитати", L"Read again"}}, kMsHereNames[1] = {{L"Тут", L"Here"}}, kMsRunNames[1] = {{L"Запустити", L"Run"}},
+         kMsStopNames[1] = {{L"Зупинити", L"Stop"}}, kMsFrontNames[1] = {{L"Перед Йорком", L"In front of York"}};
+void SelectPage(int page);
+void MsSlotChanged() { MissionLoad(g_msSlot); }
+void MsOpen();
+void MsBack();
+void MsFile() { g_msDo[2] = 0; MissionOpenFile(); }
+void MsRead() { g_msDo[3] = 0; MissionLoad(g_msSlot); }
+void MsHere() { g_msDo[4] = 0; MissionRequest(1); }
+void MsFront() { g_msDo[7] = 0; g_mission.placed = 0; MissionSave(); }
+void MsRun() { g_msDo[5] = 0; MissionSave(); MissionLoad(g_msSlot); MissionRequest(2); }
+void MsStop() { g_msDo[6] = 0; MissionRequest(3); }
+void MsSaved() { MissionSave(); }
+void MsText(const wchar_t* t, wchar_t* out) {  // a text of the file in a row: its first characters
+    if (!t[0]) { lstrcpyW(out, g_cfg.language == 1 ? L"(empty)" : L"(порожньо)"); return; }
+    lstrcpynW(out, t, 30);  // the rows' value buffers hold 40 characters
+    if (lstrlenW(t) > 29) lstrcatW(out, L"…");
+}
+void FormatMsSlot(int v, wchar_t* out) {
+    wchar_t name[40];
+    MsText(g_mission.name, name);
+    name[24] = 0;
+    if (g_mission.exists) wsprintfW(out, L"%d · %s", v, name);
+    else wsprintfW(out, g_cfg.language == 1 ? L"%d · empty slot" : L"%d · порожній слот", v);
+}
+void FormatMsName(int, wchar_t* out) { MsText(g_mission.name, out); }
+void FormatMsAuthor(int, wchar_t* out) { MsText(g_mission.author, out); }
+void FormatMsBanner(int, wchar_t* out) { MsText(g_mission.banner, out); }
+void FormatMsLine(int, wchar_t* out) { MsText(g_mission.line, out); }
+void FormatMsQuestion(int, wchar_t* out) { MsText(g_mission.question, out); }
+void FormatMsYes(int, wchar_t* out) { MsText(g_mission.yes, out); }
+void FormatMsNo(int, wchar_t* out) { MsText(g_mission.no, out); }
+void FormatMsAfterYes(int, wchar_t* out) { MsText(g_mission.afterYes, out); }
+void FormatMsAfterNo(int, wchar_t* out) { MsText(g_mission.afterNo, out); }
+void FormatMsState(int, wchar_t* out) { lstrcpynW(out, MissionState(), 38); }
+void FormatMsPlace(int, wchar_t* out) {
+    if (g_mission.placed) wsprintfW(out, L"%d  %d  %d", g_mission.x / 1000, g_mission.y / 1000, g_mission.z / 1000);
+    else lstrcpyW(out, g_cfg.language == 1 ? L"in front of York" : L"перед Йорком");
+}
+void FormatMsItem(int v, wchar_t* out) {
+    if (v < 1) { lstrcpyW(out, g_cfg.language == 1 ? L"nothing" : L"нічого"); return; }
+    FormatItem(v, out);
+}
+int g_msZero = 0;  // the value of the rows that only show a text
+#define MS_TEXT(uk, en, fmt, dUk, dEn) {{uk, en}, &g_msZero, kInt, 0, 0, 1, false, nullptr, nullptr, nullptr, nullptr, {dUk, dEn}, NOTR, nullptr, 0, nullptr, fmt}
+#define MS_BUTTON(uk, en, slot, fn, names, dUk, dEn) {{uk, en}, &g_msDo[slot], kInt, 0, 1, 1, false, nullptr, nullptr, fn, nullptr, {dUk, dEn}, NOTR, kMsOne, 1, names, nullptr, false}
+Item g_pageMsEntry[] = {
+    MS_BUTTON(L"Відкрити редактор місій", L"Open the mission editor", 0, MsOpen, kMsOpenNames,
+              L"Власні маленькі місії: персонаж, його репліки, вибір відповіді, предмет. Місія це текстовий файл у теці UltimateFix\\missions, ним можна ділитися. Перша версія редактора: одна розмова з одним персонажем.",
+              L"Small missions of your own: a character, its lines, a choice of answer, an item. A mission is a text file in UltimateFix\\missions that can be shared. The editor's first version: one talk with one character."),
+};
+Item g_pageMsMission[] = {
+    {{L"Слот місії", L"Mission slot"}, &g_msSlot, kInt, 1, 9, 1, false, nullptr, nullptr, MsSlotChanged, nullptr,
+     {L"Дев'ять місій, кожна у своєму файлі missionN.ini. Порожній слот стає місією, щойно відкриєте його файл або запустите.", L"Nine missions, each in its own file missionN.ini. An empty slot becomes a mission as soon as its file is opened or it is run."},
+     NOTR, nullptr, 0, nullptr, FormatMsSlot},
+    MS_TEXT(L"Назва", L"Name", FormatMsName, L"З файлу місії: [Mission] Name.", L"From the mission's file: [Mission] Name."),
+    MS_TEXT(L"Автор", L"Author", FormatMsAuthor, L"З файлу місії: [Mission] Author.", L"From the mission's file: [Mission] Author."),
+    MS_TEXT(L"Банер початку", L"Start banner", FormatMsBanner, L"Текст банера, який гра показує на початку місії: [Mission] Banner. Порожньо = без банера.", L"The text of the banner the game shows when the mission starts: [Mission] Banner. Empty = no banner."),
+    MS_BUTTON(L"Редагувати тексти у файлі", L"Edit the texts in the file", 2, MsFile, kMsFileNames,
+              L"Відкриває файл місії в Блокноті: назва, банер і всі репліки пишуться там. Збережіть файл (кодування не міняйте) і натисніть «Перечитати файл».",
+              L"Opens the mission's file in Notepad: the name, the banner and all the lines are written there. Save the file (leave its encoding) and press \"Read the file again\"."),
+    MS_BUTTON(L"Перечитати файл", L"Read the file again", 3, MsRead, kMsReadNames, L"Бере з файлу те, що ви щойно змінили.", L"Takes what you have just changed from the file."),
+    MS_BUTTON(L"Назад до меню", L"Back to the menu", 1, MsBack, kMsBackNames, L"Закриває редактор місій.", L"Closes the mission editor."),
+};
+Item g_pageMsActor[] = {
+    {{L"Хто", L"Who"}, &g_mission.resident, kInt, 1, 49, 1, false, nullptr, nullptr, MsSaved, nullptr,
+     {L"Житель Грінвейла, з яким Йорк говорить у місії. Ім'я поруч із номером гра показує своє внутрішнє.", L"The Greenvale resident York talks to in the mission. The name beside the number is the game's internal one."},
+     NOTR, nullptr, 0, nullptr, FormatDoll},
+    MS_TEXT(L"Місце", L"Place", FormatMsPlace, L"Де персонаж стоятиме: координати гри або «перед Йорком».", L"Where the character will stand: game coordinates or \"in front of York\"."),
+    MS_BUTTON(L"Місце: там, де зараз стоїть Йорк", L"Place: where York stands now", 4, MsHere, kMsHereNames,
+              L"Запам'ятовує місце й напрямок Йорка як місце персонажа. Станьте, де він має стояти, і поверніться, куди він має дивитися.",
+              L"Remembers York's place and heading as the character's. Stand where it should stand and face where it should look."),
+    MS_BUTTON(L"Місце: перед Йорком на початку місії", L"Place: in front of York when the mission starts", 7, MsFront, kMsFrontNames,
+              L"Персонаж з'являється за два кроки перед Йорком, де б той не був.", L"The character appears two steps in front of York wherever he is."),
+    {{L"Набір анімацій", L"Motion set"}, &g_mission.motionSet, kInt, 0, 3, 1, false, nullptr, nullptr, MsSaved, kBodySetTr,
+     {L"Звідки брати позу персонажа.", L"Where the character's pose comes from."}, NOTR},
+    {{L"Анімація", L"Motion"}, &g_mission.motion, kInt, 0, 322, 1, false, nullptr, nullptr, MsSaved, nullptr,
+     {L"0 = стоїть спокійно. Номери анімацій можна підібрати у фоторежимі в рядках «Персонаж: анімація тіла».", L"0 = stands calm. The numbers can be tried in the photo mode, rows \"Character: body motion\"."},
+     NOTR, nullptr, 0, nullptr, FormatBodyNo},
+};
+Item g_pageMsTalk[] = {
+    MS_TEXT(L"Репліка", L"Line", FormatMsLine, L"Що персонаж каже спершу: [Talk] Line.", L"What the character says first: [Talk] Line."),
+    MS_TEXT(L"Питання", L"Question", FormatMsQuestion, L"Питання перед вибором: [Talk] Question.", L"The question before the choice: [Talk] Question."),
+    MS_TEXT(L"Відповідь 1", L"Answer 1", FormatMsYes, L"[Talk] Yes.", L"[Talk] Yes."),
+    MS_TEXT(L"Відповідь 2", L"Answer 2", FormatMsNo, L"[Talk] No.", L"[Talk] No."),
+    MS_TEXT(L"Після відповіді 1", L"After answer 1", FormatMsAfterYes, L"[Talk] AfterYes.", L"[Talk] AfterYes."),
+    MS_TEXT(L"Після відповіді 2", L"After answer 2", FormatMsAfterNo, L"[Talk] AfterNo.", L"[Talk] AfterNo."),
+    {{L"Предмет за відповідь 1", L"Item for answer 1"}, &g_mission.giveItem, kInt, 0, 365, 1, false, nullptr, nullptr, MsSaved, nullptr,
+     {L"Що гра видає Йоркові, коли він вибрав першу відповідь (з рідним вікном «отримано»). 0 = нічого.", L"What the game gives York when he picked the first answer (with its own \"obtained\" window). 0 = nothing."},
+     NOTR, nullptr, 0, nullptr, FormatMsItem},
+    MS_BUTTON(L"Редагувати тексти у файлі", L"Edit the texts in the file", 2, MsFile, kMsFileNames, L"Репліки пишуться у файлі місії.", L"The lines are written in the mission's file."),
+    MS_BUTTON(L"Перечитати файл", L"Read the file again", 3, MsRead, kMsReadNames, L"Бере з файлу те, що ви щойно змінили.", L"Takes what you have just changed from the file."),
+};
+Item g_pageMsTest[] = {
+    MS_BUTTON(L"Запустити місію зараз", L"Run the mission now", 5, MsRun, kMsRunNames,
+              L"Ставить персонажа, показує банер і чекає, поки ви підійдете й натиснете E. Вільна гра, пішки, не сцена. ЗБЕРЕЖІТЬСЯ ПЕРЕД СПРОБОЮ. У грі ще не перевірено.",
+              L"Puts the character, shows the banner and waits for you to walk up and press E. Free play on foot, no scene. SAVE BEFORE TRYING. Not yet verified in the game."),
+    MS_BUTTON(L"Зупинити місію", L"Stop the mission", 6, MsStop, kMsStopNames, L"Прибирає персонажа місії.", L"Removes the mission's character."),
+    MS_TEXT(L"Стан", L"State", FormatMsState, L"Що з місією зараз або чому вона не запустилась.", L"What the mission is doing now, or why it did not start."),
+    MS_BUTTON(L"Назад до меню", L"Back to the menu", 1, MsBack, kMsBackNames, L"Закриває редактор місій.", L"Closes the mission editor."),
+};
+
 struct Page {
     Tr title;
     Tr subtitle;
@@ -1151,9 +1258,20 @@ Page g_pages[] = {
     {{L"Сюжет", L"Story"}, {L"Епізод, побічні завдання, поточна ціль (лише перегляд)", L"Episode, side quests, current destination (read-only)"}, nullptr, 0, true, DrawStory},
     {{L"Жителі", L"Residents"}, {L"Де хто зараз за розкладом гри і куди піде далі", L"Where everyone is now by the game's timetable, and where next"}, nullptr, 0, true, nullptr, true},
     {{L"Моди", L"Mods"}, {L"Переклади, текстури й інші моди з теки UltimateFix\\mods", L"Translations, textures and other mods from UltimateFix\\mods"}, nullptr, 0, true, nullptr, false, true},
+    {{L"Редактор місій", L"Mission editor"}, {L"Власні місії: персонаж, розмова, предмет", L"Missions of your own: a character, a talk, an item"}, g_pageMsEntry, 1, false},
     {{L"Про мод", L"About"}, {L"Автор і подяки", L"Author and credits"}, nullptr, 0, true},
+    // the editor's own sections (shown instead of the ones above while g_editor is set)
+    {{L"Місія", L"Mission"}, {L"Редактор місій · слот, назва, банер, файл", L"Mission editor · slot, name, banner, file"}, g_pageMsMission, (int)(sizeof(g_pageMsMission) / sizeof(Item)), false},
+    {{L"Персонаж", L"Character"}, {L"Редактор місій · хто, де стоїть, поза", L"Mission editor · who, where, pose"}, g_pageMsActor, (int)(sizeof(g_pageMsActor) / sizeof(Item)), false},
+    {{L"Розмова", L"Talk"}, {L"Редактор місій · репліки, відповіді, предмет", L"Mission editor · lines, answers, item"}, g_pageMsTalk, (int)(sizeof(g_pageMsTalk) / sizeof(Item)), false},
+    {{L"Перевірка", L"Test"}, {L"Редактор місій · запустити й подивитися", L"Mission editor · run it and see"}, g_pageMsTest, (int)(sizeof(g_pageMsTest) / sizeof(Item)), false},
 };
+constexpr int kEditorPages = 4;
 constexpr int kPageCount = (int)(sizeof(g_pages) / sizeof(Page));
+constexpr int kMainPages = kPageCount - kEditorPages;
+// The sections of the sidebar now: the menu's own, or the mission editor's
+inline int PageLo() { return g_editor ? kMainPages : 0; }
+inline int PageN() { return g_editor ? kEditorPages : kMainPages; }
 
 // The sidebar has 8 sections instead of 13: some are several pages of settings put together once at start (each part keeps its heading).
 struct PageSource {
@@ -1334,7 +1452,7 @@ void UpdateLayout() {
     kLangY = kPy + kPh - 56;
     g_restartShown = PendingCount() > 0;
     kRestartY = kLangY - 10 - kRestartH;
-    kNavH = (kLangY - 10 - (g_restartShown ? kRestartRoom : 0.f) - kNavTop) / (float)kPageCount;
+    kNavH = (kLangY - 10 - (g_restartShown ? kRestartRoom : 0.f) - kNavTop) / (float)PageN();
     if (kNavH > 44) kNavH = 44;
     kConfirmX = SnapWhole(kPx + (kPw - kConfirmW) / 2);  // the panel is at least 820 x 520, so the box is always inside it
     kConfirmY = SnapWhole(kPy + (kPh - kConfirmH) / 2);
@@ -1756,8 +1874,12 @@ void Change(Item& it, int direction) {
 
 bool g_editing = false;
 
+void SelectPage(int page);
+void MsOpen() { g_msDo[0] = 0; g_editor = true; MissionLoad(g_msSlot); SelectPage(kMainPages); }
+void MsBack() { g_msDo[1] = 0; g_editor = false; SelectPage(kMainPages - 2); }
+
 void SelectPage(int page) {
-    g_page = (page % kPageCount + kPageCount) % kPageCount;
+    g_page = PageLo() + (((page - PageLo()) % PageN()) + PageN()) % PageN();
     g_sel = 0;
     g_chipRow = -1;  // the button highlight of the old page does not carry over to row 0 of this one
     g_scroll = 0;
@@ -1972,8 +2094,8 @@ bool SidebarClick(float mx, float my) {
         AskRestart();
         return true;
     }
-    for (int p = 0; p < kPageCount; ++p) {
-        float y = kNavTop + p * kNavH;
+    for (int p = PageLo(); p < PageLo() + PageN(); ++p) {
+        float y = kNavTop + (p - PageLo()) * kNavH;
         if (mx >= kPx && mx < kPx + kSideW && my >= y && my < y + kNavH) {
             SelectPage(p);
             return true;
@@ -2693,6 +2815,12 @@ void DrawItemRow(Item& it, float y, bool sel) {
     }
     // slider + the value (a click on it types a number)
     float sw = SliderW(it);
+    if (it.hi <= it.lo) {  // a row that only shows a text (the mission editor's): no slider
+        if (it.format) it.format(*it.value, value);
+        else wsprintfW(value, L"%d", *it.value);
+        DrawText(value, kCr - TextWidth(value, 16), y + 11, kMuted, 16);
+        return;
+    }
     float t = (float)(*it.value - it.lo) / (float)(it.hi - it.lo);
     FillRound(kSliderX, cy - 3, sw, 6, 3, kLine2);
     FillRound(kSliderX, cy - 3, sw * t, 6, 3, sel ? kAccent : kFaint);  // red only on the selected row
@@ -3123,11 +3251,11 @@ void Draw() {
     FillRect(kPx + 20, kPy + 84, kSideW - 40, 1, kLine);
     // the section highlight, under the names: it glides from the section before (kept relative to the top of the sidebar)
     static Glide navGlide;
-    const float navY = kNavTop + GlideTo(navGlide, (float)g_page * kNavH, g_page, 0);
+    const float navY = kNavTop + GlideTo(navGlide, (float)(g_page - PageLo()) * kNavH, g_page, 0);
     FillRect(kPx, navY, kSideW, kNavH, kSelected);
     FillRect(kPx, navY, 4, kNavH, kAccent);
-    for (int p = 0; p < kPageCount; ++p) {
-        float y = kNavTop + p * kNavH;
+    for (int p = PageLo(); p < PageLo() + PageN(); ++p) {
+        float y = kNavTop + (p - PageLo()) * kNavH;
         // the content is centred on the row: a small panel with the restart block shrinks the rows below 44, and a name kept
         // at y + 12 would sink to the next row's highlight (at 44 this is exactly y + 12)
         const float ty = y + SnapWhole((kNavH - 20.f) / 2.f);

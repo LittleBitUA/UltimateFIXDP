@@ -455,6 +455,26 @@ constexpr int kNoticeInfo = 0, kNoticeWarning = 1, kNoticeError = 2;
 void DollTick(void* player);   // combat_strafe.cpp, from the player update
 void RequestDoll(int what);    // photo mode: 1 = put the chosen resident next to York as a doll, 2 = remove it (at the next player update)
 bool DollName(int id, char* out16);  // the resident's internal name from the game's NPC list, false when it cannot be read
+// the mission editor (missions.cpp) and what it uses of the lab and the doll (combat_strafe.cpp)
+bool PlayerPlace(float out[4]);       // York's position and heading, false when there is no player
+void DollPutAt(int resident, const float place[4], int motionSet, int motion, u32 talkEvent);
+void DollTalkDefault();
+bool DollStands();
+void LabSetGiveItem(int id);
+int LabRunEvent(u32 event);
+struct Mission {  // one mission of the editor: UltimateFix\missions\missionN.ini
+    int slot, exists, resident, placed, x, y, z, yaw, motionSet, motion, giveItem, giveCount;
+    wchar_t name[64], author[64], banner[96], line[200], question[200], yes[40], no[40], afterYes[200], afterNo[200];
+};
+extern Mission g_mission;
+void MissionLoad(int slot);           // reads the file of slot 1..9 into g_mission
+void MissionSave();                   // the numbers of g_mission into its file
+void MissionOpenFile();               // the file in Notepad
+void MissionRequest(int what);        // 1 = the character's place is where York stands, 2 = run, 3 = stop
+const wchar_t* MissionState();
+void MissionTick(void* player);       // from the player update
+bool MissionActive();
+bool LabSetText(u32 id, const char* text);  // text_overlay.cpp: one of the lab's message records rewritten in place
 bool LabTextsIn();  // text_overlay.cpp: the mission lab's texts are in the game's messages
 void ShowNotice(const wchar_t* titleUk, const wchar_t* titleEn, const wchar_t* textUk, const wchar_t* textEn, int seconds,
                 int kind = kNoticeInfo);

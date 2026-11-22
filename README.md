@@ -287,6 +287,10 @@ Known issues of 0.7.0, see 0.7.1 above for what is fixed.
 </tr>
 </table>
 
+**Photo mode.** Emily, put in a room as a posed character and photographed with the free camera — made entirely in the mod's photo mode (a picture by Dmytro):
+
+<img src="docs/screenshots/photo-emily.jpg" alt="Emily, posed and photographed in the mod's photo mode"/>
+
 ### Standing on the shoulders of
 
 The code is our own (MIT). The ideas, facts and addresses came from earlier community work:
