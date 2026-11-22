@@ -513,9 +513,11 @@ void DollSpawn(u8* player) {
                     kSet[8] = {0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x5B, 0x87}, kDel[8] = {0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B},
                     kLink[8] = {0x81, 0xEC, 0x84, 0x00, 0x00, 0x00, 0xA1, 0xCC}, kEntry[8] = {0x8B, 0x44, 0x24, 0x04, 0x50, 0xE8, 0xA6, 0x5E};
     if (!BytesMatch(kFactoryFn, kFactory, 8) || !BytesMatch(kResLoadFn, kLoad, 8) || !BytesMatch(kSetModelFn, kSet, 8) ||
-        !BytesMatch(kObjDeleteFn, kDel, 8) || !BytesMatch(kFaceLinkFn, kLink, 8) || !BytesMatch(kResEntryFn, kEntry, 8) ||
-        *(volatile u32*)(uintptr_t)(kDollVtable + 0x68) != kFaceWeightsFn) {
-        Log("doll: the game's functions differ from DP.exe 1.01b, nothing done");
+        !BytesMatch(kObjDeleteFn, kDel, 8) || !BytesMatch(kFaceLinkFn, kLink, 8) || !BytesMatch(kResEntryFn, kEntry, 8)) {
+        // (0.7.12-test3 also compared the doll's face slot with the game's function here, and the mod's own hook sits in it)
+        Log("doll: the game's functions differ from DP.exe 1.01b, nothing done (%d%d%d%d%d%d)", BytesMatch(kFactoryFn, kFactory, 8),
+            BytesMatch(kResLoadFn, kLoad, 8), BytesMatch(kSetModelFn, kSet, 8), BytesMatch(kObjDeleteFn, kDel, 8), BytesMatch(kFaceLinkFn, kLink, 8),
+            BytesMatch(kResEntryFn, kEntry, 8));
         return;
     }
     const int id = g_cfg.photoDollId;

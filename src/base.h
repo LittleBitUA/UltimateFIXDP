@@ -343,6 +343,8 @@ void CheatMoney(int amount);
 void CheatSetHour(int hour);
 void CheatWeather(int type);
 void CheatAmmo();
+void CheatSpawnCar(int number);          // one of the game's numbered cars put in front of York (open Greenvale only)
+void CheatGiveItem(int id, int count);   // the game's own give-item call
 void CheatYorkToCamera();
 int WeaponClassNow();
 bool InstallAlternate3D();

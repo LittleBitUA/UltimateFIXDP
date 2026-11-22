@@ -57,6 +57,60 @@ void CheatMoney(int amount) { g_money = amount; PhotoThaw(20); }
 void CheatSetHour(int hour) { g_timeHour = hour; PhotoThaw(20); }
 void CheatWeather(int type) { g_weatherSet = type; PhotoThaw(20); }
 void CheatAmmo() { g_ammo = 1; PhotoThaw(20); }
+// The spawner. Cars: the player's cars are numbered objects of the open world; FUN_005F1840 (thiscall on 0143C078h: number,
+// place node or -1, reveal; ret 0Ch) loads and shows car N, as the scripts do for reward cars (8Fh/4Bh), and FUN_00541760
+// (thiscall on the car: position[4], rotation[4]; ret 8) moves it. Items: FUN_005019B0 (thiscall on CGame: id, count, 1, 0, 0;
+// ret 14h), the call behind the script command 84h in its silent form.
+volatile int g_spawnCar = 0, g_giveItem = 0, g_giveCount = 0;
+void CheatSpawnCar(int number) { g_spawnCar = number; PhotoThaw(180); }
+void CheatGiveItem(int id, int count) { g_giveCount = count; g_giveItem = id; PhotoThaw(20); }
+constexpr u32 kCarShowFn = 0x5F1840, kCarMoveFn = 0x541760, kGiveItemFn = 0x5019B0, kWorldFactoryVa = 0x143C078;
+typedef void*(__attribute__((thiscall)) * CarShowFn)(void* self, u32 number, int placeNode, int reveal);
+typedef void(__attribute__((thiscall)) * CarMoveFn)(void* car, float* pos, float* rot);
+typedef int(__attribute__((thiscall)) * GiveItemFn)(void* game, int id, int count, int toStorage, int a, int b);
+inline float SinC(float x) { float r; __asm__("fsin" : "=t"(r) : "0"(x)); return r; }
+inline float CosC(float x) { float r; __asm__("fcos" : "=t"(r) : "0"(x)); return r; }
+void SpawnerTick(u8* game, u8* player) {
+    static const u8 kShow[8] = {0x51, 0x56, 0x8B, 0xF1, 0x89, 0x74, 0x24, 0x04}, kMove[8] = {0x8B, 0x44, 0x24, 0x04, 0x56, 0x8B, 0xF1, 0x81},
+                    kGive[8] = {0x83, 0xEC, 0x08, 0x53, 0x55, 0x56, 0x8B, 0xD9};
+    const bool free = *(volatile u32*)(uintptr_t)kGameplayModeVa == 3 && !(*(volatile u32*)(uintptr_t)kEventModeVa & 0x80000000u);
+    if (g_giveItem) {
+        const int id = g_giveItem, count = g_giveCount;
+        g_giveItem = 0;
+        if (!free || !BytesMatch(kGiveItemFn, kGive, 8) || id < 1 || id > 0x16D || count < 1) {
+            Log("spawner: item %d not given (needs free play; the function must be DP.exe 1.01b's)", id);
+        } else {
+            const int r = ((GiveItemFn)(uintptr_t)kGiveItemFn)(game, id, count, 1, 0, 0);
+            Log("spawner: item %d x %d given, the game answered %d (-3 = it went to the storage)", id, count, r);
+            if (r == -3) ShowNotice(L"Предмет пішов у сховище", L"The item went to the storage", L"В інвентарі немає місця.", L"There is no room in the inventory.", 3);
+            else ShowNotice(L"Предмет видано", L"Item given", L"Дивіться інвентар.", L"See the inventory.", 2);
+        }
+    }
+    if (g_spawnCar) {
+        const int number = g_spawnCar;
+        g_spawnCar = 0;
+        if (!player || !free || !BytesMatch(kCarShowFn, kShow, 8) || !BytesMatch(kCarMoveFn, kMove, 8) || !(*(volatile u32*)(game + 0x8C5EC) & 2) ||
+            *(volatile u32*)(game + 0x834FE0) != 0) {
+            Log("spawner: car %d not put (needs free play outdoors in Greenvale)", number);
+            ShowNotice(L"Машина: не зараз", L"Car: not now", L"Потрібна вільна гра надворі у Грінвейлі, не в будівлі й не в сцені.",
+                       L"It needs free play outdoors in Greenvale, not in a building or a scene.", 4);
+            return;
+        }
+        u8* car = (u8*)((CarShowFn)(uintptr_t)kCarShowFn)((void*)(uintptr_t)kWorldFactoryVa, (u32)number, -1, 1);
+        if (!car || (*(volatile u32*)(car + 0xDC) & 0x60)) {
+            Log("spawner: the game gave no car %d (%08X)", number, (u32)(uintptr_t)car);
+            ShowNotice(L"Машина не з'явилась", L"The car did not appear", L"Гра не дала цієї машини. Деталі в ufx.log.", L"The game gave no such car. See ufx.log.", 4);
+            return;
+        }
+        const float yaw = *(volatile float*)(player + 0x7C);
+        float pos[4] = {*(volatile float*)(player + 0x58) + SinC(yaw) * 16.f, *(volatile float*)(player + 0x5C) + 1.f,
+                        *(volatile float*)(player + 0x60) + CosC(yaw) * 16.f, 1.f};
+        float rot[4] = {0.f, yaw + 1.5707963f, 0.f, 0.f};  // side on to York
+        ((CarMoveFn)(uintptr_t)kCarMoveFn)(car, pos, rot);
+        Log("spawner: car %d (object %08X, subtype %d) put at %d %d %d", number, (u32)(uintptr_t)car, (int)*(volatile signed char*)(car + 0x474),
+            (int)pos[0], (int)pos[1], (int)pos[2]);
+    }
+}
 void CheatYorkToCamera() { g_toCamera = 1; PhotoThaw(20); }
 
 // Runs once per frame from the player update (esi = the player object).
@@ -174,6 +228,7 @@ void CheatsTick(void* player) {
         }
     }
 
+    SpawnerTick(game, (u8*)player);
     if (g_ammo) {
         g_ammo = 0;
         int id = *(volatile int*)(game + 0x98E48);

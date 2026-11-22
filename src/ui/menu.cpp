@@ -18,6 +18,7 @@
 #include "../sites.h"
 #include "../story.h"
 #include "../menupad.h"
+#include "../item_names.h"
 #include <mmsystem.h>
 
 namespace ufx {
@@ -786,7 +787,9 @@ void ApplyCostumeNow() {
     g_applyPick = 0;
     if (g_cfg.photoCostume < 1) return;
     PhotoThaw(120);  // the loaders need the game running
-    RequestSuit(g_cfg.photoCostume);
+    // one row of 30: the game keeps suits as a set (1..3) of ten
+    g_cfg.photoSuitSet = (g_cfg.photoCostume - 1) / 10 + 1;
+    RequestSuit((g_cfg.photoCostume - 1) % 10 + 1);
 }
 
 // The suit is worn as it is scrolled to, with no "Wear" button. A suit loads from disk (up to a second), so the one the row
@@ -913,12 +916,9 @@ Item g_pagePhoto[] = {
     {{L"Різкість, %", L"Sharpening, %"}, &g_cfg.sharpen, kInt, 0, 100, 10, false, L"Graphics", L"Sharpen", nullptr, nullptr, {nullptr, nullptr}, NOTR},
     {{L"Згладжування країв, %", L"Edge smoothing, %"}, &g_cfg.antialias, kInt, 0, 100, 10, false, L"Graphics", L"Antialias", nullptr, nullptr, {nullptr, nullptr}, NOTR},
     {{L"Затінення в кутках, %", L"Ambient occlusion, %"}, &g_cfg.ambientOcclusion, kInt, 0, 100, 10, false, L"Graphics", L"AmbientOcclusion", nullptr, nullptr, {nullptr, nullptr}, NOTR},
-    {{L"Набір костюмів", L"Costume set"}, &g_cfg.photoSuitSet, kInt, 1, 3, 1, false, nullptr, nullptr, nullptr, nullptr,
-     {L"Йорк має набори 1 і 2, Зак (коли ви граєте за нього) набори 1, 2 і 3 (у третього один костюм). Який персонаж зараз, видно в журналі.", L"York has sets 1 and 2, Zach (when you play as him) sets 1, 2 and 3 (the third has one suit). The log says which character is current."},
-     {L"Персонаж", L"Character"}, nullptr, 0, nullptr, FormatSet},
-    {{L"Костюм", L"Suit"}, &g_cfg.photoCostume, kInt, 0, 10, 1, false, nullptr, nullptr, nullptr, nullptr,
-     {L"Йорк одягає костюм, щойно ви на ньому зупинилися (за третину секунди), окремої кнопки немає. ЕКСПЕРИМЕНТАЛЬНО, зробіть збереження. Костюм вантажиться з диска, на це йде до секунди (час гри на цей час запускається). Костюм 2 це слот додаткового пакета DLC і може бути порожнім. Не в катсцені й не в машині.",
-      L"York wears the suit as soon as you stop on it (a third of a second), there is no separate button. EXPERIMENTAL, save first. The suit loads from disk, which takes up to a second (game time runs for that moment). Suit 2 is the DLC add-on slot and may be empty. Not in a cutscene or a car."},
+    {{L"Костюм", L"Suit"}, &g_cfg.photoCostume, kInt, 0, 30, 1, false, nullptr, nullptr, nullptr, nullptr,
+     {L"Йорк одягає костюм, щойно ви на ньому зупинилися (за третину секунди), окремої кнопки немає. ЕКСПЕРИМЕНТАЛЬНО, зробіть збереження. Костюм вантажиться з диска, на це йде до секунди (час гри на цей час запускається). Усі костюми гри в одному рядку: Йорк має 20 (далі повторюються), Зак 21. Костюми 2, 12 і 22 це слот додаткового пакета DLC і можуть бути порожніми. Не в катсцені й не в машині.",
+      L"York wears the suit as soon as you stop on it (a third of a second), there is no separate button. EXPERIMENTAL, save first. The suit loads from disk, which takes up to a second (game time runs for that moment). All the game's suits in one row: York has 20 (they repeat after that), Zach 21. Suits 2, 12 and 22 are the DLC add-on slot and may be empty. Not in a cutscene or a car."},
      NOTR, nullptr, 0, nullptr, FormatSuit},
     {{L"Поза Йорка (експериментально)", L"York's pose (experimental)"}, &g_cfg.photoAnim, kInt, 0, 9, 1, false, nullptr, nullptr, nullptr, kPoseTr,
      {L"Виберіть позу й натисніть «Застосувати». «Спокій» і «Дія 1–7» не потребують зброї (це стани гри 4–8, 12, 14, назви невідомі). «Зброя в руках» бере стан класу зброї, яку Йорк тримає (потрібна зброя в руках). Зробіть збереження. «Спокій» повертає Йорка як було.",
@@ -1027,6 +1027,22 @@ void DoTime() {
 }
 void DoWeather() { int p = g_cheatPick; g_cheatPick = 0; CheatWeather(p); }
 void DoAmmo() { g_cheatPick = 0; CheatAmmo(); }
+// the spawner
+int g_carPick = 0, g_itemPick = 1, g_itemCount = 1, g_carDo = 0, g_itemDo = 0;
+const int kCarNumbers[16] = {7, 8, 90, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89};
+const Tr kCarTr[16] = {{L"Патрульна Йорка", L"York's squad car"}, {L"Патрульна, другий тип", L"Squad car, second type"}, {L"Патрульна (невразлива)", L"Patrol car (invulnerable)"},
+    {L"Carmen GT", L"Carmen GT"}, {L"Machina", L"Machina"}, {L"Elephant T-3", L"Elephant T-3"}, {L"Tough chap", L"Tough chap"}, {L"AppleStar", L"AppleStar"},
+    {L"Mezger C600", L"Mezger C600"}, {L"Rockabilly 58'", L"Rockabilly 58'"}, {L"Woodland", L"Woodland"}, {L"Jogcargo", L"Jogcargo"}, {L"Victoria", L"Victoria"},
+    {L"SR sportwagon", L"SR sportwagon"}, {L"Wave R2000", L"Wave R2000"}, {L"S33 Condor", L"S33 Condor"}};
+const Tr kCarDoNames[1] = {{L"Поставити", L"Put"}};
+const Tr kItemDoNames[1] = {{L"Дати", L"Give"}};
+void DoCar() { g_carDo = 0; if (g_carPick >= 0 && g_carPick < 16) CheatSpawnCar(kCarNumbers[g_carPick]); }
+void DoItem() { g_itemDo = 0; CheatGiveItem(g_itemPick, g_itemCount); }
+void FormatItem(int v, wchar_t* out) {
+    const char* n = v >= 0 && v < kItemNameCount ? kItemNames[v] : "";
+    if (*n) wsprintfW(out, L"%d %S", v, n);
+    else wsprintfW(out, L"%d (%s)", v, g_cfg.language == 1 ? L"empty" : L"порожньо");
+}
 void DoCamera() { g_cheatPick = 0; CheatYorkToCamera(); }
 
 Item g_pageCheats[] = {
@@ -1048,6 +1064,22 @@ Item g_pageCheats[] = {
     {{L"Набої зброї в руках", L"Ammunition of the weapon in hand"}, &g_cheatPick, kInt, 0, 1, 1, false, nullptr, nullptr, DoAmmo, nullptr,
      {L"Магазин зброї, яку Йорк тримає, до максимуму.", L"Fills the magazine of the weapon York holds."},
      {L"Предмети й переміщення", L"Items and moving"}, kOneValue, 1, kAmmoNames, nullptr, false},
+    {{L"Машина", L"Car"}, &g_carPick, kInt, 0, 15, 1, false, nullptr, nullptr, nullptr, kCarTr,
+     {L"Яку машину поставити. Це власні машини гри: патрульні та ті, що Йорк отримує за завдання.", L"Which car to put. They are the game's own cars: the squad cars and the ones York gets for missions."},
+     {L"Спавнер (експериментально)", L"Spawner (experimental)"}},
+    {{L"Поставити машину перед Йорком", L"Put the car in front of York"}, &g_carDo, kInt, 0, 1, 1, false, nullptr, nullptr, DoCar, nullptr,
+     {L"Гра показує вибрану машину і мод ставить її за кілька кроків перед Йорком, боком до нього. Лише у вільній грі надворі у Грінвейлі. Кожна машина у грі одна: якщо вона вже десь стоїть, вона переїде сюди. Збережіться перед спробою. У грі ще не перевірено.",
+      L"The game shows the chosen car and the mod puts it a few steps in front of York, side on. Free play outdoors in Greenvale only. The game has one of each car: if it stands somewhere already, it moves here. Save before trying. Not yet verified in the game."},
+     NOTR, kOneValue, 1, kCarDoNames, nullptr, false},
+    {{L"Предмет", L"Item"}, &g_itemPick, kInt, 1, 365, 1, false, nullptr, nullptr, nullptr, nullptr,
+     {L"Який предмет дати: 1–66 зброя, 67–73 набої, далі їжа, аптечки, ключі, картки та інше. Назви англійською, з даних гри.", L"Which item to give: 1-66 weapons, 67-73 ammunition, then food, first aid, keys, cards and the rest. The names come from the game's data."},
+     NOTR, nullptr, 0, nullptr, FormatItem},
+    {{L"Кількість", L"Count"}, &g_itemCount, kInt, 1, 20, 1, false, nullptr, nullptr, nullptr, nullptr,
+     {L"Скільки разів дати; для набоїв і подібного гра множить на розмір пачки.", L"How many to give; for ammunition and the like the game multiplies by the pack size."}, NOTR},
+    {{L"Дати предмет", L"Give the item"}, &g_itemDo, kInt, 0, 1, 1, false, nullptr, nullptr, DoItem, nullptr,
+     {L"Власний виклик гри «видати предмет», без вікна «отримано». Якщо в інвентарі немає місця, предмет іде у сховище. Сюжетні предмети (ключі, докази) можуть зламати проходження: давайте їх обережно. У грі ще не перевірено.",
+      L"The game's own give-item call, without the \"obtained\" window. With no room in the inventory the item goes to the storage. Story items (keys, evidence) can break the story: give them with care. Not yet verified in the game."},
+     NOTR, kOneValue, 1, kItemDoNames, nullptr, false},
     {{L"Політ Йорка (F3)", L"Fly York (F3)"}, &g_cfg.cheatFly, kBool, 0, 1, 1, false, nullptr, nullptr, nullptr, nullptr,
      {L"Йорк летить, куди ведете: WASD відносно камери, мишка або Q/E повертають, Space вгору, Ctrl (або C) вниз, Shift учетверо швидше. Поки летить, гра не бачить клавіш і пада, не рухає його й не дає впасти. Вимкніть біля землі, бо з висоти він упаде (згодиться невразливість). Не в машині й не в катсцені. Клавіша й швидкість: [Cheats] FlyKey, FlySpeed в UltimateFix.ini.",
       L"York flies where you steer: WASD relative to the camera, the mouse or Q/E turn, Space up, Ctrl (or C) down, Shift four times faster. While he flies the game sees no keys or pad, neither moves him nor lets him fall. Turn it off near the ground, from a height he falls (invulnerability helps). Not in a car or a cutscene. Key and speed: [Cheats] FlyKey, FlySpeed in UltimateFix.ini."}, NOTR},
