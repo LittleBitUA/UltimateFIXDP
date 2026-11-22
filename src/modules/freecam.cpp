@@ -178,7 +178,8 @@ void __attribute__((cdecl)) CameraWorker() {
         if (wasPhoto && !photo) {
             if (g_cfg.photoAnim) RequestPose(1);  // state 0: calm
             g_cfg.photoAnim = 0;
-            g_cfg.photoBodyNo = g_cfg.photoFaceOn = g_cfg.photoNoBlink = g_cfg.photoPlay = 0;  // PhotoAnimTick puts York's own motion back
+            g_cfg.photoBodyNo = g_cfg.photoFaceOn = g_cfg.photoNoBlink = g_cfg.photoPlay = 0;
+            g_cfg.photoMoveX = g_cfg.photoMoveY = g_cfg.photoMoveZ = g_cfg.photoTurn = 0;  // FlyFrame puts him back and lands him  // PhotoAnimTick puts York's own motion back
             Log("photo mode: over, York's own motion and face again");
         }
         wasPhoto = photo;
@@ -281,6 +282,13 @@ float g_fly[3];
 float g_flyYaw = 0.f;  // York's heading while flying (+7Ch, also the target +6Ch): the game's camera follows it
 LARGE_INTEGER g_flyLast = {};
 
+// Photo mode: York placed by hand. The rows of the photo page give an offset from where he stood (right, up, forward along
+// his own heading at that moment) and a turn; he is held there by the fly cheat's own means (position, physics shapes, no
+// ground or fall), and put back and landed by the game's teleport sync when the offsets are zero again or the photo mode ends.
+bool g_placing = false;
+float g_placeBase[3], g_placeYaw = 0.f;
+bool PlaceWanted() { return g_cfg.photoMoveX || g_cfg.photoMoveY || g_cfg.photoMoveZ || g_cfg.photoTurn; }
+
 bool FlyAllowed(u8* p) {
     const u32 state = *(volatile u32*)(p + 0x654);
     return state != 0x87 && state != 0x88 && !InCutscene();  // not behind the wheel, not in a scene
@@ -303,9 +311,19 @@ void FlyFrame(bool menuOpen) {
                                   : L"York falls from where he is now.", 3);
     }
     u8* p = (u8*)(uintptr_t)PlayerObjectNow();
-    if (!g_cfg.cheatFly || !p || !FlyAllowed(p)) {
+    const bool place = !g_cfg.cheatFly && PlaceWanted();
+    if (g_placing && !place && g_flyOn && p) {  // the offsets are zero again (or the fly cheat takes over): back where he stood
+        for (int i = 0; i < 3; ++i) g_fly[i] = g_placeBase[i];
+        g_flyYaw = g_placeYaw;
+        *(volatile float*)(p + 0x7C) = g_flyYaw;
+        *(volatile float*)(p + 0x6C) = g_flyYaw;
+        FlyPut(p);
+        Log("photo place: York back where he stood");
+    }
+    if (!place) g_placing = false;
+    if ((!g_cfg.cheatFly && !place) || !p || !FlyAllowed(p)) {
         if (g_flyOn) {
-            Log("cheat: fly %s", g_cfg.cheatFly ? "paused (car or scene)" : "off");
+            Log("cheat: fly %s", (g_cfg.cheatFly || place) ? "paused (car or scene)" : "off");
             g_flyBridge = (p && FlyAllowed(p)) ? 2 : 0;  // land through the game's own teleport sync on the next physics call
         }
         g_flyOn = false;
@@ -323,6 +341,27 @@ void FlyFrame(bool menuOpen) {
         POINT c;
         if (CenterOfWindow(&c)) SetCursorPos(c.x, c.y);
         Log("cheat: fly on at %d %d %d", (int)g_fly[0], (int)g_fly[1], (int)g_fly[2]);
+    }
+    if (place) {
+        if (!g_placing) {
+            g_placing = true;
+            for (int i = 0; i < 3; ++i) g_placeBase[i] = g_fly[i];
+            g_placeYaw = g_flyYaw;
+            Log("photo place: York held from %d %d %d, heading %d (thousandths of a radian)", (int)g_fly[0], (int)g_fly[1], (int)g_fly[2],
+                (int)(g_flyYaw * 1000.f));
+        }
+        // forward = where he faced when the placing began (sin, cos of the heading), right = a quarter turn from it
+        const float s = Sin(g_placeYaw), c = Cos(g_placeYaw);
+        const float right = (float)g_cfg.photoMoveX * 0.1f, fwd = (float)g_cfg.photoMoveZ * 0.1f;
+        g_fly[0] = g_placeBase[0] + s * fwd + c * right;
+        g_fly[2] = g_placeBase[2] + c * fwd - s * right;
+        g_fly[1] = g_placeBase[1] + (float)g_cfg.photoMoveY * 0.1f;
+        g_flyYaw = g_placeYaw + (float)g_cfg.photoTurn * (kPi / 180.f);
+        *(volatile float*)(p + 0x7C) = g_flyYaw;
+        *(volatile float*)(p + 0x6C) = g_flyYaw;
+        g_flyLast = now;
+        FlyPut(p);
+        return;
     }
     float dt = (float)((double)(now.QuadPart - g_flyLast.QuadPart) / (double)freq.QuadPart);
     g_flyLast = now;

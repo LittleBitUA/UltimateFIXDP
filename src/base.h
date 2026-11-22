@@ -156,6 +156,7 @@ struct Config {
     int photoBodySet;        // which set of body motions: 0 York, 1 residents (day), 2 cutscene extras, 3 Raincoat Killer
     int photoBodyNo;         // 0 = untouched, n = the n-th motion of the set
     int photoFrame;          // the held frame, percent of the motion's length
+    int photoMoveX, photoMoveY, photoMoveZ, photoTurn;  // photo mode: York moved right / up / forward (tenths of a unit) and turned (degrees) from where he stood
     int photoPlay;           // 1 = the motion runs instead of holding the frame
     int photoFaceOn;         // 1 = the face page drives York's face
     int photoFaceAdd;        // 1 = over the game's own face of the frame instead of in its place

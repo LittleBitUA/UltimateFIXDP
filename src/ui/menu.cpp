@@ -121,6 +121,7 @@ void RunningScene(wchar_t* out) {
 }
 
 // "200%  ·  3840×2160": the size of the scene that percent gives.
+void FormatMove(int v, wchar_t* out) { wsprintfW(out, L"%s%d.%d", v < 0 ? L"-" : v > 0 ? L"+" : L"", (v < 0 ? -v : v) / 10, (v < 0 ? -v : v) % 10); }
 void FormatTenths(int v, wchar_t* out) { wsprintfW(out, L"%d.%d", v / 10, v % 10); }
 void FormatStops(int v, wchar_t* out) {
     const int a = v < 0 ? -v : v;
@@ -902,6 +903,18 @@ Item g_pagePhoto[] = {
      NOTR},
     {{L"Застосувати позу", L"Apply the pose"}, &g_applyPick, kInt, 0, 1, 1, false, nullptr, nullptr, ApplyPoseNow, nullptr, {nullptr, nullptr}, NOTR,
      kApplyValues, 1, kApplyNames, nullptr, false},
+    {{L"Йорк: ліворуч / праворуч", L"York: left / right"}, &g_cfg.photoMoveX, kInt, -300, 300, 1, false, nullptr, nullptr, nullptr, nullptr,
+     {L"Пересуває Йорка вбік від місця, де він стояв (відносно того, куди він тоді дивився). Одиниця = десята частина одиниці гри; утримуйте ← → для швидшого руху. 0 в усіх чотирьох рядках повертає його на місце. Поки Йорк пересунутий, гра ним не керує, а земля й стіни його не тримають. Не за кермом і не в катсцені. У грі ще не перевірено.",
+      L"Moves York sideways from where he stood (relative to where he faced then). One step is a tenth of a game unit; hold the arrows to go faster. 0 in all four rows puts him back. While York is moved the game does not control him, and the ground and walls do not hold him. Not at the wheel and not in a cutscene. Not yet verified in the game."},
+     NOTR, nullptr, 0, nullptr, FormatMove},
+    {{L"Йорк: назад / вперед", L"York: back / forward"}, &g_cfg.photoMoveZ, kInt, -300, 300, 1, false, nullptr, nullptr, nullptr, nullptr,
+     {L"Пересуває Йорка вперед або назад від місця, де він стояв.", L"Moves York forward or back from where he stood."},
+     NOTR, nullptr, 0, nullptr, FormatMove},
+    {{L"Йорк: нижче / вище", L"York: lower / higher"}, &g_cfg.photoMoveY, kInt, -300, 300, 1, false, nullptr, nullptr, nullptr, nullptr,
+     {L"Піднімає або опускає Йорка: посадити на паркан, поставити на дах, втопити в землю.", L"Raises or lowers York: sit him on a fence, stand him on a roof, sink him into the ground."},
+     NOTR, nullptr, 0, nullptr, FormatMove},
+    {{L"Йорк: поворот, градуси", L"York: turn, degrees"}, &g_cfg.photoTurn, kInt, -180, 180, 5, false, nullptr, nullptr, nullptr, nullptr,
+     {L"Повертає Йорка навколо себе від напрямку, куди він дивився.", L"Turns York on the spot from the direction he faced."}, NOTR},
     {{L"Набір анімацій тіла (експериментально)", L"Body motion set (experimental)"}, &g_cfg.photoBodySet, kInt, 0, 3, 1, false, nullptr, nullptr, PhotoAnimChanged, kBodySetTr,
      {L"Звідки брати анімацію тіла: Йорк (322), жителі вдень (134), додаткові з катсцен (244), Вбивця в дощовику (56). Лише набори, які гра тримає в пам'яті. Назв анімації не мають, лише номери.",
       L"Where the body motion comes from: York (322), residents by day (134), cutscene extras (244), the Raincoat Killer (56). Only sets the game keeps in memory. The motions have numbers, not names."}, NOTR},
