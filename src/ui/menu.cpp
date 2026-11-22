@@ -138,7 +138,7 @@ void DollGone() {
     PhotoThaw(6);
 }
 void DollThaw() { PhotoThaw(6); }
-const Tr kPlayAsTr[5] = {{L"Йорк", L"York"}, {L"Емілі", L"Emily"}, {L"Йорк у дитинстві", L"York as a child"}, {L"CBS02 (імовірно, вбивця)", L"CBS02 (probably the killer)"}, {L"Зак", L"Zach"}};
+const Tr kPlayAsTr[5] = {{L"Йорк", L"York"}, {L"Емілі", L"Emily"}, {L"Третій (спойлер)", L"The third (spoiler)"}, {L"Четвертий (спойлер)", L"The fourth (spoiler)"}, {L"П'ятий (спойлер)", L"The fifth (spoiler)"}};  // not named in the menu: story spoilers
 void PlayAsChanged2() { PhotoThaw(180); }
 void PlayAsChanged() { g_cfg.playAsOn = 1; PhotoThaw(180); }  // the model loads from disk
 void FormatDoll(int v, wchar_t* out) {
@@ -918,8 +918,8 @@ Item g_pagePhoto[] = {
     {{L"Згладжування країв, %", L"Edge smoothing, %"}, &g_cfg.antialias, kInt, 0, 100, 10, false, L"Graphics", L"Antialias", nullptr, nullptr, {nullptr, nullptr}, NOTR},
     {{L"Затінення в кутках, %", L"Ambient occlusion, %"}, &g_cfg.ambientOcclusion, kInt, 0, 100, 10, false, L"Graphics", L"AmbientOcclusion", nullptr, nullptr, {nullptr, nullptr}, NOTR},
     {{L"Костюм", L"Suit"}, &g_cfg.photoCostume, kInt, 0, 30, 1, false, nullptr, nullptr, nullptr, nullptr,
-     {L"Йорк одягає костюм, щойно ви на ньому зупинилися (за третину секунди), окремої кнопки немає. ЕКСПЕРИМЕНТАЛЬНО, зробіть збереження. Костюм вантажиться з диска, на це йде до секунди (час гри на цей час запускається). Усі костюми гри в одному рядку: Йорк має 20 (далі повторюються), Зак 21. Костюми 2, 12 і 22 це слот додаткового пакета DLC і можуть бути порожніми. Не в катсцені й не в машині.",
-      L"York wears the suit as soon as you stop on it (a third of a second), there is no separate button. EXPERIMENTAL, save first. The suit loads from disk, which takes up to a second (game time runs for that moment). All the game's suits in one row: York has 20 (they repeat after that), Zach 21. Suits 2, 12 and 22 are the DLC add-on slot and may be empty. Not in a cutscene or a car."},
+     {L"Йорк одягає костюм, щойно ви на ньому зупинилися (за третину секунди), окремої кнопки немає. ЕКСПЕРИМЕНТАЛЬНО, зробіть збереження. Костюм вантажиться з диска, на це йде до секунди (час гри на цей час запускається). Усі костюми гри в одному рядку: у Йорка їх 20 (далі повторюються). Костюми 2, 12 і 22 це слот додаткового пакета DLC і можуть бути порожніми. Не в катсцені й не в машині.",
+      L"York wears the suit as soon as you stop on it (a third of a second), there is no separate button. EXPERIMENTAL, save first. The suit loads from disk, which takes up to a second (game time runs for that moment). All the game's suits in one row: York has 20 (they repeat after that). Suits 2, 12 and 22 are the DLC add-on slot and may be empty. Not in a cutscene or a car."},
      NOTR, nullptr, 0, nullptr, FormatSuit},
     {{L"Поза Йорка (експериментально)", L"York's pose (experimental)"}, &g_cfg.photoAnim, kInt, 0, 9, 1, false, nullptr, nullptr, nullptr, kPoseTr,
      {L"Виберіть позу й натисніть «Застосувати». «Спокій» і «Дія 1–7» не потребують зброї (це стани гри 4–8, 12, 14, назви невідомі). «Зброя в руках» бере стан класу зброї, яку Йорк тримає (потрібна зброя в руках). Зробіть збереження. «Спокій» повертає Йорка як було.",
