@@ -56,15 +56,29 @@ bool MemoryIsLow() { return g_memLow; }
 }  // namespace ufx
 
 // ---- the game's worker threads ----------------------------------------------------------------------------------------
-// SerialSetThread: at 00401C9D the main thread wakes SetThread and then waits for it at once, so world objects are never
-// built while the next frame updates the world. The game's own wait at 00401C7D then finds nothing to wait for.
+// SerialSetThread: at 00401C9D the main thread wakes SetThread and then waits until it has finished its turn, so world objects
+// are never built while the next frame updates the world. The game's own wait at 00401C7D then finds nothing to wait for.
+// The flag at 00894560 is also SetThread's "go on" sign: the game's wait (0040CC60) clears it BEFORE waiting, and SetThread
+// builds queued objects (FUN_0040D0D0, the 4096 requests at 00894570) only while it is set. Calling that wait right after the
+// wake cleared the flag before the thread had looked at it: nothing was built unless the thread happened to run first, the
+// request queue filled up and the main thread then span for ever looking for a free cell (a player's hang dump: 4096 of 4096
+// requests waiting, flag 0; the same starvation leaves the town without buildings). So the flag stays set while we wait for
+// the thread's "done" event (it works for the game's own 1 ms), and is cleared afterwards.
 extern "C" __attribute__((naked)) void SetThreadSerialStub() {
     asm volatile(
         ".intel_syntax noprefix\n"
         "mov eax, 0x0040CC90\n"
-        "call eax\n"
-        "mov eax, 0x0040CC60\n"
-        "jmp eax\n"
+        "call eax\n"                           // sets the flag and the wake event when either queue has something
+        "cmp dword ptr ds:[0x00894560], 0\n"
+        "je 1f\n"
+        "push 1\n"                             // wait without a time limit
+        "push 0\n"                             // event 0: SetThread has finished this turn
+        "mov ecx, 0x00894540\n"
+        "mov eax, 0x00712B40\n"
+        "call eax\n"                           // thiscall, takes its two arguments off the stack
+        "mov dword ptr ds:[0x00894560], 0\n"
+        "1:\n"
+        "ret\n"
         ".att_syntax\n");
 }
 
@@ -122,7 +136,7 @@ bool InstallStability() {
     if (g_cfg.serialSetThread) {
         const SiteDef& s = kSiteSetThreadWake;
         if (PatchCall(s.va, s.bytes, s.len, (const void*)SetThreadSerialStub)) {
-            Log("stability: the main thread waits for SetThread right after waking it (no world objects built during the update)");
+            Log("stability: the main thread waits for SetThread's turn right after waking it (objects are built in that turn, not during the update)");
             any = true;
         } else {
             Log("stability: the SetThread wake at %08X differs from DP.exe 1.01b, left as it is", s.va);

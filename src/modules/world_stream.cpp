@@ -30,6 +30,19 @@ volatile int g_repair = 0;
 void WorldStreamRepair() { g_repair = 1; }
 
 void WorldStreamFrame() {
+    {   // SetThread's queue of objects to build (4096 cells, count at 008A4578): a count that only grows means it is starved
+        const u32 waiting = *(volatile u32*)(uintptr_t)0x8A4578;
+        static u32 worst = 0, said = 0;
+        static DWORD last = 0;
+        const DWORD t = GetTickCount();
+        if (waiting <= 4096 && waiting > worst) worst = waiting;
+        if (waiting <= 4096 && waiting >= 256 && said < 20 && t - last > 5000) {
+            last = t;
+            ++said;
+            Log("world build: %u of 4096 object requests wait for SetThread (most so far %u, go flag %u)", waiting, worst,
+                *(volatile u32*)(uintptr_t)0x894560);
+        }
+    }
     u8* game = *(u8* volatile*)(uintptr_t)kGameManagerPtrVa;
     if (!game || IsBadReadPtr(game + kFlagsOff, 4)) return;
     volatile u32* flags = (volatile u32*)(game + kFlagsOff);
