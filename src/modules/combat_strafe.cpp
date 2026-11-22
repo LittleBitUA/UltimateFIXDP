@@ -77,6 +77,7 @@ void* g_photoMotion = nullptr;  // the motion the photo mode put on York
 int g_photoMotionKey = -1;      // set * 1000 + number it was chosen by
 int g_photoReplays = 0;
 
+void PhotoFaceApply(float* w, int n);
 void __attribute__((thiscall)) H_FaceWeights(void* actor, float* w, int n) {
     r_faceWeights(actor, w, n);
     static bool told = false;
@@ -85,6 +86,10 @@ void __attribute__((thiscall)) H_FaceWeights(void* actor, float* w, int n) {
         Log("photo face: the face weights of York pass the hook (%d channels)", n);
     }
     if ((u32)(uintptr_t)actor != g_playerObject || !w || n < 4 || n > 64) return;
+    if (g_cfg.photoFaceTarget != 0) return;  // the page's face goes to the doll
+    PhotoFaceApply(w, n);
+}
+void PhotoFaceApply(float* w, int n) {
     if (!g_cfg.photoFaceOn && !g_cfg.photoNoBlink) return;
     if (g_cfg.photoFaceOn) {
         if (!g_cfg.photoFaceAdd)  // the page's face stands alone: the game's own face of this frame is cleared
@@ -385,7 +390,7 @@ volatile DWORD g_playerTickMs = 0;  // when the player object was last updated: 
 
 void __cdecl StrafeWorker(void* player) {
     if (player) { g_playerTickMs = GetTickCount(); g_playerObject = (u32)(uintptr_t)player; }
-    if (player) { SuitTick(player); PhotoAnimTick(player); LabTick(player); PoseTick(player); CheatsTick(player); LayoutTick(player); }
+    if (player) { SuitTick(player); PhotoAnimTick(player); DollTick(player); LabTick(player); PoseTick(player); CheatsTick(player); LayoutTick(player); }
     if (!player || !g_cfg.combatStrafe) return;
     unsigned now = PadButtons() & 0x30;  // buttons 4 (LB) and 5 (RB)
     unsigned rising = now & ~g_prevShoulders;
@@ -423,6 +428,180 @@ void RequestSuit(int variant) {
 }
 void RequestPose(int stateAndOne) { g_poseRequest = stateAndOne; }
 
+
+// ---- Photo mode: a resident as a doll ---------------------------------------------------------------------------------
+// The game itself makes plain characters (CCharacter, object type 13h: no AI, no schedule, nothing in the save) and gives them a
+// model: 004B04BC makes one with the object factory FUN_005E7620 (thiscall on 0143C078h: type, 0; ret 8), sets its model with
+// FUN_006BE6E0 (model, textures, nodes, 0; ret 10h), ors +DCh with 100400h and plays a motion through its virtual slot +54h.
+// The photo page does the same with the model of a resident from the game's NPC list (models at *(CNpcMain+D84h), a record
+// of C0h per resident id: 12 outfits of 10h, each u8 set, u8 variant, 2 pad, then the XMD, XPC and XNV resource ids).
+constexpr u32 kFactoryThisVa = 0x143C078, kFactoryFn = 0x5E7620, kResLoadFn = 0x40B330, kResObjectFn = 0x6B2C70, kSetModelFn = 0x6BE6E0,
+              kFaceLinkFn = 0x40E780, kResEntryFn = 0x40B2F0, kObjDeleteFn = 0x6C5DA0, kObjLookupFn = 0x6C5FD0, kObjMgrPtrVa = 0xBD7670,
+              kNpcMainPtrVa = 0x138A760, kDollVtable = 0x770224, kDollFaceSlot = 0x77028C, kNpcIdleMotion = 0x25AA;
+typedef void*(__attribute__((thiscall)) * FactoryFn)(void* self, u32 type, u32 spawn);
+typedef void(__attribute__((thiscall)) * ResLoadFn)(void* game, u32 id, u32 kind, u32 wait);
+typedef void*(__attribute__((thiscall)) * ResObjectFn)(void* res, u32 id, u32 flag);
+typedef void(__attribute__((thiscall)) * SetModelFn)(void* obj, void* model, void* textures, void* nodes, u32 zero);
+typedef void*(__attribute__((thiscall)) * ResEntryFn)(void* game, u32 id);
+typedef void(__attribute__((cdecl)) * FaceLinkFn)(void* entry);
+typedef void(__attribute__((thiscall)) * ObjDeleteFn)(void* mgr, void* obj);
+typedef void*(__attribute__((thiscall)) * ObjLookupFn)(void* mgr, u32 handle);
+typedef void*(__attribute__((cdecl)) * ResMgrFn)();
+volatile int g_dollRequest = 0;
+u8* g_doll = nullptr;
+u32 g_dollHandle = 0;
+float g_dollBase[3], g_dollYaw = 0.f;
+FaceWeightsFn r_dollFaceWeights = nullptr;
+
+inline float Sinf(float x) { float r; __asm__("fsin" : "=t"(r) : "0"(x)); return r; }
+inline float Cosf(float x) { float r; __asm__("fcos" : "=t"(r) : "0"(x)); return r; }
+inline u32 Swap32(u32 v) { return (v >> 24) | ((v >> 8) & 0xFF00u) | ((v << 8) & 0xFF0000u) | (v << 24); }
+// The model ids of a resident's first outfit; how the list is laid out is checked on Emily (id 6: XMD BDAh, XPC BDCh, XNV BDBh)
+bool DollModel(int id, int* xmd, int* xpc, int* xnv) {
+    const u8* main = *(u8* volatile*)(uintptr_t)kNpcMainPtrVa;
+    if (!main || IsBadReadPtr(main + 0xD84, 4)) return false;
+    const u8* list = *(u8* volatile*)(main + 0xD84);
+    if (!list || IsBadReadPtr(list, 50 * 0xC0)) return false;
+    static int layout = -1;  // bit 0: ids start at 1 without a record 0; bit 1: big-endian
+    if (layout < 0) {
+        for (int k = 0; k < 4 && layout < 0; ++k) {
+            u32 v = *(const u32*)(list + (6 - (k & 1)) * 0xC0 + 4);
+            if (k & 2) v = Swap32(v);
+            if (v == 0xBDA) layout = k;
+        }
+        if (layout < 0) {
+            const u32* w = (const u32*)(list + 6 * 0xC0);
+            Log("doll: the game's NPC model list is not laid out as expected (record 6: %08X %08X %08X %08X), no doll", w[0], w[1], w[2], w[3]);
+            return false;
+        }
+        Log("doll: NPC model list at %08X, layout %d", (u32)(uintptr_t)list, layout);
+    }
+    const u32* e = (const u32*)(list + (id - (layout & 1)) * 0xC0);
+    u32 v[3] = {e[1], e[2], e[3]};
+    if (layout & 2)
+        for (u32& x : v) x = Swap32(x);
+    *xmd = (int)v[0];
+    *xpc = (int)v[1];
+    *xnv = (int)v[2];
+    return *xmd > 0 && *xmd < 0x8000 && *xpc > 0 && *xpc < 0x8000;
+}
+
+u8* DollAlive() {
+    if (!g_doll || !g_dollHandle) return nullptr;
+    void* mgr = *(void* volatile*)(uintptr_t)kObjMgrPtrVa;
+    if (!mgr || ((ObjLookupFn)(uintptr_t)kObjLookupFn)(mgr, g_dollHandle) != g_doll || *(volatile u32*)g_doll != kDollVtable) {
+        Log("doll: the doll is gone (the game removed it)");
+        g_doll = nullptr;
+        g_dollHandle = 0;
+    }
+    return g_doll;
+}
+
+void DollRemove(const char* why) {
+    u8* doll = DollAlive();
+    if (!doll) return;
+    void* mgr = *(void* volatile*)(uintptr_t)kObjMgrPtrVa;
+    ((ObjDeleteFn)(uintptr_t)kObjDeleteFn)(mgr, doll);
+    g_doll = nullptr;
+    g_dollHandle = 0;
+    g_cfg.dollMoveX = g_cfg.dollMoveY = g_cfg.dollMoveZ = g_cfg.dollTurn = 0;
+    Log("doll: removed (%s)", why);
+}
+
+void DollSpawn(u8* player) {
+    static const u8 kFactory[8] = {0x6A, 0xFF, 0x68, 0x64, 0x78, 0x76, 0x00, 0x64}, kLoad[8] = {0x8B, 0x44, 0x24, 0x08, 0x8B, 0x4C, 0x24, 0x04},
+                    kSet[8] = {0x55, 0x8B, 0xEC, 0x6A, 0xFF, 0x68, 0x5B, 0x87}, kDel[8] = {0x55, 0x8B, 0xEC, 0x51, 0x89, 0x4D, 0xFC, 0x8B},
+                    kLink[8] = {0x81, 0xEC, 0x84, 0x00, 0x00, 0x00, 0xA1, 0xCC}, kEntry[8] = {0x8B, 0x44, 0x24, 0x04, 0x50, 0xE8, 0xA6, 0x5E};
+    if (!BytesMatch(kFactoryFn, kFactory, 8) || !BytesMatch(kResLoadFn, kLoad, 8) || !BytesMatch(kSetModelFn, kSet, 8) ||
+        !BytesMatch(kObjDeleteFn, kDel, 8) || !BytesMatch(kFaceLinkFn, kLink, 8) || !BytesMatch(kResEntryFn, kEntry, 8) ||
+        *(volatile u32*)(uintptr_t)(kDollVtable + 0x68) != kFaceWeightsFn) {
+        Log("doll: the game's functions differ from DP.exe 1.01b, nothing done");
+        return;
+    }
+    const int id = g_cfg.photoDollId;
+    int xmd = 0, xpc = 0, xnv = -1;
+    if (id < 1 || id > 49 || !DollModel(id, &xmd, &xpc, &xnv)) {
+        Log("doll: resident %d has no model in the game's list", id);
+        ShowNotice(L"Персонаж: немає моделі", L"Character: no model", L"Для цього номера у грі немає моделі. Виберіть інший.", L"The game has no model for this number. Pick another.", 4);
+        return;
+    }
+    DollRemove("another one is put");
+    void* game = *(void* volatile*)(uintptr_t)kGameManagerPtrVa;
+    void* res = ((ResMgrFn)(uintptr_t)kResourceMgrFn)();
+    if (!game || !res) return;
+    Log("doll: resident %d, model %04X, textures %04X, nodes %04X: loading", id, xmd, xpc, xnv & 0xFFFF);
+    ((ResLoadFn)(uintptr_t)kResLoadFn)(game, (u32)xmd, 0xB, 1);
+    ((ResLoadFn)(uintptr_t)kResLoadFn)(game, (u32)xpc, 0xB, 1);
+    if (xnv > 0) ((ResLoadFn)(uintptr_t)kResLoadFn)(game, (u32)xnv, 0xB, 1);
+    void* model = ((ResObjectFn)(uintptr_t)kResObjectFn)(res, (u32)xmd, 0);
+    void* tex = ((ResObjectFn)(uintptr_t)kResObjectFn)(res, (u32)xpc, 0);
+    void* nodes = xnv > 0 ? ((ResObjectFn)(uintptr_t)kMotionByIdFn)(res, (u32)xnv, 1) : nullptr;
+    if (!model || !tex) {
+        Log("doll: the model did not load (model %08X, textures %08X)", (u32)(uintptr_t)model, (u32)(uintptr_t)tex);
+        ShowNotice(L"Персонаж: модель не завантажилась", L"Character: the model did not load", L"Деталі в ufx.log.", L"See ufx.log.", 4);
+        return;
+    }
+    u8* obj = (u8*)((FactoryFn)(uintptr_t)kFactoryFn)((void*)(uintptr_t)kFactoryThisVa, 0x13, 0);
+    if (!obj || *(volatile u32*)obj != kDollVtable) {
+        Log("doll: the factory gave %08X (not a plain character), nothing done", (u32)(uintptr_t)obj);
+        return;
+    }
+    ((SetModelFn)(uintptr_t)kSetModelFn)(obj, model, tex, nodes, 0);
+    if (nodes) *(volatile u32*)(obj + 0xDC) |= 0x100400u;  // as the game does at 004B04E9
+    void* entry = ((ResEntryFn)(uintptr_t)kResEntryFn)(game, (u32)xmd);
+    if (entry) ((FaceLinkFn)(uintptr_t)kFaceLinkFn)(entry);  // the model's face set (<name>.XFE)
+    // two units in front of York, facing him
+    const float yaw = *(volatile float*)(player + 0x7C);
+    g_dollBase[0] = *(volatile float*)(player + 0x58) + Sinf(yaw) * 8.f;
+    g_dollBase[1] = *(volatile float*)(player + 0x5C);
+    g_dollBase[2] = *(volatile float*)(player + 0x60) + Cosf(yaw) * 8.f;
+    g_dollYaw = yaw + 3.14159265f;
+    for (int i = 0; i < 3; ++i) *(volatile float*)(obj + 0x58 + 4 * i) = g_dollBase[i];
+    *(volatile float*)(obj + 0x64) = 1.f;
+    *(volatile float*)(obj + 0x7C) = *(volatile float*)(obj + 0x6C) = g_dollYaw;
+    void* idle = ((ResObjectFn)(uintptr_t)kMotionByIdFn)(res, kNpcIdleMotion, 1);
+    if (idle) {
+        const u32 play = (*(u32* volatile*)obj)[0x54 / 4];
+        ((PlayMotionFn)(uintptr_t)play)(obj, idle, 0.f, 0.f, 0, 0);
+    }
+    g_doll = obj;
+    g_dollHandle = *(volatile u32*)(obj + 0x3C);
+    g_cfg.dollMoveX = g_cfg.dollMoveY = g_cfg.dollMoveZ = g_cfg.dollTurn = 0;
+    Log("doll: resident %d stands at %d %d %d (object %08X, handle %08X, idle motion %s)", id, (int)g_dollBase[0], (int)g_dollBase[1],
+        (int)g_dollBase[2], (u32)(uintptr_t)obj, g_dollHandle, idle ? "played" : "not in memory");
+}
+
+void DollTick(void* playerPtr) {
+    u8* player = (u8*)playerPtr;
+    const bool scene = (*(volatile u32*)(uintptr_t)kEventModeVa & 0x80000000u) != 0;
+    const bool free = *(volatile u32*)(uintptr_t)kGameplayModeVa == 3 && !scene;
+    static bool wasPhoto = false;
+    const bool photo = g_cfg.photoActive || g_cfg.photoFreeze;
+    if (g_doll && (scene || (wasPhoto && !photo))) DollRemove(scene ? "a scene began" : "the photo mode ended");
+    wasPhoto = photo;
+    const int req = g_dollRequest;
+    if (req) {
+        g_dollRequest = 0;
+        if (req == 2) DollRemove("asked");
+        else if (!free || *(volatile u32*)player != kPlayerVtable) Log("doll: not now (needs free play on foot outside any scene)");
+        else DollSpawn(player);
+    }
+    u8* doll = DollAlive();
+    if (!doll) return;
+    const float s = Sinf(g_dollYaw), c = Cosf(g_dollYaw);  // forward = where the doll faced when it was put
+    const float right = (float)g_cfg.dollMoveX * 0.1f, fwd = (float)g_cfg.dollMoveZ * 0.1f;
+    *(volatile float*)(doll + 0x58) = g_dollBase[0] + s * fwd + c * right;
+    *(volatile float*)(doll + 0x5C) = g_dollBase[1] + (float)g_cfg.dollMoveY * 0.1f;
+    *(volatile float*)(doll + 0x60) = g_dollBase[2] + c * fwd - s * right;
+    *(volatile float*)(doll + 0x7C) = *(volatile float*)(doll + 0x6C) = g_dollYaw + (float)g_cfg.dollTurn * (3.14159265f / 180.f);
+}
+
+void __attribute__((thiscall)) H_DollFaceWeights(void* actor, float* w, int n) {
+    r_dollFaceWeights(actor, w, n);
+    if (!actor || actor != g_doll || g_cfg.photoFaceTarget != 1 || !w || n < 4 || n > 64) return;
+    PhotoFaceApply(w, n);
+}
+
 bool InstallCombatStrafe() {
     g_suitAvailable = BytesMatch(kSiteSuitChange.va, kSiteSuitChange.bytes, kSiteSuitChange.len);
     if (!g_suitAvailable) Log("suit: the costume function differs from DP.exe 1.01b, costume change off");
@@ -437,6 +616,8 @@ bool InstallCombatStrafe() {
         Log("photo face: the player's face weights hooked (expressions in the photo mode)");
     else
         Log("photo face: the player's virtual table differs from DP.exe 1.01b, no expressions");
+    if (*(volatile u32*)(uintptr_t)kDollFaceSlot == kFaceWeightsFn)
+        SwapImport((void**)(uintptr_t)kDollFaceSlot, (void*)H_DollFaceWeights, (void**)&r_dollFaceWeights);
     if (*(volatile u32*)(uintptr_t)kPlayerPlayByIdSlot == kPlayByIdFn && *(volatile u32*)(uintptr_t)kPlayerPlayByPtrSlot == kPlayByPtrFn &&
         SwapImport((void**)(uintptr_t)kPlayerPlayByIdSlot, (void*)H_PlayById, (void**)&r_playById) &&
         SwapImport((void**)(uintptr_t)kPlayerPlayByPtrSlot, (void*)H_PlayByPtr, (void**)&r_playByPtr))
@@ -464,3 +645,16 @@ bool InstallCombatStrafe() {
 }
 
 }  // namespace ufx
+
+void ufx::RequestDoll(int what) { g_dollRequest = what; }
+bool ufx::DollName(int id, char* out16) {
+    const u8* main = *(u8* volatile*)(uintptr_t)kNpcMainPtrVa;
+    if (id < 1 || id > 49 || !main || IsBadReadPtr(main + 0xD4C, 4)) return false;
+    const char* rec = *(const char* volatile*)(main + 0xD4C);
+    if (!rec || IsBadReadPtr(rec + id * 0xA8, 16)) return false;
+    rec += id * 0xA8;
+    int n = 0;
+    for (; n < 15 && rec[n] >= 0x20 && rec[n] < 0x7F; ++n) out16[n] = rec[n];
+    out16[n] = 0;
+    return n > 0;
+}

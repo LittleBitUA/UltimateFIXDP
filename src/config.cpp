@@ -837,6 +837,7 @@ void LoadConfig(const wchar_t* ini) {
     if (g_cfg.nearPlane < 10) g_cfg.nearPlane = 10;
     if (g_cfg.nearPlane > 200) g_cfg.nearPlane = 200;
     g_cfg.shadowBiasFix = GetPrivateProfileIntW(L"Graphics", L"ShadowBiasFix", 1, ini) ? 1 : 0;
+    g_cfg.photoDollId = 6;  // Emily: the first pick of the photo page's character row (not saved)
     g_cfg.riverWater = (int)GetPrivateProfileIntW(L"Fixes", L"RiverWater", 2, ini);
     if (g_cfg.riverWater < 0 || g_cfg.riverWater > 2) g_cfg.riverWater = 2;
     if (GetPrivateProfileIntW(L"Fixes", L"RiverWaterMigrated", 0, ini) == 0) {  // 1 (always) was the default of 0.7.10

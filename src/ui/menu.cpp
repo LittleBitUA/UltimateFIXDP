@@ -121,6 +121,27 @@ void RunningScene(wchar_t* out) {
 }
 
 // "200%  ·  3840×2160": the size of the scene that percent gives.
+int g_dollPutPick = 0, g_dollGonePick = 0;
+const int kDollValues[1] = {1};
+const Tr kDollPutNames[1] = {{L"Поставити", L"Put"}};
+const Tr kDollGoneNames[1] = {{L"Прибрати", L"Remove"}};
+const Tr kFaceTargetTr[2] = {{L"Йорк", L"York"}, {L"Персонаж", L"The character"}};
+void DollPut() {
+    g_dollPutPick = 0;
+    RequestDoll(1);
+    PhotoThaw(120);  // the loader needs the game running
+}
+void DollGone() {
+    g_dollGonePick = 0;
+    RequestDoll(2);
+    PhotoThaw(6);
+}
+void DollThaw() { PhotoThaw(6); }
+void FormatDoll(int v, wchar_t* out) {
+    char name[16];
+    if (DollName(v, name)) wsprintfW(out, L"%d %S", v, name);
+    else wsprintfW(out, L"%d", v);
+}
 void FormatMove(int v, wchar_t* out) { wsprintfW(out, L"%s%d.%d", v < 0 ? L"-" : v > 0 ? L"+" : L"", (v < 0 ? -v : v) / 10, (v < 0 ? -v : v) % 10); }
 void FormatTenths(int v, wchar_t* out) { wsprintfW(out, L"%d.%d", v / 10, v % 10); }
 void FormatStops(int v, wchar_t* out) {
@@ -903,6 +924,28 @@ Item g_pagePhoto[] = {
      NOTR},
     {{L"Застосувати позу", L"Apply the pose"}, &g_applyPick, kInt, 0, 1, 1, false, nullptr, nullptr, ApplyPoseNow, nullptr, {nullptr, nullptr}, NOTR,
      kApplyValues, 1, kApplyNames, nullptr, false},
+    {{L"Персонаж (експериментально)", L"Character (experimental)"}, &g_cfg.photoDollId, kInt, 1, 49, 1, false, nullptr, nullptr, nullptr, nullptr,
+     {L"Житель Грінвейла, якого поставити поруч із Йорком як нерухому «ляльку» для знімка: без поведінки, без розкладу, у збереження не потрапляє. Ім'я поруч із номером гра показує своє внутрішнє (англійською). Зробіть збереження перед спробами. У грі ще не перевірено.",
+      L"A Greenvale resident to put next to York as a still \"doll\" for the picture: no behaviour, no schedule, never in a save. The name beside the number is the game's internal one. Save before trying. Not yet verified in the game."},
+     NOTR, nullptr, 0, nullptr, FormatDoll},
+    {{L"Поставити персонажа", L"Put the character"}, &g_dollPutPick, kInt, 0, 1, 1, false, nullptr, nullptr, DollPut, nullptr,
+     {L"Ставить вибраного жителя за два кроки перед Йорком, обличчям до нього. Модель вантажиться з диска, тож на мить час гри запускається. Лише у вільній грі, пішки, не в катсцені. Попередній персонаж зникає: одночасно стоїть один.",
+      L"Puts the chosen resident two steps in front of York, facing him. The model loads from disk, so the game's time runs for a moment. Free play on foot only, not in a cutscene. The one before disappears: one stands at a time."},
+     NOTR, kDollValues, 1, kDollPutNames, nullptr, false},
+    {{L"Прибрати персонажа", L"Remove the character"}, &g_dollGonePick, kInt, 0, 1, 1, false, nullptr, nullptr, DollGone, nullptr,
+     {L"Прибирає поставленого персонажа. Він також зникає сам, коли фоторежим закінчується або починається катсцена.",
+      L"Removes the character that was put. It also goes by itself when the photo mode ends or a cutscene begins."},
+     NOTR, kDollValues, 1, kDollGoneNames, nullptr, false},
+    {{L"Персонаж: ліворуч / праворуч", L"Character: left / right"}, &g_cfg.dollMoveX, kInt, -300, 300, 1, false, nullptr, nullptr, DollThaw, nullptr,
+     {L"Пересуває персонажа вбік від місця, де його поставлено (відносно того, куди він тоді дивився).", L"Moves the character sideways from where it was put (relative to where it faced then)."},
+     NOTR, nullptr, 0, nullptr, FormatMove},
+    {{L"Персонаж: назад / вперед", L"Character: back / forward"}, &g_cfg.dollMoveZ, kInt, -300, 300, 1, false, nullptr, nullptr, DollThaw, nullptr,
+     {L"Пересуває персонажа вперед або назад.", L"Moves the character forward or back."}, NOTR, nullptr, 0, nullptr, FormatMove},
+    {{L"Персонаж: нижче / вище", L"Character: lower / higher"}, &g_cfg.dollMoveY, kInt, -300, 300, 1, false, nullptr, nullptr, DollThaw, nullptr,
+     {L"Піднімає або опускає персонажа. Землі під ним гра не шукає: він стоїть на висоті Йорка, поправте тут.", L"Raises or lowers the character. The game does not find the ground for it: it stands at York's height, adjust it here."},
+     NOTR, nullptr, 0, nullptr, FormatMove},
+    {{L"Персонаж: поворот, градуси", L"Character: turn, degrees"}, &g_cfg.dollTurn, kInt, -180, 180, 5, false, nullptr, nullptr, DollThaw, nullptr,
+     {L"Повертає персонажа навколо себе.", L"Turns the character on the spot."}, NOTR},
     {{L"Йорк: ліворуч / праворуч", L"York: left / right"}, &g_cfg.photoMoveX, kInt, -300, 300, 1, false, nullptr, nullptr, nullptr, nullptr,
      {L"Пересуває Йорка вбік від місця, де він стояв (відносно того, куди він тоді дивився). Одиниця = десята частина одиниці гри; утримуйте ← → для швидшого руху. 0 в усіх чотирьох рядках повертає його на місце. Поки Йорк пересунутий, гра ним не керує, а земля й стіни його не тримають. Не за кермом і не в катсцені. У грі ще не перевірено.",
       L"Moves York sideways from where he stood (relative to where he faced then). One step is a tenth of a game unit; hold the arrows to go faster. 0 in all four rows puts him back. While York is moved the game does not control him, and the ground and walls do not hold him. Not at the wheel and not in a cutscene. Not yet verified in the game."},
@@ -926,6 +969,8 @@ Item g_pagePhoto[] = {
      {L"Який момент анімації тримати: 0 початок, 100 кінець. Діє, поки «Програвати анімацію» вимкнено.", L"Which moment of the motion to hold: 0 the start, 100 the end. Used while \"Play the motion\" is off."}, NOTR},
     {{L"Програвати анімацію", L"Play the motion"}, &g_cfg.photoPlay, kBool, 0, 1, 1, false, nullptr, nullptr, PhotoAnimChanged, nullptr,
      {L"Увімкнено: анімація йде сама (вимкніть «Зупинити час», інакше вона стоїть). Вимкнено: тримається кадр із повзунка вище.", L"On: the motion runs by itself (turn \"Freeze time\" off or it stands). Off: the frame of the slider above is held."}, NOTR},
+    {{L"Міміка для", L"The face of"}, &g_cfg.photoFaceTarget, kInt, 0, 1, 1, false, nullptr, nullptr, PhotoAnimChanged, kFaceTargetTr,
+     {L"Кому дістається міміка з рядків нижче: Йоркові чи поставленому персонажеві. Другий тим часом має власне обличчя гри.", L"Who gets the face of the rows below: York or the character that was put. The other one keeps the game's own face meanwhile."}, NOTR},
     {{L"Емоція", L"Emotion"}, &g_faceSel[0], kInt, 0, 20, 1, false, nullptr, nullptr, FaceCompose, kFaceTr0,
      {L"Вираз усього обличчя: усмішка, сум, сміх, страх, огида, крик. Окремо від анімації тіла. Нижче можна додати брови, повіки й рот поверх.", L"The expression of the whole face: smile, sadness, laughter, fear, disgust, shout. Apart from the body motion. Brows, lids and mouth below can be added over it."}, {L"Міміка Йорка (експериментально)", L"York's face (experimental)"}},
     {{L"Емоція: сила", L"Emotion: strength"}, &g_faceAmt[0], kInt, -100, 150, 5, false, nullptr, nullptr, FaceCompose, nullptr,

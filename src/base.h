@@ -159,6 +159,9 @@ struct Config {
     int photoMoveX, photoMoveY, photoMoveZ, photoTurn;  // photo mode: York moved right / up / forward (tenths of a unit) and turned (degrees) from where he stood
     int photoPlay;           // 1 = the motion runs instead of holding the frame
     int photoFaceOn;         // 1 = the face page drives York's face
+    int photoDollId;         // photo mode: which resident (1..49 of the game's NPC list) the doll is
+    int photoFaceTarget;     // whose face the photo page's expression goes to: 0 York, 1 the doll
+    int dollMoveX, dollMoveY, dollMoveZ, dollTurn;  // the doll moved right / up / forward (tenths of a unit) and turned (degrees) from where it was put
     int photoFaceAdd;        // 1 = over the game's own face of the frame instead of in its place
     int photoFaceW[58];      // weight of face channel i+2 in percent (-100..150; channels 0 and 1 scale the blink and the darts)
     int photoNoBlink;        // 1 = no blinking and no eye darts
@@ -444,6 +447,9 @@ void SessionFrame(void* device);  // once per frame from the Present hook: the l
 // the same family as a shown or waiting one (the same text before a colon, or one title the first words of the other:
 // "Fly: on" and "Fly: off", "Scan" and "Scan finished") takes its place instead of queueing.
 constexpr int kNoticeInfo = 0, kNoticeWarning = 1, kNoticeError = 2;
+void DollTick(void* player);   // combat_strafe.cpp, from the player update
+void RequestDoll(int what);    // photo mode: 1 = put the chosen resident next to York as a doll, 2 = remove it (at the next player update)
+bool DollName(int id, char* out16);  // the resident's internal name from the game's NPC list, false when it cannot be read
 bool LabTextsIn();  // text_overlay.cpp: the mission lab's texts are in the game's messages
 void ShowNotice(const wchar_t* titleUk, const wchar_t* titleEn, const wchar_t* textUk, const wchar_t* textEn, int seconds,
                 int kind = kNoticeInfo);
