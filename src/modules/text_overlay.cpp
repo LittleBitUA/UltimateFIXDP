@@ -503,6 +503,66 @@ const u8* g_seenData = nullptr;  // the resource the copy below was made from
 u32 g_seenSize = 0;
 u8* g_merged = nullptr;
 
+// Mission lab ([Debug] MissionLab=1): the texts of the mod's own event script (number 900) as new records in ids the game
+// leaves empty (4413h..4419h), appended behind the last record of the file with their offsets written into the table.
+// Ukrainian through the glyph map; a text with a letter that has no cell is given in Latin letters instead.
+struct LabText {
+    u32 id;
+    u16 style;  // w0: 10 a window, 15 / 16 the two answers of a choice, 11 a banner
+    const char* uk;
+    const char* en;
+};
+const LabText kLabTexts[] = {
+    {0x4413, 10, u8"Тест редактора місій.{NEXT_SEGMENT}", "Mission editor test.{NEXT_SEGMENT}"},
+    {0x4414, 10, u8"Продовжити?{NEXT_SEGMENT}", "Continue?{NEXT_SEGMENT}"},
+    {0x4415, 15, u8"Так", "Yes"},
+    {0x4416, 16, u8"Ні", "No"},
+    {0x4417, 10, u8"Обрано: так.{NEXT_SEGMENT}", "Chosen: yes.{NEXT_SEGMENT}"},
+    {0x4418, 10, u8"Обрано: ні.{NEXT_SEGMENT}", "Chosen: no.{NEXT_SEGMENT}"},
+    {0x4419, 11, u8"{SET_COLOR color=135, 240, 120}Тестове завдання{NEXT_SEGMENT}                                 --Початок{RESET_COLOR}",
+     "{SET_COLOR color=135, 240, 120}Test mission{NEXT_SEGMENT}                                 --Start{RESET_COLOR}"},
+};
+constexpr u32 kLabTextCount = sizeof(kLabTexts) / sizeof(kLabTexts[0]);
+bool g_labTextsIn = false;
+
+// A copy of the file `base` with the lab records behind it, null when it cannot be made (the reason goes to the log)
+u8* WithLabRecords(const u8* base, u32 size, const u8* icons) {
+    MesFile f;
+    if (!MesOpen(base, size, &f)) return nullptr;
+    for (const LabText& t : kLabTexts)
+        if (t.id >= f.count || MesOffset(f, t.id)) {
+            Log("lab: text id %04X is not free in the loaded MES_ALL.MES (%u ids), the lab texts are left out", t.id, f.count);
+            return nullptr;
+        }
+    const u32 start = (size + 1) & ~1u, cap = start + kLabTextCount * 512 + 64;
+    u8* out = (u8*)VirtualAlloc(nullptr, cap, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    if (!out) return nullptr;
+    for (u32 i = 0; i < size; ++i) out[i] = base[i];
+    u32 pos = start, latin = 0;
+    for (const LabText& t : kLabTexts) {
+        MesOriginal orig = {};
+        orig.w0 = t.style;
+        MesErrorInfo info = {0, 0, 0, 0};
+        u32 words = 0;
+        MesError e = MesEncode(t.uk, t.uk + lstrlenA(t.uk), g_map, orig, icons, g_encoded, 250, &words, &info);
+        if (e != kMesOk) {
+            ++latin;
+            e = MesEncode(t.en, t.en + lstrlenA(t.en), g_map, orig, icons, g_encoded, 250, &words, &info);
+        }
+        if (e != kMesOk || !words || pos + words * 2 + 64 > cap) {
+            Log("lab: the text %04X could not be encoded (error %d, value %u), the lab texts are left out", t.id, (int)e, info.value);
+            VirtualFree(out, 0, MEM_RELEASE);
+            return nullptr;
+        }
+        for (u32 i = 0; i < words * 2; ++i) out[pos + i] = g_encoded[i];
+        MesWr32(out + 12 + t.id * 4, pos);
+        pos += words * 2;
+    }
+    Log("lab: %u texts added to the game's messages (ids %04X..%04X, %u in Latin letters: no cell for a Ukrainian letter); file %u -> %u bytes",
+        kLabTextCount, kLabTexts[0].id, kLabTexts[kLabTextCount - 1].id, latin, size, pos);
+    return out;
+}
+
 // The text the game is about to bind: dumped when asked, and merged with the text files. Returns the merged copy, or null
 // when the game must keep its own (nothing to replace, or anything about the file that is not as expected).
 u8* MergedFor(const u8* data, u32 size) {
@@ -538,6 +598,7 @@ u8* MergedFor(const u8* data, u32 size) {
     if (b.files)
         LocLog("text: %d records differ from the loaded MES_ALL.MES and are replaced, %d say the same and stay byte for byte, %d texts refused",
                b.applied, b.same, b.refused);
+    u32 mergedSize = 0;
     if (b.applied) {
         const u32 total = MesMerge(b.file, b.order, b.n, b.ov, nullptr, 0);
         // 64 zero bytes behind the end: the game's scanners have no limit, a few words of slack cost nothing
@@ -556,6 +617,7 @@ u8* MergedFor(const u8* data, u32 size) {
         }
         if (good) {
             g_merged = merged;
+            mergedSize = total;
         } else {
             if (merged) VirtualFree(merged, 0, MEM_RELEASE);
             Log("text: the merged MES could not be built, the game keeps its own text");
@@ -568,6 +630,14 @@ u8* MergedFor(const u8* data, u32 size) {
     } else if (b.files) {
         Log("text: no record replaced (%d files read, %d texts say what the loaded file says, %d refused, see UltimateFix\\loc.log), the game "
             "keeps its own text", b.files, b.same, b.refused);
+    }
+    g_labTextsIn = false;
+    if (g_cfg.missionLab) {
+        u8* lab = g_merged ? WithLabRecords(g_merged, mergedSize, b.icons) : WithLabRecords(data, size, b.icons);
+        if (lab) {  // an earlier merged copy is left alone, like every copy made here
+            g_merged = lab;
+            g_labTextsIn = true;
+        }
     }
     if (b.arena) VirtualFree(b.arena, 0, MEM_RELEASE);
     VirtualFree(tables, 0, MEM_RELEASE);
@@ -909,7 +979,7 @@ void TextToolsFrame() {
 
 bool InstallTextTools() {
     const bool wantDraw = g_cfg.glyphLog || g_cfg.showMessageId;
-    const bool wantData = g_cfg.textDump || (g_cfg.textOverlay && (HaveJson() || ListTextFiles(nullptr) > 0));
+    const bool wantData = g_cfg.textDump || g_cfg.missionLab || (g_cfg.textOverlay && (HaveJson() || ListTextFiles(nullptr) > 0));
     if (!wantDraw && !wantData) return false;  // no text files and no tool asked for: nothing is patched
     if (g_cfg.safeMode) {
         Log("text: SafeMode: the text overlay, the text dump, the glyph log and the message ids are off for this run");
@@ -1001,3 +1071,5 @@ extern "C" INTEGER_ONLY void __cdecl LocGlyphWorker(ufx::u32 message, const ufx:
     const u32 halves = (!fromDrawer || cell < kMesWideFrom) ? 1 : 3;
     if (!(g_ink[cell] & halves)) Note(id, cell);
 }
+
+bool ufx::LabTextsIn() { return g_labTextsIn; }

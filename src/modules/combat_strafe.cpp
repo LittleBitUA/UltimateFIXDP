@@ -248,10 +248,28 @@ void LabTick(void* player) {
     HWND fg = GetForegroundWindow();
     DWORD pid = 0;
     if (fg) GetWindowThreadProcessId(fg, &pid);
-    const bool down = pid == GetCurrentProcessId() && !ui::IsOpen() && (GetAsyncKeyState(VK_NUMPAD7) & 0x8000);
+    // Numpad 7 = the smallest event (a fade), Numpad 8 = a line in the game's dialogue window with a yes / no choice,
+    // Numpad 9 = a mission banner with its sound. 8 and 9 need the lab texts in the game's messages.
+    static const int kKeys[3] = {VK_NUMPAD7, VK_NUMPAD8, VK_NUMPAD9};
+    static const u32 kEvents[3] = {kLabEvMin, kLabEvTalk, kLabEvBanner};
+    const bool ours = pid == GetCurrentProcessId() && !ui::IsOpen();
+    int pick = -1;
+    bool down = false;
+    for (int k = 0; k < 3; ++k)
+        if (ours && (GetAsyncKeyState(kKeys[k]) & 0x8000)) {
+            down = true;
+            if (pick < 0) pick = k;
+        }
     const bool hit = down && !held;
     held = down;
     if (!hit) return;
+    const u32 event = kEvents[pick];
+    if (event != kLabEvMin && !LabTextsIn()) {
+        Log("lab: event %u needs the lab texts, and they are not in the game's messages (see the lab: lines at the start)", event);
+        ShowNotice(L"Лабораторія місій: немає текстів", L"Mission lab: no texts", L"Тексти лабораторії не додано до повідомлень гри. Деталі в ufx.log.",
+                   L"The lab texts were not added to the game's messages. See ufx.log.", 5);
+        return;
+    }
     if (g_labPid != -1) {
         Log("lab: Numpad 7 while the event still runs, ignored");
         return;
@@ -266,8 +284,8 @@ void LabTick(void* player) {
         return;
     }
     if (!LabRegistered() && !LabRegister()) return;
-    const int r = ((RunEventFn)(uintptr_t)kRunEventFn)((void*)ev, 0, kLabDsbNo, kLabEvMin, 0, 0, 0);
-    Log("lab: RunEvent(script %u, event %u) returned %d; our process slot %d", kLabDsbNo, kLabEvMin, r, LabProcess());
+    const int r = ((RunEventFn)(uintptr_t)kRunEventFn)((void*)ev, 0, kLabDsbNo, event, 0, 0, 0);
+    Log("lab: RunEvent(script %u, event %u) returned %d; our process slot %d", kLabDsbNo, event, r, LabProcess());
     if (r == -1) {
         ShowNotice(L"Лабораторія місій: гра відмовила", L"Mission lab: the game refused", L"RunEvent повернув -1. Деталі в ufx.log.", L"RunEvent returned -1. See ufx.log.", 5);
         return;

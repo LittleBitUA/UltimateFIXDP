@@ -443,6 +443,7 @@ void SessionFrame(void* device);  // once per frame from the Present hook: the l
 // the same family as a shown or waiting one (the same text before a colon, or one title the first words of the other:
 // "Fly: on" and "Fly: off", "Scan" and "Scan finished") takes its place instead of queueing.
 constexpr int kNoticeInfo = 0, kNoticeWarning = 1, kNoticeError = 2;
+bool LabTextsIn();  // text_overlay.cpp: the mission lab's texts are in the game's messages
 void ShowNotice(const wchar_t* titleUk, const wchar_t* titleEn, const wchar_t* textUk, const wchar_t* textEn, int seconds,
                 int kind = kNoticeInfo);
 // While the F10 menu is open it draws the notice itself (between OverlayBegin and OverlayEnd, inside its own fade), so the
