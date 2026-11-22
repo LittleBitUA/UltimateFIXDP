@@ -159,6 +159,7 @@ struct Config {
     int photoMoveX, photoMoveY, photoMoveZ, photoTurn;  // photo mode: York moved right / up / forward (tenths of a unit) and turned (degrees) from where he stood
     int photoPlay;           // 1 = the motion runs instead of holding the frame
     int photoFaceOn;         // 1 = the face page drives York's face
+    int coopPartner;         // 1 = a second character (the doll) walks by the gamepad while York keeps the keyboard and mouse
     int playAsOn;            // 1 = the Cheats row asked for the kind in photoPlayAs (cleared once the game plays it)
     int photoPlayAs;         // photo mode: which of the game's playable characters York's place shows (0 York, 1 Emily, 2 York as a child (CNC01), 3 CBS02, 4 Zach)
     int photoDollId;         // photo mode: which resident (1..49 of the game's NPC list) the doll is
@@ -452,6 +453,7 @@ void SessionFrame(void* device);  // once per frame from the Present hook: the l
 // the same family as a shown or waiting one (the same text before a colon, or one title the first words of the other:
 // "Fly: on" and "Fly: off", "Scan" and "Scan finished") takes its place instead of queueing.
 constexpr int kNoticeInfo = 0, kNoticeWarning = 1, kNoticeError = 2;
+bool PartnerPad(float* x, float* y, u32* buttons);  // menu.cpp: the pad's left stick (-1..1, up positive) and buttons for the partner
 void DollTick(void* player);   // combat_strafe.cpp, from the player update
 void RequestDoll(int what);    // photo mode: 1 = put the chosen resident next to York as a doll, 2 = remove it (at the next player update)
 bool DollName(int id, char* out16);  // the resident's internal name from the game's NPC list, false when it cannot be read

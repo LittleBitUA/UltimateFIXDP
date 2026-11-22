@@ -742,6 +742,93 @@ void DollTalkTick(u8* player, u8* doll, bool free) {
     }
 }
 
+// ---- The partner (a try at local co-op): the doll driven by the gamepad while York keeps the keyboard and mouse ----
+// It walks where the left stick points, relative to the camera, at York's height (a doll has no physics and the game finds no
+// ground for it). Its standing, walking and running motions are learnt from York: whatever motion York has at rest, at a
+// walk and at a run is remembered and played on the partner in the same three cases.
+void* g_partnerMotion[3];  // York's motion at rest, walking, running
+int g_partnerState = -1;
+float g_yorkLast[3];
+LARGE_INTEGER g_partnerClock;
+inline float Atan2f(float y, float x) { float r; __asm__("fpatan" : "=t"(r) : "0"(x), "u"(y) : "st(1)"); return r; }
+inline float Sqrtf(float x) { float r; __asm__("fsqrt" : "=t"(r) : "0"(x)); return r; }
+void PartnerTick(u8* player, u8* doll) {
+    LARGE_INTEGER now, freq;
+    QueryPerformanceCounter(&now);
+    QueryPerformanceFrequency(&freq);
+    float dt = g_partnerClock.QuadPart ? (float)((double)(now.QuadPart - g_partnerClock.QuadPart) / (double)freq.QuadPart) : 0.f;
+    g_partnerClock = now;
+    if (dt <= 0.f || dt > 0.2f) dt = 0.f;
+    // learn from York: his speed over the ground this update tells which of the three his motion is
+    float yp[3];
+    for (int i = 0; i < 3; ++i) yp[i] = *(volatile float*)(player + 0x58 + 4 * i);
+    if (dt > 0.f && !g_photoMotion) {
+        const float vx = (yp[0] - g_yorkLast[0]) / dt, vz = (yp[2] - g_yorkLast[2]) / dt, v = Sqrtf(vx * vx + vz * vz);
+        void* m = *(void* volatile*)(player + 0x18C);
+        const int kind = v < 0.5f ? 0 : v < 9.f ? 1 : v < 40.f ? 2 : -1;  // faster than a run is a teleport
+        const u32 state = *(volatile u32*)(player + 0x654);
+        if (kind >= 0 && m && state != 0x87 && state != 0x88 && g_partnerMotion[kind] != m) {
+            if (!g_partnerMotion[kind]) Log("partner: learnt York's %s motion (%08X, York at %d thousandths of a unit a second)",
+                                            kind == 0 ? "standing" : kind == 1 ? "walking" : "running", (u32)(uintptr_t)m, (int)(v * 1000.f));
+            g_partnerMotion[kind] = m;
+        }
+    }
+    for (int i = 0; i < 3; ++i) g_yorkLast[i] = yp[i];
+    // the pad
+    float sx = 0.f, sy = 0.f;
+    u32 buttons = 0;
+    static bool padSeen = false, padTold = false;
+    const bool pad = PartnerPad(&sx, &sy, &buttons);
+    if (pad != padSeen || !padTold) {
+        padTold = true;
+        padSeen = pad;
+        Log("partner: the gamepad is %s", pad ? "read" : "not found (the partner stands)");
+    }
+    float mag = Sqrtf(sx * sx + sy * sy);
+    if (mag > 1.f) { sx /= mag; sy /= mag; mag = 1.f; }
+    // camera forward on the ground
+    volatile float* eye = (volatile float*)(uintptr_t)(kRenderCameraVa + 0x04);
+    volatile float* tgt = (volatile float*)(uintptr_t)(kRenderCameraVa + 0x14);
+    float fx = tgt[0] - eye[0], fz = tgt[2] - eye[2];
+    const float len = Sqrtf(fx * fx + fz * fz);
+    if (len > 1e-4f) { fx /= len; fz /= len; } else { fx = 0.f; fz = 1.f; }
+    const float rx = -fz, rz = fx;  // screen right, as for the free camera and the fly cheat
+    const bool run = mag > 0.85f;
+    const float speed = mag > 0.f ? (run ? 15.f : 5.5f) : 0.f;
+    const float dx = (fx * sy + rx * sx), dz = (fz * sy + rz * sx);
+    if (mag > 0.f && dt > 0.f) {
+        const float dl = Sqrtf(dx * dx + dz * dz);
+        if (dl > 1e-4f) {
+            g_dollBase[0] += dx / dl * speed * dt;
+            g_dollBase[2] += dz / dl * speed * dt;
+            g_dollYaw = Atan2f(dx, dz);  // forward = (sin, cos) of the heading
+        }
+    }
+    // York's height, eased; Y / Triangle (WinMM button 4) or a long way off: back next to York
+    g_dollBase[1] += (yp[1] - g_dollBase[1]) * (dt > 0.f ? (dt * 6.f > 1.f ? 1.f : dt * 6.f) : 0.f);
+    const float ox = g_dollBase[0] - yp[0], oz = g_dollBase[2] - yp[2];
+    if ((buttons & 8u) || ox * ox + oz * oz > 400.f * 400.f) {
+        const float yaw = *(volatile float*)(player + 0x7C);
+        g_dollBase[0] = yp[0] + Cosf(yaw) * 6.f;
+        g_dollBase[1] = yp[1];
+        g_dollBase[2] = yp[2] - Sinf(yaw) * 6.f;
+    }
+    for (int i = 0; i < 3; ++i) *(volatile float*)(doll + 0x58 + 4 * i) = g_dollBase[i];
+    *(volatile float*)(doll + 0x7C) = *(volatile float*)(doll + 0x6C) = g_dollYaw;
+    // the motion of the case
+    const int want = mag <= 0.f ? 0 : run ? 2 : 1;
+    void* m = g_partnerMotion[want] ? g_partnerMotion[want] : g_partnerMotion[want == 2 ? 1 : 0];
+    if (m && (want != g_partnerState || *(void* volatile*)(doll + 0x18C) != m)) {
+        const u8* cur = *(u8* volatile*)(doll + 0x18C);
+        if (!cur || (uintptr_t)cur < 0x10000 || *(const u16*)(cur + 8) == *(const u16*)((const u8*)m + 8)) {
+            const u32 play = (*(u32* volatile*)doll)[0x54 / 4];
+            ((PlayMotionFn)(uintptr_t)play)(doll, m, 0.f, 6.f, 1, 0);
+            *(volatile float*)(doll + 0x1F8) = 1.f;
+        }
+        g_partnerState = want;
+    }
+}
+
 void DollTick(void* playerPtr) {
     u8* player = (u8*)playerPtr;
     const bool scene = (*(volatile u32*)(uintptr_t)kEventModeVa & 0x80000000u) != 0;
@@ -749,7 +836,7 @@ void DollTick(void* playerPtr) {
     static bool wasPhoto = false;
     const bool photo = g_cfg.photoActive || g_cfg.photoFreeze;
     // (with the mission lab on the doll stays after the photo mode: it is the one York talks to)
-    if (g_doll && (scene || (wasPhoto && !photo && !g_cfg.missionLab && !MissionActive()))) DollRemove(scene ? "a scene began" : "the photo mode ended");
+    if (g_doll && (scene || (wasPhoto && !photo && !g_cfg.missionLab && !MissionActive() && !g_cfg.coopPartner))) DollRemove(scene ? "a scene began" : "the photo mode ended");
     wasPhoto = photo;
     PlayAsTick(player, free);
     const int req = g_dollRequest;
@@ -759,8 +846,23 @@ void DollTick(void* playerPtr) {
         else if (!free || *(volatile u32*)player != kPlayerVtable) Log("doll: not now (needs free play on foot outside any scene)");
         else DollSpawn(player);
     }
+    {   // the partner: there while its switch is on, gone when it goes off
+        static bool wasPartner = false;
+        static DWORD asked = 0;
+        if (g_cfg.coopPartner && !g_doll && free && *(volatile u32*)player == kPlayerVtable && GetTickCount() - asked > 3000) {
+            asked = GetTickCount();
+            g_partnerState = -1;
+            g_dollRequest = 1;
+        }
+        if (!g_cfg.coopPartner && wasPartner && g_doll) DollRemove("the partner was switched off");
+        wasPartner = g_cfg.coopPartner != 0;
+    }
     u8* doll = DollAlive();
     if (!doll) return;
+    if (g_cfg.coopPartner) {
+        PartnerTick(player, doll);
+        return;
+    }
     const float s = Sinf(g_dollYaw), c = Cosf(g_dollYaw);  // forward = where the doll faced when it was put
     const float right = (float)g_cfg.dollMoveX * 0.1f, fwd = (float)g_cfg.dollMoveZ * 0.1f;
     *(volatile float*)(doll + 0x58) = g_dollBase[0] + s * fwd + c * right;

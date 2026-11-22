@@ -139,6 +139,7 @@ void DollGone() {
 }
 void DollThaw() { PhotoThaw(6); }
 const Tr kPlayAsTr[5] = {{L"Йорк", L"York"}, {L"Емілі", L"Emily"}, {L"Йорк у дитинстві", L"York as a child"}, {L"CBS02 (імовірно, вбивця)", L"CBS02 (probably the killer)"}, {L"Зак", L"Zach"}};
+void PlayAsChanged2() { PhotoThaw(180); }
 void PlayAsChanged() { g_cfg.playAsOn = 1; PhotoThaw(180); }  // the model loads from disk
 void FormatDoll(int v, wchar_t* out) {
     char name[16];
@@ -1074,6 +1075,13 @@ Item g_pageCheats[] = {
      {L"Ви граєте за іншого персонажа, за якого гра сама дає грати: зі своєю моделлю й анімаціями, можна бігати й робити все як завжди. Це власний перемикач гри. Діє у вільній грі, пішки; модель вантажиться з диска секунду-дві. Персонаж лишається, доки ви не виберете іншого або сюжет сам не змінить його. ГРА ЗАПИСУЄ У ЗБЕРЕЖЕННЯ, КИМ ВИ ГРАЄТЕ: перед збереженням поверніть свого персонажа, якщо не хочете лишитися іншим.",
       L"You play another character the game itself lets you play, with its own model and motions: run and do everything as usual. It is the game's own switch. Works in free play on foot; the model takes a second or two to load. The character stays until you pick another or the story changes it. THE GAME WRITES WHO YOU PLAY INTO THE SAVE: put your own character back before saving unless you want to stay someone else."},
      {L"Персонаж", L"Character"}},
+    {{L"Напарник із ґеймпада (експериментально)", L"A partner on the gamepad (experimental)"}, &g_cfg.coopPartner, kBool, 0, 1, 1, false, nullptr, nullptr, PlayAsChanged2, nullptr,
+     {L"Проба локального кооперативу: поруч із Йорком з'являється другий персонаж (житель із рядка нижче), яким керує ґеймпад, а Йорк лишається на клавіатурі й миші. Лівий стік ходить (до упору = біг), Y / трикутник повертає напарника до Йорка. Це «лялька»: вороги його не бачать, він не б'ється, не відчиняє дверей, землі під собою не шукає (тримається висоти Йорка) і проходить крізь стіни. Ходу й біг він переймає в Йорка: пройдіться і пробіжіться Йорком, щоб напарник їх вивчив. Вільна гра, пішки. У грі ще не перевірено.",
+      L"A try at local co-op: a second character (the resident of the row below) appears next to York and is driven by the gamepad, while York keeps the keyboard and mouse. The left stick walks (fully tilted = runs), Y / Triangle brings the partner back to York. It is a \"doll\": enemies do not see it, it does not fight or open doors, it does not find the ground (it keeps York's height) and it walks through walls. It learns walking and running from York: walk and run with York so the partner knows them. Free play on foot. Not yet verified in the game."},
+     NOTR},
+    {{L"Хто напарник", L"Who the partner is"}, &g_cfg.photoDollId, kInt, 1, 49, 1, false, nullptr, nullptr, nullptr, nullptr,
+     {L"Житель Грінвейла, чию модель має напарник (6 = Емілі). Щоб змінити на ходу, вимкніть і ввімкніть напарника.", L"The Greenvale resident whose model the partner has (6 = Emily). To change it on the go, switch the partner off and on."},
+     NOTR, nullptr, 0, nullptr, FormatDoll},
     {{L"Машина", L"Car"}, &g_carPick, kInt, 0, 15, 1, false, nullptr, nullptr, nullptr, kCarTr,
      {L"Яку машину поставити. Це власні машини гри: патрульні та ті, що Йорк отримує за завдання.", L"Which car to put. They are the game's own cars: the squad cars and the ones York gets for missions."},
      {L"Спавнер (експериментально)", L"Spawner (experimental)"}},
@@ -3730,9 +3738,26 @@ void PadForGame(JOYINFOEX* info, int source) {
     info->dwButtonNumber = (DWORD)count;
 }
 
+// The pad for the partner (the co-op experiment): read here, past the game's hook, from whichever source has one
+bool PartnerPadImpl(float* x, float* y, u32* buttons) {
+    JOYINFOEX j = {};
+    j.dwSize = sizeof j;
+    j.dwFlags = JOY_RETURNALL;
+    bool asked = false;
+    const bool ok = (g_cfg.nativeDualSense && DualSenseToJoy(&j)) || AskWinmm(0, &j, &asked) == JOYERR_NOERROR || XInputToJoy(&j);
+    if (!ok) return false;
+    float fx = ((float)j.dwXpos - 32767.f) / 32767.f, fy = (32767.f - (float)j.dwYpos) / 32767.f;
+    if (fx * fx + fy * fy < 0.04f) fx = fy = 0.f;  // dead zone of a fifth
+    *x = fx;
+    *y = fy;
+    *buttons = j.dwButtons;
+    return true;
+}
+
 MMRESULT WINAPI H_joyGetPosEx(UINT id, LPJOYINFOEX info) {
     if (id != 0 && g_cfg.onlyFirstPad) return JOYERR_UNPLUGGED;  // the game only ever uses slot 0
-    if ((!g_open && !FreeCamBlocksInput()) || id != 0 || !info) {
+    // (with the partner on, the pad is the partner's: the game gets a pad at rest, as while the menu is open)
+    if ((!g_open && !FreeCamBlocksInput() && !g_cfg.coopPartner) || id != 0 || !info) {
         MMRESULT r;
         int source = kPadNone;
         if (id == 0 && info && g_cfg.nativeDualSense && DualSenseToJoy(info)) {
@@ -4237,4 +4262,5 @@ void PhotoLookReset() {
 bool GameLookValues(int* out) { return GameLookValuesImpl(out); }
 
 }  // namespace ui
+bool PartnerPad(float* x, float* y, u32* buttons) { return ui::PartnerPadImpl(x, y, buttons); }
 }  // namespace ufx
