@@ -402,6 +402,33 @@ void DescribeTexture(void* tex, char* out) {
 
 int Milli(float f) { return (int)(f * 1000.f + (f < 0 ? -0.5f : 0.5f)); }
 
+const DWORD* CurrentPsCode();
+// Once, with TraceWater: the game's 16 water records (resource 3A11h, a pointer at CGame+835004h, 2Ch bytes each, the name
+// at +4). The Xbox builds each water object's animated texture from its record (type +10h picks the source texture, mode +12h
+// the layers, +14h..+1Ah the scroll speeds of two layers); the PC port reads only the weight, the mix and the colour.
+void DumpWaterRecords() {
+    static bool done = false;
+    if (done) return;
+    u8* game = *(u8**)(uintptr_t)kGameManagerPtrVa;
+    if (!game || (uintptr_t)game < 0x10000) return;
+    const u8* rec = *(u8* volatile*)(game + 0x835004);
+    if (!rec || (uintptr_t)rec < 0x10000 || IsBadReadPtr(rec, 16 * 0x2C)) return;
+    done = true;
+    Log("water records at %08X (16 x 2Ch): index, name | type mode | speeds +14 +16 +18 +1A | +1C +1E | mix +20 weight +22 | colour +24..+2A | first word", (u32)(uintptr_t)rec);
+    for (int i = 0; i < 16; ++i) {
+        const u8* r = rec + i * 0x2C;
+        char name[13];
+        for (int k = 0; k < 12; ++k) {
+            const u8 c = r[4 + k];
+            name[k] = (c >= 0x20 && c < 0x7F) ? (char)c : (c ? '?' : ' ');
+        }
+        name[12] = 0;
+        const short* w = (const short*)r;
+        Log("water record %2d '%s' | %d %d | %d %d %d %d | %d %d | %d %d | %d %d %d %d | %08X", i, name, w[8], w[9], w[10], w[11], w[12], w[13],
+            w[14], w[15], w[16], w[17], w[18], w[19], w[20], w[21], *(const u32*)r);
+    }
+}
+
 bool NoteWaterDraw(UINT count, u32 from) {
     if (!g_curPs) return false;
     bool water = false;
@@ -410,7 +437,8 @@ bool NoteWaterDraw(UINT count, u32 from) {
     if (water && g_waterKeyCount < 40) {
         {
             u32 key = (u32)(uintptr_t)g_curPs * 31u + (u32)(uintptr_t)g_stageTex[0] * 7u + (u32)(uintptr_t)g_stageTex[1] * 13u +
-                      (u32)(uintptr_t)g_stageTex[5] * 17u + (u32)(uintptr_t)g_stageTex[6] * 19u + (u32)Milli(g_psC[10][2]) * 23u;
+                      (u32)(uintptr_t)g_stageTex[5] * 17u + (u32)(uintptr_t)g_stageTex[6] * 19u + (u32)Milli(g_psC[10][2]) * 23u +
+                      (u32)Milli(g_psC[10][1]) * 29u;
             bool seen = false;
             for (int i = 0; i < g_waterKeyCount && !seen; ++i) seen = g_waterKeys[i] == key;
             if (!seen) {
@@ -425,6 +453,11 @@ bool NoteWaterDraw(UINT count, u32 from) {
                     Milli(g_psC[10][1]), Milli(g_psC[10][2]), Milli(g_psC[10][3]), Milli(g_psC[13][0]), Milli(g_psC[13][1]),
                     Milli(g_psC[13][2]), Milli(g_psC[13][3]), Milli(g_psC[12][0]), Milli(g_psC[12][1]), Milli(g_psC[12][2]),
                     Milli(g_psC[12][3]), Milli(g_vsC243[0]), Milli(g_vsC243[1]), Milli(g_vsC243[2]), Milli(g_vsC243[3]));
+                Log("water:   c9 %d %d %d %d  c0 %d %d %d %d  c3 %d %d %d %d (specular, light colour, light direction; thousandths)",
+                    Milli(g_psC[9][0]), Milli(g_psC[9][1]), Milli(g_psC[9][2]), Milli(g_psC[9][3]), Milli(g_psC[0][0]), Milli(g_psC[0][1]),
+                    Milli(g_psC[0][2]), Milli(g_psC[0][3]), Milli(g_psC[3][0]), Milli(g_psC[3][1]), Milli(g_psC[3][2]), Milli(g_psC[3][3]));
+                Log("water:   pixel shader bytecode %08X", (u32)(uintptr_t)CurrentPsCode());
+                DumpWaterRecords();
             }
         }
     }
