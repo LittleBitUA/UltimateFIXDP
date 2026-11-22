@@ -525,6 +525,10 @@ bool RiverRecord(float* mix, float* weight, float* colour) {
     }
     return false;
 }
+// The river's wave map repeats far too often on PC (grain smaller than a pixel; on the Xbox the cells are tens of pixels wide).
+// Numpad 8 / Numpad 2 (TraceWater, with WaterTest 3) scale the river's UV for the test; the river's mesh goes to the log once.
+float g_riverUvScale = 1.f;
+void DumpRiverMesh(void* dev);
 template <typename Draw> HRESULT WaterDraw(void* dev, bool water, Draw draw) {
     if (!water || g_cfg.waterTest < 1 || g_cfg.waterTest > 3 || !r_SetPsConstF) return draw();
     float v[4] = {g_psC[10][0], g_psC[10][1], g_cfg.waterTest == 1 ? -0.75f : 0.0f, g_psC[10][3]};
@@ -542,9 +546,16 @@ template <typename Draw> HRESULT WaterDraw(void* dev, bool water, Draw draw) {
                 Milli(v[3]), Milli(c13[0]), Milli(c13[1]), Milli(c13[2]), Milli(c13[3]));
         }
         r_SetPsConstF(dev, 13, c13, 1);
+        DumpRiverMesh(dev);
+    }
+    const bool scaled = g_cfg.waterTest == 3 && g_riverUvScale != 1.f && r_SetVsConstF;
+    if (scaled) {
+        const float uv[4] = {g_vsC243[0] * g_riverUvScale, g_vsC243[1] * g_riverUvScale, g_vsC243[2], g_vsC243[3]};
+        r_SetVsConstF(dev, 243, uv, 1);
     }
     r_SetPsConstF(dev, 10, v, 1);
     const HRESULT hr = draw();
+    if (scaled) r_SetVsConstF(dev, 243, g_vsC243, 1);
     r_SetPsConstF(dev, 10, g_psC[10], 1);
     if (g_cfg.waterTest == 3) r_SetPsConstF(dev, 13, g_psC[13], 1);
     return hr;
@@ -815,6 +826,87 @@ float HalfToFloat(u16 h) {
     float f;
     __builtin_memcpy(&f, &bits, 4);
     return f;
+}
+
+// The river's mesh once per mesh in the log: the vertex layout, the range of every element (place, UVs) and the first vertices.
+// From the UV range against the size in the world follows how often the wave map repeats.
+void DumpRiverMesh(void* dev) {
+    struct Seen {
+        void* vb;
+        UINT first;
+    };
+    static Seen seen[6];
+    static int seenCount = 0;
+    typedef HRESULT(WINAPI * GetDeclFn)(void*, void**);
+    typedef HRESULT(WINAPI * DeclElemsFn)(void*, void*, UINT*);
+    void** dvt = *(void***)dev;
+    void* vb[4] = {nullptr, nullptr, nullptr, nullptr};
+    UINT off[4] = {0, 0, 0, 0}, stride[4] = {0, 0, 0, 0};
+    const u8* ptr[4] = {nullptr, nullptr, nullptr, nullptr};
+    ((SmokeGetStreamFn)dvt[101])(dev, 0, &vb[0], &off[0], &stride[0]);
+    bool known = seenCount >= 6;
+    for (int i = 0; i < seenCount; ++i) known |= seen[i].vb == vb[0] && seen[i].first == g_drawFirstVertex;
+    if (known || !vb[0]) {
+        if (vb[0]) ((SmokeRelFn)(*(void***)vb[0])[2])(vb[0]);
+        return;
+    }
+    seen[seenCount++] = {vb[0], g_drawFirstVertex};
+    for (int st = 1; st < 4; ++st) ((SmokeGetStreamFn)dvt[101])(dev, st, &vb[st], &off[st], &stride[st]);
+    UINT count = g_drawNumVerts;
+    if (count > 8192) count = 8192;
+    for (int st = 0; st < 4; ++st) {
+        void* p = nullptr;
+        if (vb[st] && stride[st] && stride[st] <= 128 && count &&
+            SUCCEEDED(((SmokeVbLockFn)(*(void***)vb[st])[11])(vb[st], off[st] + g_drawFirstVertex * stride[st], count * stride[st], &p, 0x10)))
+            ptr[st] = (const u8*)p;
+    }
+    Log("river mesh %d: first vertex %u, %u vertices (%u read), strides %u %u %u %u, vs c243 %d %d %d %d (thousandths)", seenCount,
+        g_drawFirstVertex, g_drawNumVerts, count, stride[0], stride[1], stride[2], stride[3], Milli(g_vsC243[0]), Milli(g_vsC243[1]),
+        Milli(g_vsC243[2]), Milli(g_vsC243[3]));
+    void* decl = nullptr;
+    if (SUCCEEDED(((GetDeclFn)dvt[88])(dev, &decl)) && decl) {
+        u8 el[64 * 8];
+        UINT elems = 64;
+        if (SUCCEEDED(((DeclElemsFn)(*(void***)decl)[4])(decl, el, &elems))) {
+            for (UINT i = 0; i < elems && i < 64; ++i) {
+                const u16 stream = *(const u16*)(el + i * 8), offset = *(const u16*)(el + i * 8 + 2);
+                const u8 type = el[i * 8 + 4], usage = el[i * 8 + 6], index = el[i * 8 + 7];
+                if (stream == 0xFF) break;
+                // FLOAT1..4 = 0..3, FLOAT16_2 = 15, FLOAT16_4 = 16
+                const int comps = type <= 3 ? type + 1 : type == 15 ? 2 : type == 16 ? 4 : 0;
+                const bool half = type >= 15;
+                if (!comps || stream > 3 || !ptr[stream] || offset + comps * (half ? 2u : 4u) > stride[stream]) {
+                    Log("river mesh %d: element stream %u offset %u type %u usage %u index %u (not read)", seenCount, stream, offset, type, usage, index);
+                    continue;
+                }
+                float lo[4] = {0, 0, 0, 0}, hi[4] = {0, 0, 0, 0}, head[3][4] = {};
+                for (UINT v = 0; v < count; ++v) {
+                    const u8* a = ptr[stream] + v * stride[stream] + offset;
+                    for (int c = 0; c < comps; ++c) {
+                        float f;
+                        if (half)
+                            f = HalfToFloat(*(const u16*)(a + c * 2));
+                        else
+                            __builtin_memcpy(&f, a + c * 4, 4);
+                        if (!v || f < lo[c]) lo[c] = f;
+                        if (!v || f > hi[c]) hi[c] = f;
+                        if (v < 3) head[v][c] = f;
+                    }
+                }
+                Log("river mesh %d: element stream %u offset %u type %u usage %u index %u: min %d %d %d %d, max %d %d %d %d (thousandths)", seenCount,
+                    stream, offset, type, usage, index, Milli(lo[0]), Milli(lo[1]), Milli(lo[2]), Milli(lo[3]), Milli(hi[0]), Milli(hi[1]),
+                    Milli(hi[2]), Milli(hi[3]));
+                Log("river mesh %d:   first vertices %d %d %d %d | %d %d %d %d | %d %d %d %d", seenCount, Milli(head[0][0]), Milli(head[0][1]),
+                    Milli(head[0][2]), Milli(head[0][3]), Milli(head[1][0]), Milli(head[1][1]), Milli(head[1][2]), Milli(head[1][3]),
+                    Milli(head[2][0]), Milli(head[2][1]), Milli(head[2][2]), Milli(head[2][3]));
+            }
+        }
+        ((SmokeRelFn)(*(void***)decl)[2])(decl);
+    }
+    for (int st = 0; st < 4; ++st) {
+        if (ptr[st]) ((SmokeVbUnlockFn)(*(void***)vb[st])[12])(vb[st]);
+        if (vb[st]) ((SmokeRelFn)(*(void***)vb[st])[2])(vb[st]);
+    }
 }
 
 // Every vertex of a smoke mesh once in the log (place, UV, normal and the FLOAT16_2 tangent slot): the data to rebuild the Xbox
@@ -2237,6 +2329,23 @@ void WaterFrame() {
                        L"Numpad 6 swaps which of the two sheets is the grey one. Compare with the Xbox.", 4);
         }
         held6 = d6;
+    }
+    if (g_cfg.traceWater && g_cfg.waterTest == 3) {  // Numpad 8 / Numpad 2: the river's wave cells larger / smaller
+        static bool held8 = false, held2 = false;
+        const bool d8 = ours && (GetAsyncKeyState(VK_NUMPAD8) & 0x8000), d2 = ours && (GetAsyncKeyState(VK_NUMPAD2) & 0x8000);
+        if ((d8 && !held8) || (d2 && !held2)) {
+            g_riverUvScale *= d8 && !held8 ? 0.5f : 2.f;
+            if (g_riverUvScale < 1.f / 4096.f) g_riverUvScale = 1.f / 4096.f;
+            if (g_riverUvScale > 16.f) g_riverUvScale = 16.f;
+            const int per = (int)(g_riverUvScale * 100000.f + 0.5f);  // thousandths of a percent
+            Log("water: the river's UV scale is now %d.%03d%% of the game's (Numpad 8 larger cells, Numpad 2 smaller)", per / 1000, per % 1000);
+            wchar_t uk[96], en[96];
+            wsprintfW(uk, L"Хвилі річки: масштаб %d.%03d%%", per / 1000, per % 1000);
+            wsprintfW(en, L"River waves: scale %d.%03d%%", per / 1000, per % 1000);
+            ShowNotice(uk, en, L"Numpad 8 — зерно більше, Numpad 2 — дрібніше.", L"Numpad 8 makes the cells larger, Numpad 2 smaller.", 3);
+        }
+        held8 = d8;
+        held2 = d2;
     }
     if (now && !was) {
         g_cfg.waterTest = g_cfg.waterTest == 3 ? 0 : 3;
