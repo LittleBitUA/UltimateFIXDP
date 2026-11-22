@@ -530,9 +530,42 @@ bool RiverRecord(float* mix, float* weight, float* colour) {
 // scaled by 1/16, the value picked by eye in the game against the Xbox pictures (the Xbox's own number is not known yet).
 // With TraceWater the river's mesh goes to the log once.
 constexpr float kRiverUvScale = 1.f / 16.f;
-inline int WaterMode() { return g_cfg.waterTest >= 1 && g_cfg.waterTest <= 3 ? g_cfg.waterTest : g_cfg.riverWater ? 3 : 0; }
+// RiverWater 2 = only while a scene (cutscene) runs: bit 31 of 008A6074h; the free game keeps the port's water.
+inline bool InScene() { return *(volatile int*)(uintptr_t)0x8A6074 < 0; }
+inline int WaterMode() {
+    if (g_cfg.waterTest >= 1 && g_cfg.waterTest <= 3) return g_cfg.waterTest;
+    return g_cfg.riverWater == 1 || (g_cfg.riverWater == 2 && InScene()) ? 3 : 0;
+}
+// Which scene and which event scripts run while a record-less water draw (the river) is on screen: one log line per change, to
+// tie the fix to one scene by its number. Scene id at 008A6078h; live event threads at 00BDC960h (80 x C4h, +18h in use,
+// +14h -> the event's record: u16 script number, u16 event id).
+void NoteRiverScene() {
+    static int lastScene = 0x7FFFFFFF, lastIn = -1, lines = 0;
+    static u32 lastKey = 0;
+    const int scene = *(volatile int*)(uintptr_t)0x8A6078, in = InScene() ? 1 : 0;
+    char ev[160];
+    int n = 0;
+    u32 key = 0;
+    ev[0] = 0;
+    for (int i = 0; i < 80 && n < 130; ++i) {
+        const u8* t = (const u8*)(uintptr_t)(0xBDC960 + i * 0xC4);
+        if (!*(volatile u32*)(t + 0x18)) continue;
+        const u16* rec = *(const u16* volatile*)(t + 0x14);
+        if (!rec || (uintptr_t)rec < 0x10000 || IsBadReadPtr(rec, 4)) continue;
+        key = key * 31u + rec[0] * 65537u + rec[1];
+        n += wsprintfA(ev + n, " %u/%u", rec[0], rec[1]);
+    }
+    if (scene == lastScene && in == lastIn && key == lastKey) return;
+    lastScene = scene;
+    lastIn = in;
+    lastKey = key;
+    if (lines++ >= 80) return;
+    Log("water: the river is drawn: scene id %d, scene flag %d, RiverWater %d, live events (script/event):%s", scene, in, g_cfg.riverWater,
+        n ? ev : " none");
+}
 void DumpRiverMesh(void* dev);
 template <typename Draw> HRESULT WaterDraw(void* dev, bool water, Draw draw) {
+    if (water && g_cfg.riverWater && g_psC[10][1] == 0.f && g_psC[10][2] == 1.f) NoteRiverScene();
     const int mode = water ? WaterMode() : 0;
     if (!mode || !r_SetPsConstF) return draw();
     float v[4] = {g_psC[10][0], g_psC[10][1], mode == 1 ? -0.75f : 0.0f, g_psC[10][3]};

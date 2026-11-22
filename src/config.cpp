@@ -60,7 +60,8 @@ static const char kDefaultIni[] =
     "\r\n"
     "[Fixes]\r\n"
     "; 1 = the river is drawn with the values of the game's own \"_river\" water record (reflection, lit waves, sparkle), which\r\n"
-    "; the PC version never applies (flat blue water), and with a wave map 16 times larger. Changes at once.\r\n"
+    "; the PC version never applies (flat blue water), and with a wave map 16 times larger. 0 = off, 1 = always,\r\n"
+    "; 2 = only while a cutscene runs (the free game keeps the port's water). Changes at once.\r\n"
     "RiverWater=1\r\n"
     "; Muzzle flashes, splashes and hits take a fixed step: at the console's 30 frames/s that is half the speed of the other\r\n"
     "; effects, at the PC's 60 it is full speed, so they play twice as fast as on the console. 1 = console speed. Restart needed.\r\n"
@@ -836,7 +837,8 @@ void LoadConfig(const wchar_t* ini) {
     if (g_cfg.nearPlane < 10) g_cfg.nearPlane = 10;
     if (g_cfg.nearPlane > 200) g_cfg.nearPlane = 200;
     g_cfg.shadowBiasFix = GetPrivateProfileIntW(L"Graphics", L"ShadowBiasFix", 1, ini) ? 1 : 0;
-    g_cfg.riverWater = GetPrivateProfileIntW(L"Fixes", L"RiverWater", 1, ini) ? 1 : 0;
+    g_cfg.riverWater = (int)GetPrivateProfileIntW(L"Fixes", L"RiverWater", 1, ini);
+    if (g_cfg.riverWater < 0 || g_cfg.riverWater > 2) g_cfg.riverWater = 1;
     g_cfg.farShadowFilter = GetPrivateProfileIntW(L"Graphics", L"FarShadowFilter", 1, ini) ? 1 : 0;
     g_cfg.generateMips = GetPrivateProfileIntW(L"Graphics", L"GenerateMips", 1, ini) ? 1 : 0;
     g_cfg.gameLook = (int)GetPrivateProfileIntW(L"Graphics", L"GameLook", 0, ini);
