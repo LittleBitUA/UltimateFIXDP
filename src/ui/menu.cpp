@@ -138,7 +138,7 @@ void DollGone() {
     PhotoThaw(6);
 }
 void DollThaw() { PhotoThaw(6); }
-const Tr kPlayAsTr[5] = {{L"Йорк", L"York"}, {L"Емілі", L"Emily"}, {L"CNC01 (хто це, ще не знаю)", L"CNC01 (not identified yet)"}, {L"CBS02 (імовірно, вбивця)", L"CBS02 (probably the killer)"}, {L"Зак", L"Zach"}};
+const Tr kPlayAsTr[5] = {{L"Йорк", L"York"}, {L"Емілі", L"Emily"}, {L"Йорк у дитинстві", L"York as a child"}, {L"CBS02 (імовірно, вбивця)", L"CBS02 (probably the killer)"}, {L"Зак", L"Zach"}};
 void PlayAsChanged() { PhotoThaw(180); }  // the model loads from disk
 void FormatDoll(int v, wchar_t* out) {
     char name[16];
