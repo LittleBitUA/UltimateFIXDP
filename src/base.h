@@ -193,6 +193,7 @@ struct Config {
     int cheatClockSpeed;     // clock speed in tenths (10 = as the game)
     int frameStats;          // separate panel: frame time split (game, physics, Present), worst frame, graph
     int perfOverlay;         // FPS, frame time and the GPU time of the mod's passes on the screen
+    int triggerDrive;        // behind the wheel: brake on L2, gas on R2 (the car reads the aim and attack bindings)
     int triggerFire;         // aim on L2 and fire on R2 (run on L1, hold breath on R1) instead of the shoulder buttons
     int bisect;              // [Debug] Bisect: a bit mask of hook groups left out for this run, to find which one breaks something (see main.cpp)
     int safeMode;            // skips some newer hooks (free camera, physics, player update bridge, alternate 3D, waypoint, icon index, effect step,

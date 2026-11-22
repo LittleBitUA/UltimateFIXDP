@@ -418,8 +418,11 @@ static const char kDefaultIni[] =
     "; SonyLayout=0, nor on 4-axis DirectInput pads whose Z axis is the right stick.\r\n"
     "SwapTriggers=0\r\n"
     "; 1 = aim on L2 and fire on R2 (run moves to L1, hold breath and lock-on to R1); 0 = the game's layout (aim L1, fire R1).\r\n"
-    "; Behind the wheel the game's own layout is used, and on a Sony pad read through Windows with SonyLayout=0. Changes at once.\r\n"
+    "; Behind the wheel see TriggerDrive. The game's own layout is used on a Sony pad read through Windows with SonyLayout=0. Changes at once.\r\n"
     "TriggerFire=1\r\n"
+    "; 1 = behind the wheel the brake (and reverse) is on L2 and the gas on R2, as on the console; the car's other buttons stay\r\n"
+    "; where the game has them. 0 = the game's layout in the car (brake L1, gas R1). Changes at once.\r\n"
+    "TriggerDrive=1\r\n"
     "; Strafe with LB / RB in combat while locked on (the console had it, the PC code lost it). Both buttons are also bound (LB aim,\r\n"
     "; RB fire; with TriggerFire=1 L1 run, R1 hold breath and lock-on), so pressing either while locked on also sidesteps. Changes at once.\r\n"
     "CombatStrafe=0\r\n"
@@ -667,6 +670,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.perfOverlay = (int)GetPrivateProfileIntW(L"Debug", L"PerfOverlay", 0, ini);
     g_cfg.frameStats = (int)GetPrivateProfileIntW(L"Debug", L"FrameStats", 0, ini);
     g_cfg.triggerFire = (int)GetPrivateProfileIntW(L"Input", L"TriggerFire", 1, ini);
+    g_cfg.triggerDrive = (int)GetPrivateProfileIntW(L"Input", L"TriggerDrive", 1, ini);
     g_cfg.safeMode = (int)GetPrivateProfileIntW(L"Debug", L"SafeMode", 0, ini);
     g_cfg.bisect = (int)GetPrivateProfileIntW(L"Debug", L"Bisect", 0, ini);
     g_cfg.traceStates = (int)GetPrivateProfileIntW(L"Debug", L"TraceStates", 0, ini);
@@ -912,6 +916,7 @@ void LoadConfig(const wchar_t* ini) {
         g_cfg.physicsSteps = 0;
         g_cfg.autoRecover = 0;
         g_cfg.triggerFire = 0;
+        g_cfg.triggerDrive = 0;
         g_cfg.synthHaptics = 0;
         g_cfg.pauseInMenu = 0;
         g_cfg.halveFlashes = 0;

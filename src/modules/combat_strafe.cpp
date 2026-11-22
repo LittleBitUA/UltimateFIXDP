@@ -403,11 +403,15 @@ void SuitTick(void* player) {
 
 volatile bool g_triggerLayout = false;  // aim and fire are on the trigger buttons: the trigger axis must not reach the game as well
 
-// The pad layout with aim and fire on the triggers: the four binding globals are rewritten, and put back behind the wheel.
+// The pad layout with aim and fire on the triggers: the four binding globals are rewritten. Behind the wheel the car reads the
+// same two actions: "aim" (held bit 40h) is its brake and reverse, "attack" (bit 80h) its gas (FUN_0054BFC0 and its two
+// sisters; the action functions FUN_0070AAF0 and FUN_0070ABA0 ask for the bindings BE5904h and BE58FCh). With TriggerDrive
+// those two stay on L2 and R2 in the car as on the console, and run / hold breath go back to the game's buttons there, so the
+// car's other buttons are where the game has them; without it the game's whole layout is used behind the wheel.
 void LayoutTick(void* player) {
     static bool saved = false;
     static u32 orig[4];
-    static bool applied = false;
+    static int applied = 0;  // 0 the game's, 1 on foot, 2 behind the wheel
     static const u32 va[4] = {kBindAim, kBindAttack, kBindRun, kBindBreath};
     static const u32 triggers[4] = {10, 11, 4, 5};  // aim L2, fire R2, run L1, hold breath R1
     if (!saved) {
@@ -417,12 +421,13 @@ void LayoutTick(void* player) {
     bool driving = *(volatile u32*)((u8*)player + 0x654) == 0x87;
     bool padMode = *(volatile u8*)(uintptr_t)kUseJoyVa != 0;  // on the keyboard the bindings are the game's own: the keys map to the same codes
     // An unconverted Sony pad (SonyLayout=0) has L3/R3 on the buttons 10 and 11 the layout binds aim and fire to: the game's layout stays.
-    bool want = g_cfg.triggerFire && !driving && padMode && !PadIsRawSony(0);
+    const bool can = padMode && !PadIsRawSony(0);
+    const int want = !can ? 0 : driving ? (g_cfg.triggerDrive ? 2 : 0) : (g_cfg.triggerFire ? 1 : 0);
     if (want == applied) return;
-    for (int i = 0; i < 4; ++i) *(volatile u32*)(uintptr_t)va[i] = want ? triggers[i] : orig[i];
+    for (int i = 0; i < 4; ++i) *(volatile u32*)(uintptr_t)va[i] = want == 1 || (want == 2 && i < 2) ? triggers[i] : orig[i];
     applied = want;
-    g_triggerLayout = want;
-    Log("input: pad layout %s", want ? "aim L2, fire R2, run L1, hold breath R1" : "the game's");
+    g_triggerLayout = want != 0;
+    Log("input: pad layout %s", want == 1 ? "aim L2, fire R2, run L1, hold breath R1" : want == 2 ? "car: brake L2, gas R2, the rest the game's" : "the game's");
 }
 
 volatile DWORD g_playerTickMs = 0;  // when the player object was last updated: the main menu and the title screen have none
