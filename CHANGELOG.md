@@ -2,6 +2,14 @@
 
 The two newest versions are in the [README](README.md).
 
+## What's new in 0.7.13
+
+A small update after 0.7.12.
+- **The partner on the gamepad** (still experimental): its standing, walking and running motions are learnt once each from a steady York, so it no longer copies York's turns, aiming and door motions (it looked as if it answered the keyboard, and its motions fell apart); it comes along when York changes location or teleports instead of staying behind. Still to do: the camera does not follow it, it walks through walls and doors, it does not find the ground.
+- **The update card** no longer cuts its second line with "…" when a gamepad is in use.
+- **No spoilers in the menu:** the playable characters past York and Emily are not named in the "Play as" row.
+- **The talk with a placed character** (mission editor, `[Debug] MissionLab=1`) runs in the game's own talk mode: York turns to the character and the camera frames it.
+
 ## What's new in 0.7.12
 
 **Photo mode: a whole scene, not only York.** The second picture at the top of the README was made entirely in the mod's photo mode.

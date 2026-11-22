@@ -28,7 +28,7 @@ _Універсальний фікс для_ **Deadly Premonition: The Director'
 One DLL in the game folder instead of DPfix, a stability fix, a map fix and a crash fix.
 No installer: press **F10** in game and everything is there. The mod also gives the game 4 GB of memory by itself (from the second start).
 
-> **Version 0.7.14.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
+> **Version 0.7.15.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
 > <br>Newest: a posed character next to York in the photo mode, play as other characters, a spawner for cars and items, a partner on the gamepad and a first mission editor — see [What's new](#whats-new-in-0713). Earlier versions: [CHANGELOG.md](CHANGELOG.md).
 
 ### Features
@@ -51,7 +51,7 @@ No installer: press **F10** in game and everything is there. The mod also gives 
 
 #### Controls and camera
 
-- 🎮 **DualSense** — USB and Bluetooth without Steam Input, **adaptive triggers per weapon**, haptics for driving and shooting, PlayStation button icons
+- 🎮 **DualSense** — USB and Bluetooth without Steam Input, **adaptive triggers per weapon and for the car** (gas on R2, brake on L2, each trigger tuned on its own), haptics for driving and shooting, PlayStation button icons
 - 📳 **Rumble that works** — the PC port calculated vibration and never sent it to the gamepad
 - 🔫 **Aim on L2, shoot on R2** — like a modern shooter, on Xbox pads too; prompts switch between keyboard and gamepad by themselves
 - 🖱️ **Camera** — field of view in play, Xbox 360 quick turn, mouse sensitivity and inversion per axis
@@ -165,6 +165,17 @@ port with the Xbox 360 original:
   Checked in the game at the river; other water (the lake, puddles,
   interiors) has not been compared yet.
 
+### What's new in 0.7.15
+
+**Driving on the triggers.** Behind the wheel the gas is on R2 / RT and the brake (and reverse, when the car stands) on L2 / LT, as on the console. The car's other buttons stay where the game has them. On by default; the row "Gas on R2, brake on L2 in the car" on the Controls page (`[Input] TriggerDrive`) puts the game's layout back (brake L1, gas R1) at once. Checked in the game.
+
+**DualSense adaptive triggers in the car, each on its own.** A group "Triggers in the car (DualSense)" on the Controls page with three rows for the gas trigger and three for the brake:
+- **Effect:** off, resistance, a click (a wall that gives way) or vibration.
+- **Strength**, 0–100 %.
+- **Where it begins** along the trigger's travel, 0 (at once) to 8 (near the end).
+
+The effect stays while the F10 menu is open, so you can tune it on the road: change a row, press the trigger. By default both triggers push back (gas 30 %, brake 60 %). It needs "DualSense adaptive triggers" on and Steam Input off for the game. Checked in the game.
+
 ### What's new in 0.7.14
 
 **An important fix: missing buildings and a freeze while driving.** If Greenvale had no buildings at all, or the game froze while you drove through it, this was the mod's own fault, in every version from 0.7.1 to 0.7.13.
@@ -176,14 +187,6 @@ port with the Xbox 360 original:
 **The photo mode in a window of its own** (_not yet checked in the game_). The photo key (F6) or "Open the photo mode" on the cheats page opens a window with five sections in place of the menu's own: camera and picture, picture look, suits, motions, spawner. Every section has "Back to the menu".
 
 **For finding faults:** `[Debug] Bisect` in `UltimateFix.ini` leaves groups of the mod's hooks out for one run (the numbers are in the source, `main.cpp`). This is how the fault above was narrowed down.
-
-### What's new in 0.7.13
-
-A small update after 0.7.12.
-- **The partner on the gamepad** (still experimental): its standing, walking and running motions are learnt once each from a steady York, so it no longer copies York's turns, aiming and door motions (it looked as if it answered the keyboard, and its motions fell apart); it comes along when York changes location or teleports instead of staying behind. Still to do: the camera does not follow it, it walks through walls and doors, it does not find the ground.
-- **The update card** no longer cuts its second line with "…" when a gamepad is in use.
-- **No spoilers in the menu:** the playable characters past York and Emily are not named in the "Play as" row.
-- **The talk with a placed character** (mission editor, `[Debug] MissionLab=1`) runs in the game's own talk mode: York turns to the character and the camera frames it.
 
 Earlier versions: [CHANGELOG.md](CHANGELOG.md).
 
@@ -327,7 +330,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 Одна DLL у теці гри замість DPfix, фіксу стабільності, фіксу мапи й фіксу вильотів.
 Без інсталятора: натисніть **F10** у грі, і все там. Мод також сам дає грі 4 ГБ пам'яті (з другого запуску).
 
-> **Версія 0.7.14.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
+> **Версія 0.7.15.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
 > <br>Найновіше: персонаж поруч із Йорком у фоторежимі, гра за інших персонажів, спавнер машин і предметів, напарник із ґеймпада і перший редактор місій — див. [Що нового](#що-нового-в-0713). Попередні версії: [CHANGELOG_UA.md](CHANGELOG_UA.md).
 
 ### Можливості
@@ -350,7 +353,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 
 #### Керування й камера
 
-- 🎮 **DualSense** — USB і Bluetooth без Steam Input, **адаптивні триґери під кожну зброю**, відгук у машині й при пострілах, іконки кнопок PlayStation
+- 🎮 **DualSense** — USB і Bluetooth без Steam Input, **адаптивні триґери під кожну зброю й для машини** (газ на R2, гальмо на L2, кожен триґер налаштовується окремо), відгук у машині й при пострілах, іконки кнопок PlayStation
 - 📳 **Вібрація, яка працює** — PC-порт рахував її, але не надсилав на ґеймпад
 - 🔫 **Приціл на L2, постріл на R2** — як у сучасних шутерах, і на Xbox-падах; підказки самі перемикаються між клавіатурою й ґеймпадом
 - 🖱️ **Камера** — кут огляду в грі, швидкий розворот як на Xbox 360, чутливість миші й інверсія по кожній осі
@@ -463,6 +466,17 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
   Перевірено у грі біля річки; іншу воду (озеро, калюжі, приміщення) ще не
   порівнювали.
 
+### Що нового в 0.7.15
+
+**Їзда на триґерах.** За кермом газ на R2 / RT, гальмо (і задній хід, коли машина стоїть) на L2 / LT, як на консолі. Решта кнопок машини лишається там, де їх має гра. Типово ввімкнено; рядок «Газ на R2, гальмо на L2 в машині» на сторінці «Керування» (`[Input] TriggerDrive`) одразу повертає розкладку гри (гальмо L1, газ R1). Перевірено у грі.
+
+**Адаптивні триґери DualSense в машині, кожен окремо.** Група «Триґери в машині (DualSense)» на сторінці «Керування»: три рядки для триґера газу й три для гальма:
+- **Ефект:** вимкнено, опір, клік (стінка, яка піддається) або вібрація.
+- **Сила**, 0–100 %.
+- **Початок ходу**: з якого місця ходу триґера починається ефект, від 0 (одразу) до 8 (майже в кінці).
+
+Ефект не зникає, коли відкрите меню F10, тож налаштовувати можна просто в дорозі: змінили рядок — натиснули триґер. Типово обидва триґери мають опір (газ 30 %, гальмо 60 %). Потрібні ввімкнені «Адаптивні триґери DualSense» і вимкнений Steam Input для гри. Перевірено у грі.
+
 ### Що нового в 0.7.14
 
 **Важливе виправлення: зниклі будівлі й зависання під час їзди.** Якщо у Грінвейлі не було жодної будівлі або гра зависала, коли ви їхали містом, це була помилка самого мода, у всіх версіях від 0.7.1 до 0.7.13.
@@ -474,14 +488,6 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 **Фоторежим у власному вікні** (_у грі ще не перевірено_). Клавіша фоторежиму (F6) або «Відкрити фоторежим» на сторінці читкодів відкриває вікно з п'ятьма розділами замість розділів меню: камера і знімок, картинка, костюми, анімації, спавнер. У кожному розділі є «Назад до меню».
 
 **Для пошуку несправностей:** `[Debug] Bisect` в `UltimateFix.ini` на один запуск вимикає групи хуків мода (числа — у коді, `main.cpp`). Саме так знайшли помилку вище.
-
-### Що нового в 0.7.13
-
-Невелике оновлення після 0.7.12.
-- **Напарник із ґеймпада** (досі експериментальний): анімації «стоїть», «іде» й «біжить» він вивчає по одному разу з Йорка, що рухається рівно, тож більше не копіює його повороти, прицілювання й двері (здавалося, що він реагує на клавіатуру, а анімації «злітали»); при зміні локації чи телепорті Йорка він переноситься разом із ним, а не лишається позаду. Ще попереду: камера за ним не стежить, він проходить крізь стіни й двері, землі під собою не шукає.
-- **Плашка оновлення** більше не обрізає другий рядок «…», коли підключено ґеймпад.
-- **Без спойлерів у меню:** персонажі, за яких можна грати, окрім Йорка та Емілі, у рядку «Грати за» не названі.
-- **Розмова з поставленим персонажем** (редактор місій, `[Debug] MissionLab=1`) іде у власному режимі розмови гри: Йорк повертається до персонажа, камера бере його в кадр.
 
 Попередні версії: [CHANGELOG_UA.md](CHANGELOG_UA.md).
 
