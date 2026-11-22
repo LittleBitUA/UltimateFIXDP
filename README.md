@@ -17,6 +17,8 @@ _Універсальний фікс для_ **Deadly Premonition: The Director'
 
 <img src="docs/screenshots/menu-graphics.jpg" width="92%" alt="UltimateFIXDP settings menu in game"/>
 
+<img src="docs/screenshots/photo-emily.jpg" width="92%" alt="A picture made in the mod's photo mode"/>
+
 </div>
 
 ---
@@ -27,29 +29,61 @@ One DLL in the game folder instead of DPfix, a stability fix, a map fix and a cr
 No installer: press **F10** in game and everything is there. The mod also gives the game 4 GB of memory by itself (from the second start).
 
 > **Version 0.7.13.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
-> <br>New in 0.7.13: fixes for the gamepad partner and the update card — see [What's new](#whats-new-in-0713). In 0.7.12: **a posed character next to York in the photo mode**, **play as Emily and other characters**, a **spawner** for cars and items, a first **mission editor** — see [What's new](#whats-new-in-0712). In 0.7.11: the river fix works by default only in its scene — see [What's new](#whats-new-in-0711). In 0.7.10: **the river has water again** (ripples, glints and reflection as on the Xbox 360), **York's face in the photo mode** — see [What's new](#whats-new-in-0710). In 0.7.9: **a new Mods page** with each mod's picture and description, **the F10 menu on a gamepad**, no stutter without a pad, adaptive sharpening (AMD RCAS) — see [What's new](#whats-new-in-079). In 0.7.8: **a redesigned F10 menu** (crisp text, the website's palette, quiet motion, changed settings marked) and **five graphics options** (filters under the interface, smoother far shadows, smooth glow, dither against banding, the game's own edge filter) — see [What's new](#whats-new-in-078). In 0.7.7: **an Xbox pad without Steam Input**. In 0.7.6: **PlayStation icons on a DualSense (Edge too)**. In 0.7.5: texture replacements in mod folders work. In 0.7.4: **York can fly** (cheats, F3), the lock-on aims at the chest instead of the hips. In 0.7.3: a mod's name, author and version in a plain `mod.txt`. In 0.7.2: **updates itself** (F9 on the start card), a much smaller archive — see [What's new](#whats-new-in-072). In 0.7.1: fixes for the **thread races** behind the crashes and hangs on entering buildings, the **QTE at high FPS**, **4 GB of memory by itself**, checked and compressed save backups, the game's own Xbox icons — see [What's new](#whats-new-in-071).
+> <br>Newest: a posed character next to York in the photo mode, play as other characters, a spawner for cars and items, a partner on the gamepad and a first mission editor — see [What's new](#whats-new-in-0713). Earlier versions: [CHANGELOG.md](CHANGELOG.md).
 
 ### Features
+
+#### Stability and speed
 
 - 🛡️ **Stability** — the crash after cutscenes, the zero-frame-time freeze and the Alt+Tab hang are fixed; a crash handler and a freeze watchdog write a dump if anything still goes wrong
 - 🚀 **Low FPS fixed** — on some PCs the game sat at ~45 FPS with an idle GPU; **45 → 180 FPS** in our test
 - ⏱️ **60 FPS limit at any refresh rate** — at 144 / 180 Hz the game used to run too fast
+- 🏎️ **High FPS physics** — 120–180 FPS with the car, doors, animations and timers at their normal speed; the FPS is unlocked by default
+- 💾 **Safe saves** — atomic writes, 60 backups named by episode, chapter and play time, automatic restore of a damaged `dp.sav`
+
+#### Picture
+
 - 🖥️ **Real output resolution** — the picture and the HUD at your monitor's resolution instead of 1280×720, borderless window, no DPI blur
 - ✨ **Graphics** — supersampling 1×–3×, horizon-based ambient occlusion (HBAO), SMAA and FXAA, adaptive sharpening (AMD RCAS), wet reflections, 16× anisotropic filtering, sharper shadows, longer draw distance
 - 📺 **Xbox 360 look** — the console's colour grading and TV gamma on top of the PC picture
 - 🌫️ **No more flickering far textures** — the game's camera wasted depth precision; far roads, roofs and decals no longer fight each other
-- 🏎️ **High FPS physics** — 120–180 FPS with the car, doors, animations and timers at their normal speed; the FPS is unlocked by default
-- 🧩 **Mod manager** — `UltimateFix\mods\<mod>\`: translations (SWERY Localization Tool files), texture packs, or any game file by its name (`fontwide.xpc`, `mes_all.mes`); order and on/off in F10, each mod with its picture and description — see [Making a mod](#making-a-mod)
+- 🌊 **The river has water again** — ripples, glints and reflection as on the Xbox 360 instead of a flat blue strip (in its scene by default, everywhere if you choose)
+
+#### Controls and camera
+
 - 🎮 **DualSense** — USB and Bluetooth without Steam Input, **adaptive triggers per weapon**, haptics for driving and shooting, PlayStation button icons
 - 📳 **Rumble that works** — the PC port calculated vibration and never sent it to the gamepad
 - 🔫 **Aim on L2, shoot on R2** — like a modern shooter, on Xbox pads too; prompts switch between keyboard and gamepad by themselves
+- 🖱️ **Camera** — field of view in play, Xbox 360 quick turn, mouse sensitivity and inversion per axis
+
+#### Map, story and residents
+
 - 🗺️ **Full pause map** — all 64 tiles, proper zoom, north up
 - 📍 **Waypoints** — F7 sets a mark; the distance in the game's own font and the game's own arrows on the minimap (_arrows are experimental_)
-- 💾 **Safe saves** — atomic writes, 60 backups named by episode, chapter and play time, automatic restore of a damaged `dp.sav`
 - 📖 **Story and residents** — where the story stands and where to go next, side quests, and the timetable of every resident of Greenvale
-- 🖱️ **Camera** — field of view in play, Xbox 360 quick turn, mouse sensitivity and inversion per axis
-- 📷 **Photo mode** — free camera, frozen time, 13 filters with grain, sepia, aberration and letterbox, your own presets, FOV, costumes, poses, PNG screenshots
-- 🧰 **Tools** — frame statistics panel, built-in profiler, cheats page (money, time, weather, ammo, god mode, York flies)
+
+#### Photo mode
+
+- 📷 **Camera and picture** — free camera, frozen time, 13 filters with grain, sepia, aberration and letterbox, your own presets, FOV and roll, PNG screenshots with or without the HUD
+- 🧍 **A character next to York** — any of Greenvale's 49 residents put into the scene as a still figure: moved and turned by hand, with its own body motion and facial expression; never in a save
+- 🎭 **York as you want him** — moved, raised and turned from where he stood; any body motion held on a frame or played; the face composed from named parts (emotion, brows, lids, mouth); all 30 suits in one row, worn as you scroll
+
+#### Cheats, spawner and a partner
+
+- 🧰 **Cheats** — money, time of day, weather, ammunition, god mode, York flies (F3)
+- 👥 **Play as** another of the game's own playable characters, with its model and motions, in free play
+- 🚗 **Spawner** — any of the game's 16 cars by name in front of York; any item by number and name
+- 🎮 **A partner on the gamepad** (_experimental_) — a first try at local co-op: a second character walks by the gamepad while York keeps the keyboard and mouse
+
+#### Mission editor
+
+- 📝 **Mission editor** (_experimental, a first version_) — a mission of your own from the F10 menu: a character, its lines, a choice of two answers, an item, a start banner. The texts live in a plain file you can share; the talk runs in the game's own dialogue mode with your text in the game's own font. Needs `[Debug] MissionLab=1` for now
+
+#### Mods, updates and tools
+
+- 🧩 **Mod manager** — `UltimateFix\mods\<mod>\`: translations (SWERY Localization Tool files), texture packs, or any game file by its name (`fontwide.xpc`, `mes_all.mes`); order and on/off in F10, each mod with its picture and description — see [Making a mod](#making-a-mod)
+- 🔄 **Updates itself** — a new version is offered on the start card; F9 downloads it, replaces the files and restarts the game
+- 📊 **Tools** — frame statistics panel, built-in profiler, crash dumps and a readable log for support
 - 🇺🇦🇬🇧 **Two languages** — Ukrainian and English, switched in the menu
 
 ### Engine fixes (RE-based)
@@ -141,9 +175,7 @@ A small update after 0.7.12.
 
 ### What's new in 0.7.12
 
-<img src="docs/screenshots/photo-emily.jpg" alt="Emily, posed and photographed in the mod's photo mode"/>
-
-**Photo mode: a whole scene, not only York.** The picture above was made entirely in the mod's photo mode.
+**Photo mode: a whole scene, not only York.** The second picture at the top of this page was made entirely in the mod's photo mode.
 - **A character next to York.** Any of Greenvale's 49 residents can be put in front of York as a still figure for the picture: no behaviour, no schedule, never in a save. It has its own rows to move it left / right, back / forward, lower / higher and to turn it, its own body motion (set, number, frame, playback), and the page's face rows work on it too ("The face of: York / The character"). One stands at a time; it goes when the photo mode ends or a cutscene begins.
 - **York placed by hand.** Four rows move York from where he stood (sideways, forward, up) and turn him; zeros put him back on the ground.
 - **One row of suits.** All the game's suits in one row of 30 instead of a set and a suit.
@@ -155,148 +187,7 @@ A small update after 0.7.12.
 
 **Mission editor, a first version** (_experimental_; needs `[Debug] MissionLab=1` in `UltimateFix.ini`). F10 → Mission editor: a mission is one character, a talk with a choice of two answers and an item for the first one, and a start banner. Its texts live in `UltimateFix\missions\missionN.ini` (the editor opens it in Notepad), the rest is picked in the menu; "Run the mission now" puts the character, shows the banner and waits for you to walk up and press E. The talk runs in the game's own dialogue mode, with the mod's texts added to the game's messages. Checked in the game so far: the banner, the character, the talk and the choice. Not yet: the item, and what the talk looks like in every place.
 
-### What's new in 0.7.11
-
-**The river fix now belongs to its scene.** In 0.7.10 the river was drawn with its ripples, glints and reflection everywhere. From 0.7.11 the fix works by default only in the scene by the river, "Welcome to Greenvale" (York's arrival), the one place the game shows the river up close; everywhere else the water stays as the port draws it. The row "River water as on the Xbox 360" on the Fixes page has three values: Off, Always, Only in the river scene (`[Fixes] RiverWater=0 / 1 / 2`), switched at once. Checked in the game: fixed in the scene, the port's water right after it. A file that still had the 0.7.10 default (Always) is moved to the new default once; pick Always again if you prefer it.
-
-### What's new in 0.7.10
-
-**The river has water again.** On PC the river was a flat blue strip; on the Xbox 360 it is grey-teal, with moving ripples and glints. Two things were lost in the port: the river's own entry of the game's water table (`_river`: reflection 100 %) is never applied, so the shader multiplied the reflection, the lit waves and the glints by zero; and the wave map repeated so often that the waves were smaller than a pixel. The mod gives the river the values of its entry and draws the wave map 16 times larger (picked by eye against Xbox 360 footage). On by default, row "River water as on the Xbox 360" on the Fixes page (`[Fixes] RiverWater`), switched at once. Checked in the game at the river; other water (the lake, puddles, interiors) has not been compared yet. The full story is under [Engine fixes](#engine-fixes-re-based).
-
-**Photo mode: York's face.** A "York's face" group on the photo page: emotion, brows, lids and mouth, each picked by name with its own strength, plus a wrinkled nose, "over the game's face" and "no blinking". The parts mix (a sad emotion with sceptical brows). Works in the game.
-
-**Photo mode, smaller things:**
-- **Suits as you scroll.** York wears the suit the list rests on (after a third of a second); the "Wear" button is gone.
-- **Body motions** (_experimental_): any motion of York, the residents, the cutscenes or the Raincoat Killer by number, held on a frame or played. Not yet confirmed in the game.
-- **Leaving the photo mode** puts York's own motion and face back, however it is closed.
-- **F4 hides the minimap too**, not only the rest of the interface.
-- **No dimming behind the menu** on any page: the game's brightness no longer jumps between sections.
-
-### What's new in 0.7.9
-
-**The Mods page, redesigned.** A list on the left (the mod's picture, name, version and author, its switch) and a card on the right for the selected mod: its **picture (350×350)**, name, version, author, whether it is on, what it brings, buttons to move it up or down and to open its folder, and its **whole description**. How to give your mod a picture and a description: see [Making a mod](#making-a-mod).
-
-**The F10 menu on a gamepad.** View + Menu together (on a DualSense Create + Options) opens and closes it. The D-pad or the left stick moves (held, it repeats; sliders speed up), A / Cross picks, B / Circle goes back, Y / Triangle puts the default back, LB / RB change the section, LT / RT scroll a screen, R3 shows a whole description, X / Square opens a mod's folder. The hints show the pad's own button icons (PlayStation ones on a DualSense). While the menu is open the game does not see the pad. Row "Gamepad control of the menu" (`[Menu] PadControl`).
-
-**No more stutter without a gamepad.** With no pad plugged in, Windows took 18–62 ms to answer the game's question about it, twice a second. A background thread asks now, and the game gets the last answer at once (`[Input] PadPollThread`).
-
-**Smaller things:**
-- The mouse no longer takes the selection away from the arrows or the pad; the cursor hides while a pad drives the menu.
-- Moving the panel (its top strip) and resizing it (the bottom right corner) work on every page.
-- Questions (restore defaults, restart) show which button is focused; ← → change it.
-- The About page has the website link and an "Open the log folder" button.
-- **You can see what waits for a restart.** The "restart" tag turns amber only on a setting whose value differs from what runs now, and its description says what runs. The sidebar counts these settings and offers "Restart the game" (a click, R, or X / Square on a pad). It asks first, because progress since the last save is lost, and it refuses while the game is writing its save (seen with the save protection on).
-- **Long descriptions in full.** A description too long for its box ends with "… F1 / R3: in full". F1, R3 on a pad or a click on the box opens it on a card over the list, scrolled with ↑ ↓ or the wheel, with the default, the value now and when a change applies. Esc, F1, B or a click outside closes it. A setting without a description (the photo sliders) gets one from its range and default.
-- **An honest photo preview.** The photo mode page no longer darkens the whole picture, so brightness, contrast and the filters are judged on the real image; the list keeps enough opacity to stay readable. Hold the right mouse button (L3 on a pad) to fade the panel away and look at the picture; the game still sees no input, and a small note says to let go. "Picture" is now the second row, under the free camera. With the menu closed, a quiet strip at the bottom names the flying keys and F11 / F4 / F10 / F6 for 6 seconds (again after any F key). It is drawn after the screenshot is taken, so it is never in a picture.
-- **Adaptive sharpening** (`SharpenMode=1`): sharpening now follows AMD FidelityFX RCAS. Soft detail gets the full strength and contrasty edges only a little, so branches against the sky and wires get no bright halos. `SharpenMode=0` brings back the old unsharp mask. Not yet checked in the game.
-
-### What's new in 0.7.8
-
-**A redesigned F10 menu:**
-- **Crisp text at any resolution.** Text and lines sit on whole pixels, so the menu is as sharp as Windows text at 1080p and 1440p, also after dragging the panel. Titles and headings are set in Segoe UI Semibold.
-- **One calm palette, the same as the website.** No green any more. Switches are red or grey pills with a round knob, and buttons and cards have rounded corners.
-- **Quiet motion.** The menu fades in, the selection glides between rows, and a switch knob slides. Closing stays instant. You can turn it off with the row "Menu animation" (`[Menu] Animations`).
-- **You can see what you changed.** A changed setting gets a grey dot, the sidebar shows how many settings changed in each section, and a slider marks its default. Backspace puts the selected setting back to its default.
-- **Notices.** A notice is coloured by what it means (grey for information, amber for a warning, coral for an error). Up to three wait their turn, and with the menu open they appear inside the panel instead of over its title.
-
-**Graphics (F10 → Screen and graphics; each can be switched off):**
-- **Filters under the interface** (`FiltersUnderHud=1`): smoothing (SMAA/FXAA), sharpening and the game look apply to the 3D picture only, so subtitles and icons stay sharp.
-- **Smoother far shadows** (`FarShadowFilter=1`): the far sun shadow cascade is filtered with the same four taps the game uses for the near ones. Distant shadow edges no longer step and crawl.
-- **Smooth glow and depth of field** (`SmoothBloom=1`): the bloom and the blur are upscaled with a cubic filter. Halos around lamps and the out-of-focus background have no square steps at 1440p/4K.
-- **Dither against banding** (`Dither=1`): a fixed, invisible noise removes the colour bands in skies, fog and dark gradients.
-- **The game's own edge filter** (`GameAliasFilter`, off by default): a 4-tap filter the game has in its final shader but never uses. 1 = as written in the game, 2 = adjusted to the render scale. It is not known whether the Xbox used it.
-
-**Also:**
-- `DumpTextures` writes every texture, cube maps included, with no size limit.
-- For testers: `[Debug] FrameCapture=1` + Numpad 0 writes one frame draw by draw (shaders, states and textures), a RenderDoc-like capture for this Direct3D 9 game.
-
-### What's new in 0.7.7
-
-- **An Xbox pad without Steam Input.** The game reads pads only through the old Windows joystick interface (WinMM), where an Xbox pad is not listed when Steam Input is off: the pad did nothing at all. The mod then hands the game the pad it reads through XInput, which needs `[Input] XInputFallback=1` (the default; in the F10 menu "Gamepad through XInput (fallback)"). If an older setup has it at 0, switch it on.
-- **The log says why a pad is not seen**: the fallback switched off, no XInput library, or what XInput answers for each of its four slots.
-- Tested by **EliParker**: an Xbox pad and a DualSense Edge both work, with the automatic icons (PlayStation on the DualSense, Xbox on the Xbox pad). Thank you!
-
-### What's new in 0.7.6
-
-- **PlayStation icons on a DualSense, the Edge included.** With `GlyphTheme=1` (automatic) the icons stayed Xbox for three reasons, all fixed:
-  - When the game starts with the pad, it loads its own pad icon atlas (`UPDATA\SOURCE\MESSAGE\BTNWIDE.XPC`) instead of the keyboard one, and the mod looked only for the keyboard atlas, so it changed nothing. The mod now recognises the game's pad atlas by its bytes.
-  - A texture pack that replaces the icon atlas hid it from the mod. The atlas is now recognised by the game's original file, before any replacement.
-  - A DualSense over Bluetooth is found a few seconds after the start, and the icon set was chosen once, before that. It is now checked on every use.
-- **Xbox icons from the mod's drawing again** (`UltimateFix\glyphs\gamepad\xbox.png`), the same look as the PlayStation set. The game's own Xbox atlas is used only when that file is missing.
-- Thanks to **EliParker** for the reports and logs with a DualSense Edge.
-
-### What's new in 0.7.5
-
-- **Texture replacements from mods work.** A texture in a mod folder (`UltimateFix\mods\<mod>\textures\<hash>.dds` or `.png`) was found but never loaded (`could not be loaded (88760B59)` in the log): the mod looked for the file in the wrong folder. With a mod that carried textures, the own folders (`UltimateFix\textures\override\`, the DPfix and ZachFix folders) failed the same way. Fixed.
-
-### What's new in 0.7.4
-
-- **York flies** (F10 → Cheats, or F3): WASD relative to the camera, the mouse or Q/E turn, Space up, Ctrl down, Shift four times faster, speed slider on the page. Handy for testing a translation. While he flies the game sees no input, and his physics (ground, fall, collisions) waits; turning it off lands him through the game's own teleport sync. Turn it off near the ground: from a height he falls (invulnerability helps).
-- **The lock-on aims at the chest.** The game aims at the enemy's waist and lowers the point by a tenth of the distance, so a few metres away it was the hips or the knees. Now the point stays a little above the waist (`[Fixes] LockOnAim`, `LockOnHeight`).
-- **DualSense Edge**: when a Sony pad cannot be opened (another program such as DSX, DS4Windows or HidHide holds or hides it) or reports another model, the log now says so.
-- For testers: `[Debug] TraceCamera=1` + Numpad 2 marks the camera at a moment; `[Debug] TraceWater=1` logs how the game draws water and which reflection it renders (Numpad 1 tries other water settings).
-- The mod list in the log shows Cyrillic names correctly.
-
-### What's new in 0.7.3
-
-- **A mod describes itself in a plain text file.** Put `mod.txt` (or `info.txt`, or the old `mod.ini`) in the mod folder, and F10 → Mods shows its name, version, author and description:
-  ```
-  Name: Ukrainian translation
-  Author: Little Bit
-  Version: 1.0
-  Description: The whole game text in Ukrainian
-  ```
-  Ukrainian keys work too (`Назва`, `Автор`, `Версія`, `Опис`), `:` or `=`, in any encoding Notepad saves (UTF-8, UTF-16, ANSI). A `readme.txt` in a mod folder is no longer taken for a game file.
-- For testers: `[Debug] TraceWater=1` logs how the game draws water (for the coming water fix).
-
-### What's new in 0.7.2
-
-- **Updates itself.** At the start the mod asks GitHub once whether a newer release is out (one anonymous request). If so, the start card says so: **F9** downloads it, checks every file, replaces `X3DAudio1_7.dll` and the icons, and restarts the game. `UltimateFix.ini`, mods and save backups stay. If anything fails, everything stays as it was. Off: F10 → "Check for updates" or `[Menu] CheckUpdates=0`.
-- **A smaller archive**: only the mod itself (`X3DAudio1_7.dll`, `UltimateFix`, a short readme). The untested DXVK and the separate tools are gone: the mod sets 4 GB and skips the launcher window by itself.
-- **The QTE fix can be switched** (F10 → Fixes → "QTE at high FPS").
-- The sampling profiler moved to **Ctrl+F9**.
-
-### What's new in 0.7.1
-
-- **Stability.**
-  - The world builder and the main thread take turns, and a level change waits for the route thread: the crashes and hangs on entering buildings with company, the ones the Windows 98 compatibility mode used to hide.
-  - Residents with a missing route stay in place instead of vanishing to (0, 0, 0).
-  - The loader waits 1 ms instead of 16 between requests: fewer hitches while the town streams in.
-  - No white "not responding" window during long loads.
-  - A memory line in the log every minute, and a notice to save and restart when memory runs low.
-- **4 GB of memory by itself**: the mod gives `DP.exe` the 4 GB flag (from the next start), no separate tool needed.
-- **The stick-waggle QTE works at high FPS** again (every swap counts as at 60 FPS).
-- **Saves.**
-  - Every save is checked: the money, the story position and the play time must agree between the header and the record, or the mod warns.
-  - 60 backups named by episode, chapter and play time, in a compressed folder (about 1 MB each instead of 8).
-- **Graphics.**
-  - Any photo filter or your own preset can stay on all the time.
-  - Bloom strength and exposure correction.
-  - The Xbox 360 look stays on in cutscenes and scripted scenes.
-  - No doubled depth-of-field edges at render scale 300 %.
-  - Fades, loading screens and the item notice cover the screen to the last pixel above 720p.
-  - The near plane follows close cameras, so York is no longer cut at the save phone or in doorways.
-- **The game's own Xbox pad icons** instead of the mod's drawing (unpacked from the game's `BTNWIDE.XPC`).
-- **Screenshots**: Shift+F11 without the HUD, and "with every filter" in photo mode.
-- **Mouse**: sensitivity 25–400 % that really turns faster, and inversion per axis.
-
-Known issues: a light strip along some wall corners with HBAO, the X on the pause map drifts while the map pans, some rare scenes use another tone-map shader where the Xbox 360 look is not applied yet (the mod saves it as `UltimateFix\composite_*.bin` for support).
-
-### What's new in 0.7.0
-
-- **Mod manager** (F10 → Mods): every folder in `UltimateFix\mods\` is a mod; switch them on and off and set their order. A mod can carry a translation (`text\`: `mes_all.json` and `glyphmap.json` of the SWERY Localization Tool), textures (`textures\<hash>.dds`, hashes from `[Debug] DumpTextures=1`), or any game file by its name right in the mod folder (`fontwide.xpc`, `mes_all.mes`, `FONTWIDE.DDS` for the picture inside an XPC). Its name, author and version go in `mod.txt` (`Name: …`, `Author: …`, `Version: …`, `Description: …`).
-- **Far texture flicker fixed**: the near plane of the play camera (20.0 instead of 1.0), mipmaps built for textures that have none, steadier far shadows.
-- **HBAO**: horizon-based ambient occlusion with a depth-aware blur, worked out at up to 1080 rows on large render scales; **SMAA**; **Xbox 360 look**.
-- **High FPS**: physics and the game's other timers at 120–180 FPS; the FPS is unlocked by default, the 60 limit stays on 61–139 Hz screens.
-- **Camera**: field of view in play, Xbox 360 quick turn, mouse sensitivity (25–400 %) and inversion per axis.
-- **Story page** (episode, chapter, side quests, where to go next by name) and **Residents page** (every resident's timetable, rooms and actions named).
-- **Waypoint** as the game's own objective: its beacon over the place, arrows on the minimap edge; shown only in its own area.
-- **Photo mode**: 13 filters, temperature, tint, sepia, fade, grain, chromatic aberration, letterbox, four presets of your own.
-- **Stability**: no endless hang on an angle that is not a number, XAudio2 kept in memory, the x87 precision of Direct3D 9, a clear message when the graphics device cannot be created.
-- **Saves**: 60 backups, each named by episode, chapter and play time.
-- A start card that the settings are on **F10**; shorter menu labels; draw distance sliders stop where more adds nothing.
-
-Known issues of 0.7.0, see 0.7.1 above for what is fixed.
+Earlier versions: [CHANGELOG.md](CHANGELOG.md).
 
 ### Screenshots
 
@@ -310,10 +201,6 @@ Known issues of 0.7.0, see 0.7.1 above for what is fixed.
 <td><img src="docs/screenshots/menu-about.jpg" alt="About page"/></td>
 </tr>
 </table>
-
-**Photo mode.** Emily, put in a room as a posed character and photographed with the free camera — made entirely in the mod's photo mode (a picture by Dmytro):
-
-<img src="docs/screenshots/photo-emily.jpg" alt="Emily, posed and photographed in the mod's photo mode"/>
 
 ### Standing on the shoulders of
 
@@ -443,29 +330,61 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 Без інсталятора: натисніть **F10** у грі, і все там. Мод також сам дає грі 4 ГБ пам'яті (з другого запуску).
 
 > **Версія 0.7.13.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
-> <br>Нове в 0.7.13: виправлення напарника з ґеймпада і плашки оновлення — див. [Що нового](#що-нового-в-0713). У 0.7.12: **персонаж поруч із Йорком у фоторежимі**, **гра за Емілі та інших персонажів**, **спавнер** машин і предметів, перший **редактор місій** — див. [Що нового](#що-нового-в-0712). У 0.7.11: виправлення річки типово діє лише у своїй сцені — див. [Що нового](#що-нового-в-0711). У 0.7.10: **у річці знову є вода** (брижі, відблиски й відбиття, як на Xbox 360), **міміка Йорка у фоторежимі** — див. [Що нового](#що-нового-в-0710). У 0.7.9: **нова сторінка модів** з картинкою й описом кожного мода, **меню F10 з ґеймпада**, без ривків без пада, адаптивна різкість (AMD RCAS) — див. [Що нового](#що-нового-в-079). У 0.7.8: **оновлене меню F10** (чіткий текст, палітра сайту, тихий рух, позначки змінених налаштувань) і **п'ять графічних опцій** (фільтри під інтерфейсом, згладжені далекі тіні, плавне світіння, дизеринг проти смуг, власний фільтр країв гри) — див. [Що нового](#що-нового-в-078). У 0.7.7: **Xbox-пад без Steam Input**. У 0.7.6: **іконки PlayStation на DualSense (і Edge)**. У 0.7.5: заміни текстур у теках модів працюють. У 0.7.4: **Йорк літає** (читкоди, F3), автоприціл цілиться в груди, а не в стегна. У 0.7.3: назва, автор і версія мода у звичайному `mod.txt`. У 0.7.2: **оновлюється сам** (F9 на стартовій плашці), значно менший архів — див. [Що нового](#що-нового-в-072). У 0.7.1: виправлено **гонки потоків**, через які гра падала й зависала при вході в будівлі, **QTE на високому FPS**, **4 ГБ пам'яті самі собою**, перевірені й стиснені копії збережень, оригінальні іконки Xbox — див. [Що нового](#що-нового-в-071).
+> <br>Найновіше: персонаж поруч із Йорком у фоторежимі, гра за інших персонажів, спавнер машин і предметів, напарник із ґеймпада і перший редактор місій — див. [Що нового](#що-нового-в-0713). Попередні версії: [CHANGELOG_UA.md](CHANGELOG_UA.md).
 
 ### Можливості
+
+#### Стабільність і швидкість
 
 - 🛡️ **Стабільність** — виправлено виліт після катсцен, зависання на нульовому кадрі й зависання після Alt+Tab; обробник вильотів і сторож зависань пишуть дамп, якщо щось усе ж трапиться
 - 🚀 **Виправлено низький FPS** — на деяких ПК гра трималась на ~45 FPS при вільній відеокарті; у нашому тесті **45 → 180 FPS**
 - ⏱️ **Ліміт 60 FPS на будь-якій частоті екрана** — на 144 / 180 Гц гра раніше бігла надто швидко
+- 🏎️ **Фізика на високому FPS** — 120–180 FPS, а машина, двері, анімації й таймери йдуть з нормальною швидкістю; FPS типово розблоковано
+- 💾 **Надійні збереження** — атомарний запис, 60 резервних копій із підписом (епізод, розділ, час гри), автоматичне відновлення пошкодженого `dp.sav`
+
+#### Картинка
+
 - 🖥️ **Справжня вихідна роздільність** — картинка й HUD у роздільності монітора, а не 1280×720, вікно без рамки, без розмиття від масштабування Windows
 - ✨ **Графіка** — суперсемплінг 1×–3×, затінення по горизонту (HBAO), SMAA і FXAA, адаптивна різкість (AMD RCAS), мокрі відбиття, анізотропна фільтрація 16×, чіткіші тіні, більша дальність промальовки
 - 📺 **Вигляд Xbox 360** — кольорокорекція й гамма телевізора консолі поверх картинки PC
 - 🌫️ **Далекі текстури більше не блимають** — камера гри марнувала точність глибини; далекі дороги, дахи й написи більше не «перебивають» одне одного
-- 🏎️ **Фізика на високому FPS** — 120–180 FPS, а машина, двері, анімації й таймери йдуть з нормальною швидкістю; FPS типово розблоковано
-- 🧩 **Менеджер модів** — `UltimateFix\mods\<мод>\`: переклади (файли SWERY Localization Tool), текстурні паки або будь-який файл гри за іменем (`fontwide.xpc`, `mes_all.mes`); порядок і вмикання в F10, кожен мод зі своєю картинкою й описом — див. [Як зробити мод](#як-зробити-мод)
+- 🌊 **У річці знову є вода** — брижі, відблиски й відбиття, як на Xbox 360, замість пласкої синьої смуги (типово у своїй сцені, за бажанням усюди)
+
+#### Керування й камера
+
 - 🎮 **DualSense** — USB і Bluetooth без Steam Input, **адаптивні триґери під кожну зброю**, відгук у машині й при пострілах, іконки кнопок PlayStation
 - 📳 **Вібрація, яка працює** — PC-порт рахував її, але не надсилав на ґеймпад
 - 🔫 **Приціл на L2, постріл на R2** — як у сучасних шутерах, і на Xbox-падах; підказки самі перемикаються між клавіатурою й ґеймпадом
+- 🖱️ **Камера** — кут огляду в грі, швидкий розворот як на Xbox 360, чутливість миші й інверсія по кожній осі
+
+#### Мапа, сюжет і жителі
+
 - 🗺️ **Повна мапа паузи** — усі 64 плитки, нормальний масштаб, північ угорі
 - 📍 **Мітки** — F7 ставить мітку; відстань ігровим шрифтом і рідні стрілки гри на мінімапі (_стрілки експериментальні_)
-- 💾 **Надійні збереження** — атомарний запис, 60 резервних копій із підписом (епізод, розділ, час гри), автоматичне відновлення пошкодженого `dp.sav`
 - 📖 **Сюжет і жителі** — де ви в сюжеті й куди йти далі, побічні завдання і розклад кожного жителя Ґрінвейла
-- 🖱️ **Камера** — кут огляду в грі, швидкий розворот як на Xbox 360, чутливість миші й інверсія по кожній осі
-- 📷 **Фоторежим** — вільна камера, зупинка часу, 13 фільтрів із зерном, сепією, аберацією й кінорамкою, власні пресети, кут огляду, костюми, пози, знімки PNG
-- 🧰 **Інструменти** — панель статистики кадру, вбудований профайлер, сторінка читкодів (гроші, час, погода, набої, невразливість, політ Йорка)
+
+#### Фоторежим
+
+- 📷 **Камера і картинка** — вільна камера, заморожений час, 13 фільтрів із зерном, сепією, аберацією та кінорамкою, власні пресети, кут огляду й нахил, знімки PNG з інтерфейсом або без
+- 🧍 **Персонаж поруч із Йорком** — будь-хто з 49 жителів Грінвейла у сцені як нерухома фігура: пересувається й повертається вручну, має власну анімацію тіла й міміку; у збереження не потрапляє
+- 🎭 **Йорк, яким ви його хочете** — зсунутий, піднятий і повернутий від місця, де стояв; будь-яка анімація тіла на вибраному кадрі або в русі; обличчя з названих частин (емоція, брови, повіки, рот); усі 30 костюмів в одному рядку, одягаються під час гортання
+
+#### Читкоди, спавнер і напарник
+
+- 🧰 **Читкоди** — гроші, час доби, погода, набої, невразливість, політ Йорка (F3)
+- 👥 **Грати за** іншого персонажа, за якого гра сама дає грати, з його моделлю й анімаціями, у вільній грі
+- 🚗 **Спавнер** — будь-яка з 16 машин гри за назвою перед Йорком; будь-який предмет за номером і назвою
+- 🎮 **Напарник із ґеймпада** (_експериментально_) — перша проба локального кооперативу: другий персонаж ходить за ґеймпадом, а Йорк лишається на клавіатурі й миші
+
+#### Редактор місій
+
+- 📝 **Редактор місій** (_експериментально, перша версія_) — власна місія з меню F10: персонаж, його репліки, вибір із двох відповідей, предмет, банер початку. Тексти лежать у звичайному файлі, яким можна ділитися; розмова йде у власному режимі діалогу гри, вашим текстом і шрифтом гри. Поки що потрібен `[Debug] MissionLab=1`
+
+#### Моди, оновлення й інструменти
+
+- 🧩 **Менеджер модів** — `UltimateFix\mods\<мод>\`: переклади (файли SWERY Localization Tool), текстурні паки або будь-який файл гри за іменем (`fontwide.xpc`, `mes_all.mes`); порядок і вмикання в F10, кожен мод зі своєю картинкою й описом — див. [Як зробити мод](#як-зробити-мод)
+- 🔄 **Оновлюється сам** — нову версію мод пропонує на стартовій плашці; F9 завантажує її, замінює файли й перезапускає гру
+- 📊 **Інструменти** — панель статистики кадрів, вбудований профайлер, дампи крашів і зрозумілий журнал для підтримки
 - 🇺🇦🇬🇧 **Дві мови** — українська та англійська, перемикаються в меню
 
 ### Виправлення рушія (на основі reverse engineering)
@@ -556,9 +475,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 
 ### Що нового в 0.7.12
 
-<img src="docs/screenshots/photo-emily.jpg" alt="Emily, posed and photographed in the mod's photo mode"/>
-
-**Фоторежим: ціла сцена, а не лише Йорк.** Знімок вище повністю зроблено у фоторежимі мода.
+**Фоторежим: ціла сцена, а не лише Йорк.** Другий знімок угорі цієї сторінки повністю зроблено у фоторежимі мода.
 - **Персонаж поруч із Йорком.** Будь-кого з 49 жителів Грінвейла можна поставити перед Йорком як нерухому фігуру для знімка: без поведінки, без розкладу, у збереження не потрапляє. Має власні рядки пересування (ліворуч / праворуч, назад / вперед, нижче / вище) і повороту, власну анімацію тіла (набір, номер, кадр, програвання), і рядки міміки сторінки теж діють на нього («Міміка для: Йорк / Персонаж»). Одночасно стоїть один; зникає, коли фоторежим закінчується або починається катсцена.
 - **Йорк, поставлений вручну.** Чотири рядки зсувають Йорка від місця, де він стояв (убік, уперед, угору), і повертають його; нулі ставлять його назад на землю.
 - **Один рядок костюмів.** Усі костюми гри в одному рядку на 30 замість набору й костюма.
@@ -570,148 +487,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 
 **Редактор місій, перша версія** (_експериментально_; потрібен `[Debug] MissionLab=1` в `UltimateFix.ini`). F10 → Редактор місій: місія — це один персонаж, розмова з вибором із двох відповідей і предметом за першу, та банер початку. Тексти лежать у `UltimateFix\missions\missionN.ini` (редактор відкриває його в Блокноті), решта вибирається в меню; «Запустити місію зараз» ставить персонажа, показує банер і чекає, поки ви підійдете й натиснете E. Розмова йде у власному режимі діалогу гри, а тексти мод додає до повідомлень гри. У грі вже перевірено: банер, персонаж, розмова й вибір. Ще ні: предмет і те, як розмова виглядає в кожному місці.
 
-### Що нового в 0.7.11
-
-**Виправлення річки тепер належить своїй сцені.** У 0.7.10 річка малювалася з брижами, відблисками й відбиттям усюди. Від 0.7.11 виправлення типово діє лише в сцені біля річки, «Ласкаво просимо до Грінвейла» (приїзд Йорка), єдиному місці, де гра показує річку зблизька; всюди далі вода лишається як у порті. Рядок «Вода річки, як на Xbox 360» на сторінці «Виправлення» має три значення: Вимкнено, Завжди, Лише в сцені біля річки (`[Fixes] RiverWater=0 / 1 / 2`), перемикається одразу. Перевірено у грі: у сцені вода виправлена, одразу після неї — як у порті. Файл налаштувань, у якому лишалося типове значення 0.7.10 (Завжди), один раз переводиться на нове; якщо «Завжди» вам більше до вподоби, виберіть його знову.
-
-### Що нового в 0.7.10
-
-**У річці знову є вода.** На ПК річка була пласкою синьою смугою; на Xbox 360 вона сіро-бірюзова, з рухомими брижами й відблисками. У порті загубилися дві речі: власний запис річки в таблиці води гри (`_river`: відбиття 100 %) не застосовується, тож шейдер множив відбиття, освітлені хвилі й відблиски на нуль; а карта хвиль повторювалася так густо, що хвилі були дрібніші за піксель. Мод дає річці значення з її запису й малює карту хвиль у 16 разів більшою (підібрано на око за записами з Xbox 360). Увімкнено типово, рядок «Вода річки, як на Xbox 360» на сторінці «Виправлення» (`[Fixes] RiverWater`), перемикається одразу. Перевірено у грі біля річки; іншу воду (озеро, калюжі, приміщення) ще не порівнювали. Докладно — у розділі [Виправлення рушія](#виправлення-рушія-на-основі-reverse-engineering).
-
-**Фоторежим: міміка Йорка.** Група «Міміка Йорка» на сторінці фото: емоція, брови, повіки й рот, кожне вибирається за назвою і має свою силу, плюс зморщений ніс, «поверх міміки гри» і «без моргання». Частини змішуються (сумна емоція зі скептичними бровами). У грі працює.
-
-**Фоторежим, дрібніше:**
-- **Костюми під час гортання.** Йорк одягає костюм, на якому зупинився список (за третину секунди); кнопки «Одягти» більше немає.
-- **Анімації тіла** (_експериментально_): будь-яка анімація Йорка, жителів, катсцен чи Вбивці в дощовику за номером, на вибраному кадрі або в русі. У грі ще не підтверджено.
-- **Вихід із фоторежиму** повертає Йоркові його анімацію й міміку, хоч як його закрити.
-- **F4 ховає і мінімапу**, а не лише решту інтерфейсу.
-- **Меню не затемнює гру** на жодній сторінці: яскравість більше не стрибає між розділами.
-
-### Що нового в 0.7.9
-
-**Нова сторінка модів.** Ліворуч список (картинка мода, назва, версія й автор, перемикач), праворуч картка вибраного мода: **картинка 350×350**, назва, версія, автор, чи він увімкнений, що він несе, кнопки «Вище», «Нижче», «Відкрити теку мода» і **повний опис**. Як дати своєму моду картинку й опис: див. [Як зробити мод](#як-зробити-мод).
-
-**Меню F10 з ґеймпада.** View + Menu разом (на DualSense Create + Options) відкриває й закриває меню. Хрестовина або лівий стік ходять (утримання повторює, повзунки прискорюються), A / хрестик вибирає, B / коло — назад, Y / трикутник повертає типове значення, LB / RB — розділ, LT / RT — екран рядків, R3 — повний опис, X / квадрат — тека мода. Підказки показують справжні іконки кнопок пада (на DualSense — PlayStation). Поки меню відкрите, гра пада не бачить. Рядок «Керування меню ґеймпадом» (`[Menu] PadControl`).
-
-**Без ривків, коли ґеймпада немає.** Без підключеного пада Windows відповідала на питання гри про нього 18–62 мс, двічі на секунду. Тепер питає фоновий потік, а гра одразу отримує останню відповідь (`[Input] PadPollThread`).
-
-**Дрібніше:**
-- Миша більше не перебиває вибір стрілками чи падом; курсор ховається, коли меню керує пад.
-- Перетягування панелі (за верхню смугу) і зміна розміру (за правий нижній кут) працюють на кожній сторінці.
-- У питаннях (відновити типові, перезапуск) видно, яка кнопка вибрана; ← → перемикають.
-- На сторінці «Про мод» — посилання на сайт і кнопка «Відкрити теку журналів».
-- **Видно, що чекає перезапуску.** Позначка «перезапуск» стає бурштиновою лише на налаштуванні, значення якого відрізняється від того, що працює зараз, а його опис каже, що працює. Бічна панель рахує такі налаштування й пропонує «Перезапустити гру» (клік, R або X / квадрат на паді). Спершу вона питає, бо прогрес після останнього збереження втрачається, і відмовляє, поки гра записує збереження (видно з увімкненим захистом збережень).
-- **Довгий опис повністю.** Опис, що не влазить у своє поле, закінчується «… F1 / R3: повністю». F1, R3 на ґеймпаді або клік по полю відкриває його на картці над списком: гортається ↑ ↓ або колесом, унизу типове значення, поточне й коли зміна діє. Закриває Esc, F1, B або клік поза карткою. Налаштування без опису (повзунки фоторежиму) отримують опис із діапазону й типового значення.
-- **Чесний перегляд у фоторежимі.** Сторінка фоторежиму більше не затемнює весь кадр, тож яскравість, контраст і фільтри видно на справжній картинці; список лишається достатньо непрозорим, щоб його було легко читати. Затисніть праву кнопку миші (L3 на ґеймпаді), і панель зникне, щоб роздивитися кадр; гра при цьому не бачить натискань, а невеличкий напис просить відпустити кнопку. «Знімок» тепер другий рядок, під вільною камерою. Коли меню закрите, внизу на 6 секунд з'являється тиха смужка з клавішами польоту й F11 / F4 / F10 / F6 (знову після будь-якої F-клавіші). Вона малюється вже після знімка, тож на знімок не потрапляє.
-- **Адаптивна різкість** (`SharpenMode=1`): різкість тепер працює за алгоритмом AMD FidelityFX RCAS. Нерізкі деталі вона підсилює на повну, а контрастні краї лише трохи, тож гілки на тлі неба й дроти не мають світлих ореолів. `SharpenMode=0` повертає стару різкість. У грі ще не перевірено.
-
-### Що нового в 0.7.8
-
-**Оновлене меню F10:**
-- **Чіткий текст за будь-якої роздільності.** Текст і лінії стоять на цілих пікселях, тож меню таке ж різке, як текст Windows, на 1080p і 1440p, і після перетягування панелі. Назви й заголовки набрано Segoe UI Semibold.
-- **Одна спокійна палітра, як на сайті.** Зеленого більше немає. Перемикачі стали червоними або сірими «пілюлями» з круглою кнопкою, кнопки й картки мають заокруглені кути.
-- **Тихий рух.** Меню плавно з'являється, виділення ковзає між рядками, кнопка перемикача з'їжджає. Закривається меню, як і раніше, миттєво. Вимикається рядком «Анімація меню» (`[Menu] Animations`).
-- **Видно, що ви змінили.** Біля зміненого налаштування стоїть сіра крапка, у бічній панелі видно, скільки змін у кожному розділі, а повзунок позначає своє типове значення. Backspace повертає вибраному налаштуванню типове значення.
-- **Сповіщення.** Колір сповіщення залежить від змісту: сірий для інформації, бурштиновий для попередження, кораловий для помилки. Сповіщення стають у чергу (до трьох), а при відкритому меню показуються всередині панелі, а не поверх заголовка.
-
-**Графіка (F10 → Екран і графіка; кожне можна вимкнути):**
-- **Фільтри під інтерфейсом** (`FiltersUnderHud=1`): згладжування (SMAA/FXAA), різкість і вигляд гри накладаються лише на 3D-картинку, тож субтитри й іконки лишаються різкими.
-- **Згладжені далекі тіні** (`FarShadowFilter=1`): далекий каскад сонячних тіней фільтрується тими самими чотирма вибірками, що й ближні. Краї тіней удалині більше не «сходинками» й не повзуть.
-- **Плавне світіння й розфокус** (`SmoothBloom=1`): світіння й розмиття збільшуються кубічним фільтром. Ореоли ліхтарів і розмитий фон без квадратних сходинок на 1440p/4K.
-- **Дизеринг проти смуг** (`Dither=1`): нерухомий непомітний шум прибирає смуги на небі, у тумані й темних переходах.
-- **Власний фільтр країв гри** (`GameAliasFilter`, вимкнено за замовчуванням): 4-точковий фільтр, який є у фінальному шейдері гри, але гра його ніколи не вмикає. 1 = як записано в грі, 2 = під масштаб рендерингу. Чи вмикав його Xbox, невідомо.
-
-**Також:**
-- `DumpTextures` записує всі текстури, кубічні теж, без обмеження розміру.
-- Для тестувальників: `[Debug] FrameCapture=1` + Numpad 0 записує один кадр по малюваннях (шейдери, стани, текстури), щось на кшталт RenderDoc для цієї гри на Direct3D 9.
-
-### Що нового в 0.7.7
-
-- **Xbox-пад без Steam Input.** Гра читає пади лише через старий інтерфейс джойстиків Windows (WinMM), а там Xbox-пада з вимкненим Steam Input немає: пад зовсім не працював. Тоді мод передає грі пад, який читає через XInput. Для цього потрібно `[Input] XInputFallback=1` (так за замовчуванням; у меню F10 «Ґеймпад через XInput (запасний)»). Якщо у старих налаштуваннях там 0, увімкніть.
-- **Журнал каже, чому пад не видно**: запасний шлях вимкнено, немає бібліотеки XInput, або що XInput відповідає по кожному з чотирьох слотів.
-- Перевірив **EliParker**: і Xbox-пад, і DualSense Edge працюють з автоматичними іконками (PlayStation на DualSense, Xbox на Xbox-паді). Дякуємо!
-
-### Що нового в 0.7.6
-
-- **Іконки PlayStation на DualSense, зокрема на Edge.** З `GlyphTheme=1` (автоматично) іконки лишались Xbox з трьох причин, усі виправлено:
-  - Якщо гра стартує з ґеймпадом, вона вантажить свій ґеймпадний атлас іконок (`UPDATA\SOURCE\MESSAGE\BTNWIDE.XPC`), а не клавіатурний, а мод шукав лише клавіатурний і нічого не міняв. Тепер мод впізнає атлас гри побайтово.
-  - Пак текстур, що замінює атлас іконок, ховав його від мода. Тепер атлас впізнається за оригінальним файлом гри, ще до заміни.
-  - DualSense по Bluetooth знаходиться через кілька секунд після запуску, а набір іконок вибирався один раз, раніше. Тепер він перевіряється щоразу.
-- **Іконки Xbox знову з малюнка мода** (`UltimateFix\glyphs\gamepad\xbox.png`), в одному стилі з PlayStation. Власний атлас Xbox гри береться лише тоді, коли цього файлу немає.
-- Дякуємо **EliParker** за повідомлення й журнали з DualSense Edge.
-
-### Що нового в 0.7.5
-
-- **Заміни текстур із модів працюють.** Текстуру в теці мода (`UltimateFix\mods\<мод>\textures\<хеш>.dds` або `.png`) мод знаходив, але не завантажував (`could not be loaded (88760B59)` у журналі): файл шукався не в тій теці. Якщо був мод із текстурами, так само не працювали й власні теки (`UltimateFix\textures\override\`, теки DPfix і ZachFix). Виправлено.
-
-### Що нового в 0.7.4
-
-- **Йорк літає** (F10 → Читкоди або F3): WASD відносно камери, мишка або Q/E повертають, Space вгору, Ctrl вниз, Shift учетверо швидше, повзунок швидкості на сторінці. Зручно для перевірки перекладу. Поки він летить, гра не бачить вводу, а його фізика (земля, падіння, зіткнення) чекає; після вимкнення гра сама ставить його на землю, як після свого телепорту. Вимикайте біля землі: з висоти він упаде (згодиться невразливість).
-- **Автоприціл цілиться в груди.** Гра цілилась у пояс ворога й ще опускала точку на десяту частину відстані, тож за кілька метрів це були стегна чи коліна. Тепер точка трохи вище пояса (`[Fixes] LockOnAim`, `LockOnHeight`).
-- **DualSense Edge**: якщо пад Sony не вдається відкрити (його тримає чи ховає інша програма, як-от DSX, DS4Windows, HidHide) або він іншої моделі, тепер це видно в журналі.
-- Для тестувальників: `[Debug] TraceCamera=1` + Numpad 2 позначає камеру в потрібну мить; `[Debug] TraceWater=1` пише, як гра малює воду і яке відбиття рендерить (Numpad 1 пробує інші параметри води).
-- Список модів у журналі показує кириличні назви правильно.
-
-### Що нового в 0.7.3
-
-- **Мод описує себе у звичайному текстовому файлі.** Покладіть `mod.txt` (або `info.txt`, або старий `mod.ini`) у теку мода, і F10 → Моди покаже його назву, версію, автора й опис:
-  ```
-  Назва: Українська локалізація
-  Автор: Little Bit
-  Версія: 1.0
-  Опис: Повний переклад тексту гри українською
-  ```
-  Англійські ключі теж працюють (`Name`, `Author`, `Version`, `Description`), `:` або `=`, у будь-якому кодуванні Блокнота (UTF-8, UTF-16, ANSI). `readme.txt` у теці мода більше не вважається файлом гри.
-- Для тестувальників: `[Debug] TraceWater=1` пише в лог, як гра малює воду (для майбутнього виправлення води).
-
-### Що нового в 0.7.2
-
-- **Оновлюється сам.** На старті мод один раз питає GitHub, чи вийшла нова версія (один анонімний запит). Якщо так, про це скаже стартова плашка: **F9** завантажить її, перевірить кожен файл, замінить `X3DAudio1_7.dll` та іконки й перезапустить гру. `UltimateFix.ini`, моди й копії збережень лишаються. Якщо щось не вдасться, усе лишиться як було. Вимкнути: F10 → «Перевіряти оновлення» або `[Menu] CheckUpdates=0`.
-- **Менший архів**: лише сам мод (`X3DAudio1_7.dll`, `UltimateFix`, коротка інструкція). Неперевірений DXVK і окремі програми прибрано: мод сам ставить 4 ГБ і сам прибирає вікно лаунчера.
-- **Фікс QTE можна вимкнути** (F10 → Виправлення → «QTE на високому FPS»).
-- Профайлер переїхав на **Ctrl+F9**.
-
-### Що нового в 0.7.1
-
-- **Стабільність.**
-  - Будівник світу й головний потік працюють по черзі, а зміна локації чекає потік маршрутів. Це прибирає вильоти й зависання при вході в будівлі з супутниками: те, що раніше ховав режим сумісності з Windows 98.
-  - Жителі без маршруту лишаються на місці, а не зникають у (0, 0, 0).
-  - Потік завантаження чекає між запитами 1 мс замість 16: менше ривків, коли місто підвантажується.
-  - Під час довгих завантажень немає білого вікна «не відповідає».
-  - Раз на хвилину в журналі рядок про пам'ять, а коли її бракує, повідомлення «збережіться й перезапустіть».
-- **4 ГБ пам'яті самі собою**: мод ставить `DP.exe` прапор 4 ГБ (діє з наступного запуску), окрема програма не потрібна.
-- **QTE «розхитування» знову проходиться на високому FPS** (кожне перемикання рахується, як на 60 FPS).
-- **Збереження.**
-  - Кожне збереження перевіряється: гроші, місце в сюжеті й час гри мають збігатися в заголовку й записі, інакше мод попереджає.
-  - 60 копій, підписаних епізодом, розділом і часом гри, у стисненій теці (близько 1 МБ кожна замість 8).
-- **Графіка.**
-  - Будь-який фільтр фоторежиму або власний пресет може діяти весь час.
-  - Сила світіння (bloom) і поправка експозиції.
-  - Вигляд Xbox 360 тримається і в катсценах та сценах без керування.
-  - Без подвоєних країв розмиття на масштабі рендеру 300 %.
-  - Затемнення, екрани завантаження й сповіщення про предмет накривають екран до останнього пікселя на роздільності понад 720p.
-  - Ближня площина камери сама підтягується, коли камера близько: Йорка більше не зрізає біля телефону й у дверях.
-- **Оригінальні іконки ґеймпада Xbox** із самої гри (розпаковуються з її `BTNWIDE.XPC`) замість намальованих модом.
-- **Знімки**: Shift+F11 без інтерфейсу, у фоторежимі «з кожним фільтром».
-- **Миша**: чутливість 25–400 %, що справді повертає швидше, та інверсія по кожній осі.
-
-Відомі проблеми: світла смужка вздовж деяких кутів з HBAO; X на мапі паузи з'їжджає під час прокручування; у кількох рідкісних сценах гра бере інший шейдер, і вигляд Xbox 360 там ще не діє (мод зберігає його як `UltimateFix\composite_*.bin`, щоб додати підтримку).
-
-### Що нового в 0.7.0
-
-- **Менеджер модів** (F10 → Моди): кожна тека в `UltimateFix\mods\` — це мод; вмикайте, вимикайте й міняйте порядок. Мод може нести переклад (`text\`: `mes_all.json` і `glyphmap.json` із SWERY Localization Tool), текстури (`textures\<хеш>.dds`, хеші з `[Debug] DumpTextures=1`) або будь-який файл гри за іменем просто в теці мода (`fontwide.xpc`, `mes_all.mes`, `FONTWIDE.DDS` для картинки всередині XPC). Назва, автор і версія мода — у `mod.txt` (`Назва: …`, `Автор: …`, `Версія: …`, `Опис: …`).
-- **Виправлено блимання далеких текстур**: ближня площина камери (20.0 замість 1.0), міпмапи для текстур без них, стабільніші далекі тіні.
-- **HBAO**: затінення по горизонту з розмиттям з урахуванням глибини, на великому масштабі рендеру рахується до 1080 рядків; **SMAA**; **вигляд Xbox 360**.
-- **Високий FPS**: фізика й решта таймерів гри на 120–180 FPS; FPS типово розблоковано, ліміт 60 лишається на екранах 61–139 Гц.
-- **Камера**: кут огляду в грі, швидкий розворот як на Xbox 360, чутливість миші (25–400 %) та інверсія по кожній осі.
-- **Сторінка «Сюжет»** (епізод, розділ, побічні завдання, куди йти далі — назвою місця) і **сторінка «Жителі»** (розклад кожного жителя, кімнати й дії людськими словами).
-- **Мітка** як рідна ціль гри: її маяк над місцем, стрілки на краю мінімапи; показується лише у своїй локації.
-- **Фоторежим**: 13 фільтрів, температура, відтінок, сепія, вицвітання, зерно, хроматична аберація, кінорамка, чотири власні пресети.
-- **Стабільність**: немає вічного зависання на куті, що не є числом; XAudio2 тримається в пам'яті; точність x87 як у Direct3D 9; зрозуміле повідомлення, якщо графічний пристрій не створюється.
-- **Збереження**: 60 резервних копій, кожна підписана епізодом, розділом і часом гри.
-- Картка на старті про **F10**; коротші підписи в меню; повзунки дальності зупиняються там, де більше нічого не дає.
-
-Відомі проблеми 0.7.0 — що виправлено, див. 0.7.1 вище.
+Попередні версії: [CHANGELOG_UA.md](CHANGELOG_UA.md).
 
 ### На чиїх плечах стоїмо
 
