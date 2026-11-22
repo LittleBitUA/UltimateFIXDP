@@ -159,6 +159,7 @@ struct Config {
     int photoMoveX, photoMoveY, photoMoveZ, photoTurn;  // photo mode: York moved right / up / forward (tenths of a unit) and turned (degrees) from where he stood
     int photoPlay;           // 1 = the motion runs instead of holding the frame
     int photoFaceOn;         // 1 = the face page drives York's face
+    int photoPlayAs;         // photo mode: which of the game's playable characters York's place shows (0 York, 1 Emily, 2 CNC01, 3 CBS02, 4 Zach)
     int photoDollId;         // photo mode: which resident (1..49 of the game's NPC list) the doll is
     int photoFaceTarget;     // whose face the photo page's expression goes to: 0 York, 1 the doll
     int dollMoveX, dollMoveY, dollMoveZ, dollTurn;  // the doll moved right / up / forward (tenths of a unit) and turned (degrees) from where it was put

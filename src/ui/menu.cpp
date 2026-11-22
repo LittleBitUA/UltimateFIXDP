@@ -137,6 +137,8 @@ void DollGone() {
     PhotoThaw(6);
 }
 void DollThaw() { PhotoThaw(6); }
+const Tr kPlayAsTr[5] = {{L"Йорк", L"York"}, {L"Емілі", L"Emily"}, {L"CNC01 (хто це, ще не знаю)", L"CNC01 (not identified yet)"}, {L"CBS02 (імовірно, вбивця)", L"CBS02 (probably the killer)"}, {L"Зак", L"Zach"}};
+void PlayAsChanged() { PhotoThaw(180); }  // the model loads from disk
 void FormatDoll(int v, wchar_t* out) {
     char name[16];
     if (DollName(v, name)) wsprintfW(out, L"%d %S", v, name);
@@ -924,6 +926,9 @@ Item g_pagePhoto[] = {
      NOTR},
     {{L"Застосувати позу", L"Apply the pose"}, &g_applyPick, kInt, 0, 1, 1, false, nullptr, nullptr, ApplyPoseNow, nullptr, {nullptr, nullptr}, NOTR,
      kApplyValues, 1, kApplyNames, nullptr, false},
+    {{L"Замість Йорка (експериментально)", L"In York's place (experimental)"}, &g_cfg.photoPlayAs, kInt, 0, 4, 1, false, nullptr, nullptr, PlayAsChanged, kPlayAsTr,
+     {L"Ставить на місце Йорка іншого персонажа, за якого гра сама дає грати: зі своєю моделлю і своїми анімаціями. Це власний перемикач гри. Діє лише у фоторежимі (вільна камера або «Зупинити час»), у вільній грі, пішки; коли фоторежим закінчується, повертається той, ким ви грали. Модель вантажиться з диска. ЗБЕРЕЖІТЬСЯ ПЕРЕД СПРОБОЮ і не зберігайте гру, поки на місці Йорка хтось інший. У грі ще не перевірено.",
+      L"Puts another character the game itself lets you play in York's place, with its own model and motions. It is the game's own switch. Works only in the photo mode (free camera or \"Freeze time\"), in free play, on foot; when the photo mode ends, the one you played comes back. The model loads from disk. SAVE BEFORE TRYING and do not save the game while someone else stands in York's place. Not yet verified in the game."}, NOTR},
     {{L"Персонаж (експериментально)", L"Character (experimental)"}, &g_cfg.photoDollId, kInt, 1, 49, 1, false, nullptr, nullptr, nullptr, nullptr,
      {L"Житель Грінвейла, якого поставити поруч із Йорком як нерухому «ляльку» для знімка: без поведінки, без розкладу, у збереження не потрапляє. Ім'я поруч із номером гра показує своє внутрішнє (англійською). Зробіть збереження перед спробами. У грі ще не перевірено.",
       L"A Greenvale resident to put next to York as a still \"doll\" for the picture: no behaviour, no schedule, never in a save. The name beside the number is the game's internal one. Save before trying. Not yet verified in the game."},
