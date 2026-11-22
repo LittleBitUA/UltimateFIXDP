@@ -26,8 +26,8 @@ _Універсальний фікс для_ **Deadly Premonition: The Director'
 One DLL in the game folder instead of DPfix, a stability fix, a map fix and a crash fix.
 No installer: press **F10** in game and everything is there. The mod also gives the game 4 GB of memory by itself (from the second start).
 
-> **Version 0.7.10.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
-> <br>New in 0.7.10: **the river has water again** (ripples, glints and reflection as on the Xbox 360), **York's face in the photo mode** — see [What's new](#whats-new-in-0710). In 0.7.9: **a new Mods page** with each mod's picture and description, **the F10 menu on a gamepad**, no stutter without a pad, adaptive sharpening (AMD RCAS) — see [What's new](#whats-new-in-079). In 0.7.8: **a redesigned F10 menu** (crisp text, the website's palette, quiet motion, changed settings marked) and **five graphics options** (filters under the interface, smoother far shadows, smooth glow, dither against banding, the game's own edge filter) — see [What's new](#whats-new-in-078). In 0.7.7: **an Xbox pad without Steam Input**. In 0.7.6: **PlayStation icons on a DualSense (Edge too)**. In 0.7.5: texture replacements in mod folders work. In 0.7.4: **York can fly** (cheats, F3), the lock-on aims at the chest instead of the hips. In 0.7.3: a mod's name, author and version in a plain `mod.txt`. In 0.7.2: **updates itself** (F9 on the start card), a much smaller archive — see [What's new](#whats-new-in-072). In 0.7.1: fixes for the **thread races** behind the crashes and hangs on entering buildings, the **QTE at high FPS**, **4 GB of memory by itself**, checked and compressed save backups, the game's own Xbox icons — see [What's new](#whats-new-in-071).
+> **Version 0.7.11.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
+> <br>New in 0.7.11: the river fix works by default only in its scene — see [What's new](#whats-new-in-0711). In 0.7.10: **the river has water again** (ripples, glints and reflection as on the Xbox 360), **York's face in the photo mode** — see [What's new](#whats-new-in-0710). In 0.7.9: **a new Mods page** with each mod's picture and description, **the F10 menu on a gamepad**, no stutter without a pad, adaptive sharpening (AMD RCAS) — see [What's new](#whats-new-in-079). In 0.7.8: **a redesigned F10 menu** (crisp text, the website's palette, quiet motion, changed settings marked) and **five graphics options** (filters under the interface, smoother far shadows, smooth glow, dither against banding, the game's own edge filter) — see [What's new](#whats-new-in-078). In 0.7.7: **an Xbox pad without Steam Input**. In 0.7.6: **PlayStation icons on a DualSense (Edge too)**. In 0.7.5: texture replacements in mod folders work. In 0.7.4: **York can fly** (cheats, F3), the lock-on aims at the chest instead of the hips. In 0.7.3: a mod's name, author and version in a plain `mod.txt`. In 0.7.2: **updates itself** (F9 on the start card), a much smaller archive — see [What's new](#whats-new-in-072). In 0.7.1: fixes for the **thread races** behind the crashes and hangs on entering buildings, the **QTE at high FPS**, **4 GB of memory by itself**, checked and compressed save backups, the game's own Xbox icons — see [What's new](#whats-new-in-071).
 
 ### Features
 
@@ -126,9 +126,14 @@ port with the Xbox 360 original:
     number was picked by eye against Xbox 360 footage, the console's own
     value has not been measured.
 
-  On by default, `[Fixes] RiverWater`, switched in the F10 menu at once.
+  `[Fixes] RiverWater`: 0 off, 1 always, 2 only in the scene by the river (the
+  default since 0.7.11); switched in the F10 menu at once.
   Checked in the game at the river; other water (the lake, puddles,
   interiors) has not been compared yet.
+
+### What's new in 0.7.11
+
+**The river fix now belongs to its scene.** In 0.7.10 the river was drawn with its ripples, glints and reflection everywhere. From 0.7.11 the fix works by default only in the scene by the river, "Welcome to Greenvale" (York's arrival), the one place the game shows the river up close; everywhere else the water stays as the port draws it. The row "River water as on the Xbox 360" on the Fixes page has three values: Off, Always, Only in the river scene (`[Fixes] RiverWater=0 / 1 / 2`), switched at once. Checked in the game: fixed in the scene, the port's water right after it. A file that still had the 0.7.10 default (Always) is moved to the new default once; pick Always again if you prefer it.
 
 ### What's new in 0.7.10
 
@@ -409,8 +414,8 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 Одна DLL у теці гри замість DPfix, фіксу стабільності, фіксу мапи й фіксу вильотів.
 Без інсталятора: натисніть **F10** у грі, і все там. Мод також сам дає грі 4 ГБ пам'яті (з другого запуску).
 
-> **Версія 0.7.10.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
-> <br>Нове в 0.7.10: **у річці знову є вода** (брижі, відблиски й відбиття, як на Xbox 360), **міміка Йорка у фоторежимі** — див. [Що нового](#що-нового-в-0710). У 0.7.9: **нова сторінка модів** з картинкою й описом кожного мода, **меню F10 з ґеймпада**, без ривків без пада, адаптивна різкість (AMD RCAS) — див. [Що нового](#що-нового-в-079). У 0.7.8: **оновлене меню F10** (чіткий текст, палітра сайту, тихий рух, позначки змінених налаштувань) і **п'ять графічних опцій** (фільтри під інтерфейсом, згладжені далекі тіні, плавне світіння, дизеринг проти смуг, власний фільтр країв гри) — див. [Що нового](#що-нового-в-078). У 0.7.7: **Xbox-пад без Steam Input**. У 0.7.6: **іконки PlayStation на DualSense (і Edge)**. У 0.7.5: заміни текстур у теках модів працюють. У 0.7.4: **Йорк літає** (читкоди, F3), автоприціл цілиться в груди, а не в стегна. У 0.7.3: назва, автор і версія мода у звичайному `mod.txt`. У 0.7.2: **оновлюється сам** (F9 на стартовій плашці), значно менший архів — див. [Що нового](#що-нового-в-072). У 0.7.1: виправлено **гонки потоків**, через які гра падала й зависала при вході в будівлі, **QTE на високому FPS**, **4 ГБ пам'яті самі собою**, перевірені й стиснені копії збережень, оригінальні іконки Xbox — див. [Що нового](#що-нового-в-071).
+> **Версія 0.7.11.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
+> <br>Нове в 0.7.11: виправлення річки типово діє лише у своїй сцені — див. [Що нового](#що-нового-в-0711). У 0.7.10: **у річці знову є вода** (брижі, відблиски й відбиття, як на Xbox 360), **міміка Йорка у фоторежимі** — див. [Що нового](#що-нового-в-0710). У 0.7.9: **нова сторінка модів** з картинкою й описом кожного мода, **меню F10 з ґеймпада**, без ривків без пада, адаптивна різкість (AMD RCAS) — див. [Що нового](#що-нового-в-079). У 0.7.8: **оновлене меню F10** (чіткий текст, палітра сайту, тихий рух, позначки змінених налаштувань) і **п'ять графічних опцій** (фільтри під інтерфейсом, згладжені далекі тіні, плавне світіння, дизеринг проти смуг, власний фільтр країв гри) — див. [Що нового](#що-нового-в-078). У 0.7.7: **Xbox-пад без Steam Input**. У 0.7.6: **іконки PlayStation на DualSense (і Edge)**. У 0.7.5: заміни текстур у теках модів працюють. У 0.7.4: **Йорк літає** (читкоди, F3), автоприціл цілиться в груди, а не в стегна. У 0.7.3: назва, автор і версія мода у звичайному `mod.txt`. У 0.7.2: **оновлюється сам** (F9 на стартовій плашці), значно менший архів — див. [Що нового](#що-нового-в-072). У 0.7.1: виправлено **гонки потоків**, через які гра падала й зависала при вході в будівлі, **QTE на високому FPS**, **4 ГБ пам'яті самі собою**, перевірені й стиснені копії збережень, оригінальні іконки Xbox — див. [Що нового](#що-нового-в-071).
 
 ### Можливості
 
@@ -508,9 +513,14 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
     на білий шум. Мод малює її у 16 разів більшою. Це число підібрано на
     око за записами з Xbox 360, значення самої консолі не виміряно.
 
-  Увімкнено типово, `[Fixes] RiverWater`, перемикається в меню F10 одразу.
+  `[Fixes] RiverWater`: 0 вимкнено, 1 завжди, 2 лише в сцені біля річки (типово
+  від 0.7.11); перемикається в меню F10 одразу.
   Перевірено у грі біля річки; іншу воду (озеро, калюжі, приміщення) ще не
   порівнювали.
+
+### Що нового в 0.7.11
+
+**Виправлення річки тепер належить своїй сцені.** У 0.7.10 річка малювалася з брижами, відблисками й відбиттям усюди. Від 0.7.11 виправлення типово діє лише в сцені біля річки, «Ласкаво просимо до Грінвейла» (приїзд Йорка), єдиному місці, де гра показує річку зблизька; всюди далі вода лишається як у порті. Рядок «Вода річки, як на Xbox 360» на сторінці «Виправлення» має три значення: Вимкнено, Завжди, Лише в сцені біля річки (`[Fixes] RiverWater=0 / 1 / 2`), перемикається одразу. Перевірено у грі: у сцені вода виправлена, одразу після неї — як у порті. Файл налаштувань, у якому лишалося типове значення 0.7.10 (Завжди), один раз переводиться на нове; якщо «Завжди» вам більше до вподоби, виберіть його знову.
 
 ### Що нового в 0.7.10
 
