@@ -304,7 +304,12 @@ void LabTick(void* player) {
     const bool hit = down && !held;
     held = down;
     if (!hit) return;
-    const u32 event = kEvents[pick];
+    // Ctrl + Numpad 8: the same lines through the game's own talk wrappers (COMMON 0_0003 events 6 and 74: event mode 1, the
+    // framed dialogue). The wrapper takes the talk partner from the process's actor (+30h, RunEvent's fifth argument) and
+    // crashed on a missing one (004BA360); the actor 7F64h is the game's own "no partner" case (00439A00), so that is given.
+    const bool framed = pick == 1 && (GetAsyncKeyState(VK_CONTROL) & 0x8000);
+    const u32 event = framed ? kLabEvTalk : kEvents[pick];
+    const u32 actor = framed ? 0x7F64u : 0u;
     if (event != kLabEvMin && !LabTextsIn()) {
         Log("lab: event %u needs the lab texts, and they are not in the game's messages (see the lab: lines at the start)", event);
         ShowNotice(L"Лабораторія місій: немає текстів", L"Mission lab: no texts", L"Тексти лабораторії не додано до повідомлень гри. Деталі в ufx.log.",
@@ -325,8 +330,8 @@ void LabTick(void* player) {
         return;
     }
     if (!LabRegistered() && !LabRegister()) return;
-    const int r = ((RunEventFn)(uintptr_t)kRunEventFn)((void*)ev, 0, kLabDsbNo, event, 0, 0, 0);
-    Log("lab: RunEvent(script %u, event %u) returned %d; our process slot %d", kLabDsbNo, event, r, LabProcess());
+    const int r = ((RunEventFn)(uintptr_t)kRunEventFn)((void*)ev, 0, kLabDsbNo, event, 0, actor, 0);
+    Log("lab: RunEvent(script %u, event %u, actor %04X) returned %d; our process slot %d", kLabDsbNo, event, actor, r, LabProcess());
     if (r == -1) {
         ShowNotice(L"Лабораторія місій: гра відмовила", L"Mission lab: the game refused", L"RunEvent повернув -1. Деталі в ufx.log.", L"RunEvent returned -1. See ufx.log.", 5);
         return;
