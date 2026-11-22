@@ -112,6 +112,15 @@ void SpawnerTick(u8* game, u8* player) {
     }
 }
 void CheatYorkToCamera() { g_toCamera = 1; PhotoThaw(20); }
+volatile int g_yorkTo = 0;
+float g_yorkToPlace[4];
+// York put at a place (the quest runner's "teleport"): the position and heading written into the player object, as the move
+// to the free camera does. No level change: a place in another zone is not reached this way.
+void CheatYorkTo(const float place[4]) {
+    for (int i = 0; i < 4; ++i) g_yorkToPlace[i] = place[i];
+    g_yorkTo = 1;
+    PhotoThaw(20);
+}
 
 // Runs once per frame from the player update (esi = the player object).
 void CheatsTick(void* player) {
@@ -247,6 +256,13 @@ void CheatsTick(void* player) {
         }
     }
 
+    if (g_yorkTo && player) {
+        g_yorkTo = 0;
+        u8* p = (u8*)player;
+        for (int i = 0; i < 3; ++i) *(volatile float*)(p + 0x58 + 4 * i) = g_yorkToPlace[i];
+        *(volatile float*)(p + 0x7C) = g_yorkToPlace[3];
+        Log("cheat: the player put at %d %d %d", (int)g_yorkToPlace[0], (int)g_yorkToPlace[1], (int)g_yorkToPlace[2]);
+    }
     if (g_toCamera) {
         g_toCamera = 0;
         if (g_cfg.photoActive && player) {

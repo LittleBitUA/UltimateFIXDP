@@ -357,6 +357,7 @@ void CheatAmmo();
 void CheatSpawnCar(int number);          // one of the game's numbered cars put in front of York (open Greenvale only)
 void CheatGiveItem(int id, int count);   // the game's own give-item call
 void CheatYorkToCamera();
+void CheatYorkTo(const float place[4]);   // York put at a place of the same zone (position and heading written)
 int WeaponClassNow();
 bool InstallAlternate3D();
 bool InstallPhysicsFreeze();
@@ -475,18 +476,37 @@ int GiveItemNow(int id, int count);   // cheats.cpp: the game's give-item call, 
 int LabRunEvent(u32 event);
 void WorldStreamFrame();              // world_stream.cpp, once a frame: the queue of world objects to build, watched
 void LabWatchFrame();                 // once a frame: which answer the running talk took
-struct Mission {  // one mission of the editor: UltimateFix\missions\missionN.ini
-    int slot, exists, resident, placed, x, y, z, yaw, motionSet, motion, giveItem, giveCount;
-    wchar_t name[64], author[64], banner[96], line[200], question[200], yes[40], no[40], afterYes[200], afterNo[200];
+// A quest of the editor: UltimateFix\missions\missionN.ini, a list of steps done one after another (missions.cpp)
+struct MissionStep {
+    int kind;  // 0 talk with a choice of two answers, 1 a line without a choice, 2 reach a place, 3 wait for an hour of the game's clock
+    int resident, placed, x, y, z, yaw, motionSet, motion;  // the character of a talk (placed 0 = in front of York)
+    int radius, zone, hour;                                  // reach: metres around x y z, zone -1 = any; wait: the hour
+    int nextYes, nextNo;                                     // the step after it: 0 = the following one, -1 = the quest ends
+    int giveItem, giveCount, money;                          // the reward when the step is done (a talk: for the first answer)
+    int car, setHour, weather, teleport, tx, ty, tz, tyaw;   // done when the step begins: car 1..16, hour 0..23 or -1, weather 0..3 (0 none)
+    wchar_t title[96], line[200], question[200], yes[40], no[40], afterYes[200], afterNo[200];
+};
+constexpr int kMissionSteps = 16;
+struct Mission {
+    int slot, exists, stepCount;
+    wchar_t name[64], author[64], banner[96], endText[200];
+    MissionStep steps[kMissionSteps];
 };
 extern Mission g_mission;
 void MissionLoad(int slot);           // reads the file of slot 1..9 into g_mission
-void MissionSave();                   // the numbers of g_mission into its file
 void MissionOpenFile();               // the file in Notepad
-void MissionRequest(int what);        // 1 = the character's place is where York stands, 2 = run, 3 = stop
+void MissionRequest(int what, int slot = 0);  // 2 = run (from the saved step), 3 = stop, 4 = run from the first step; slot 0 = the loaded one
 const wchar_t* MissionState();
 void MissionTick(void* player);       // from the player update
 bool MissionActive();
+void MissionTalkOver(bool firstAnswer);  // combat_strafe.cpp: the talk of the running step is over
+int MissionStepNow();                 // 1..N while a quest runs, 0 otherwise
+void MissionPath(int slot, wchar_t* out);
+bool EditorServerStart();             // editor_server.cpp: the local page of the quest editor; false = could not listen
+int EditorServerPort();
+void EditorOpenBrowser();
+int CarNumberOf(int pick);            // menu.cpp: the game's number of the car 1..16 of the spawner's list
+const wchar_t* CarNameOf(int pick);
 bool LabSetText(u32 id, const char* text);  // text_overlay.cpp: one of the lab's message records rewritten in place
 bool LabTextsIn();  // text_overlay.cpp: the mission lab's texts are in the game's messages
 void ShowNotice(const wchar_t* titleUk, const wchar_t* titleEn, const wchar_t* textUk, const wchar_t* textEn, int seconds,

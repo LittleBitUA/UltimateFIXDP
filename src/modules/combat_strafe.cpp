@@ -262,7 +262,8 @@ void LabTick(void* player) {
             const bool yes = g_labGiftSeen;
             g_labGiftSeen = false;
             g_labGiftWatch = false;
-            if (yes && g_labGiveItem > 0) {
+            if (MissionActive()) MissionTalkOver(yes);  // the quest runner gives its own rewards and moves to the next step
+            else if (yes && g_labGiveItem > 0) {
                 const int r = GiveItemNow(g_labGiveItem, g_labGiveCount);
                 Log("lab: the first answer was picked: item %d x %d given by the mod (the game answered %d)", g_labGiveItem, g_labGiveCount, r);
                 ShowNotice(r == -3 ? L"Предмет пішов у сховище" : L"Отримано предмет", r == -3 ? L"The item went to the storage" : L"Item obtained",
@@ -276,7 +277,7 @@ void LabTick(void* player) {
         }
         if (LabProcess() < 0) {
             Log("lab: the event is over after %u player updates", g_labFrames);
-            ShowNotice(L"Лабораторія місій: подія завершилась", L"Mission lab: the event is over", L"Власний скрипт мода відпрацював у грі.",
+            if (!MissionActive()) ShowNotice(L"Лабораторія місій: подія завершилась", L"Mission lab: the event is over", L"Власний скрипт мода відпрацював у грі.",
                        L"The mod's own script ran in the game.", 4);
             g_labPid = -1;
         } else if (g_labFrames == 3600) {
@@ -723,7 +724,8 @@ void DollTalkTick(u8* player, u8* doll, bool free) {
     const bool close = dx * dx + dz * dz < 12.f * 12.f;
     static bool wasClose = false, held = false;
     if (close && !wasClose)
-        ShowNotice(L"Натисніть E, щоб заговорити", L"Press E to talk", L"Лабораторія місій: персонаж має для вас дещо.", L"Mission lab: the character has something for you.", 4);
+        ShowNotice(L"Натисніть E, щоб заговорити", L"Press E to talk", MissionActive() ? L"" : L"Лабораторія місій: персонаж має для вас дещо.",
+                   MissionActive() ? L"" : L"Mission lab: the character has something for you.", 4);
     wasClose = close;
     HWND fg = GetForegroundWindow();
     DWORD pid = 0;
@@ -759,7 +761,7 @@ void DollTalkTick(u8* player, u8* doll, bool free) {
         g_labPid = r;
         g_labFrames = 0;
         g_labGiftSeen = false;
-        g_labGiftWatch = g_dollTalkEvent == kLabEvGift || g_dollTalkEvent == kMsEvTalkGift;
+        g_labGiftWatch = g_dollTalkEvent == kLabEvGift || g_dollTalkEvent == kMsEvTalkGift || g_dollTalkEvent == kMsEvSay;
         g_labCallArmed = false;
     }
 }
