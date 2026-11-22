@@ -138,7 +138,7 @@ const Tr kScaleNames[4] = {{L"1×", L"1x"}, {L"1,5×", L"1.5x"}, {L"2×", L"2x"}
 
 // ---- Quick quality presets: one click sets the whole picture block (some of it applies after a restart).
 int g_qualityPick = 0;
-const Tr kRiverTr[3] = {{L"Вимкнено", L"Off"}, {L"Завжди", L"Always"}, {L"Лише в катсценах", L"Only in cutscenes"}};
+const Tr kRiverTr[3] = {{L"Вимкнено", L"Off"}, {L"Завжди", L"Always"}, {L"Лише в сцені біля річки", L"Only in the river scene"}};
 const int kQualityValues[3] = {1, 2, 3};
 const Tr kQualityNames[3] = {{L"Легкий", L"Light"}, {L"Баланс", L"Balanced"}, {L"Якість", L"Quality"}};
 
@@ -516,8 +516,8 @@ Item g_pageFixes[] = {
      {L"Автоприціл гри цілиться в пояс ворога й опускає точку на десяту частину відстані: за кілька метрів це вже стегна чи коліна. З цим точка не опускається і стоїть трохи вище пояса (висота: LockOnHeight в UltimateFix.ini). Потрібен перезапуск.",
       L"The game's lock-on aims at the enemy's waist and lowers the point by a tenth of the distance: a few metres away that is the hips or the knees. With this the point does not drop and sits a little above the waist (height: LockOnHeight in UltimateFix.ini). Restart needed."}, NOTR},
     {{L"Вода річки, як на Xbox 360", L"River water as on the Xbox 360"}, &g_cfg.riverWater, kInt, 0, 2, 1, false, L"Fixes", L"RiverWater", nullptr, kRiverTr,
-     {L"На ПК річка пласка й синя: гра має для неї запис «_river» (відбиття, освітлені хвилі, відблиски), але не застосовує його. Мод дає річці значення з цього запису і збільшує карту хвиль у 16 разів, бо з масштабом гри хвилі дрібніші за піксель. Масштаб підібрано на око за знімками Xbox 360. «Лише в катсценах»: вода виправлена, поки йде сцена, а у вільній грі лишається як у порті. Змінюється одразу.",
-      L"On PC the river is flat and blue: the game has a \"_river\" record for it (reflection, lit waves, sparkle) but never applies it. The mod gives the river the values of that record and makes the wave map 16 times larger, because at the game's scale the waves are smaller than a pixel. The scale was picked by eye against Xbox 360 pictures. \"Only in cutscenes\": the water is fixed while a scene runs and stays as the port draws it in the free game. Changes at once."}, NOTR},
+     {L"На ПК річка пласка й синя: гра має для неї запис «_river» (відбиття, освітлені хвилі, відблиски), але не застосовує його. Мод дає річці значення з цього запису і збільшує карту хвиль у 16 разів, бо з масштабом гри хвилі дрібніші за піксель. Масштаб підібрано на око за знімками Xbox 360. «Лише в сцені біля річки»: вода виправлена тільки в сцені «Ласкаво просимо до Грінвейла» (приїзд Йорка), а всюди далі лишається як у порті. Змінюється одразу.",
+      L"On PC the river is flat and blue: the game has a \"_river\" record for it (reflection, lit waves, sparkle) but never applies it. The mod gives the river the values of that record and makes the wave map 16 times larger, because at the game's scale the waves are smaller than a pixel. The scale was picked by eye against Xbox 360 pictures. \"Only in the river scene\": the water is fixed only in the scene \"Welcome to Greenvale\" (York's arrival) and stays as the port draws it everywhere else. Changes at once."}, NOTR},
     {{L"QTE на високому FPS", L"QTE at high FPS"}, &g_cfg.qteFix, kBool, 0, 1, 1, true, L"Fixes", L"QteFix", nullptr, nullptr,
      {L"У QTE «розхитування» (A↔D або стік) гра множила рух на час кадру, тож вище 60 FPS кожне перемикання рахувалось менше. З цим перемикання рахується як на 60 FPS. Потрібен перезапуск.",
       L"In the waggle QTE (A/D or the stick) the game multiplied the travel by the frame time, so above 60 FPS every swap counted less. With this a swap counts as at 60 FPS. Restart needed."}, NOTR},

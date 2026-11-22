@@ -61,7 +61,7 @@ static const char kDefaultIni[] =
     "[Fixes]\r\n"
     "; 1 = the river is drawn with the values of the game's own \"_river\" water record (reflection, lit waves, sparkle), which\r\n"
     "; the PC version never applies (flat blue water), and with a wave map 16 times larger. 0 = off, 1 = always,\r\n"
-    "; 2 = only while a cutscene runs (the free game keeps the port's water). Changes at once.\r\n"
+    "; 2 = only in the scene by the river, Welcome to Greenvale (the port's water everywhere else). Changes at once.\r\n"
     "RiverWater=1\r\n"
     "; Muzzle flashes, splashes and hits take a fixed step: at the console's 30 frames/s that is half the speed of the other\r\n"
     "; effects, at the PC's 60 it is full speed, so they play twice as fast as on the console. 1 = console speed. Restart needed.\r\n"

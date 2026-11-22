@@ -530,11 +530,14 @@ bool RiverRecord(float* mix, float* weight, float* colour) {
 // scaled by 1/16, the value picked by eye in the game against the Xbox pictures (the Xbox's own number is not known yet).
 // With TraceWater the river's mesh goes to the log once.
 constexpr float kRiverUvScale = 1.f / 16.f;
-// RiverWater 2 = only while a scene (cutscene) runs: bit 31 of 008A6074h; the free game keeps the port's water.
+// RiverWater 2 = only in the scene by the river, "Welcome to Greenvale" (ScnD03: COMMON 0_0614 event 1): a scene runs
+// (bit 31 of 008A6074h) and its id at 008A6078h is 3 (0.7.11-test1 log: scene id 3 with events 365/1, 614/29, 614/1).
+// Everywhere else the game keeps the port's water.
 inline bool InScene() { return *(volatile int*)(uintptr_t)0x8A6074 < 0; }
+inline bool InRiverScene() { return InScene() && *(volatile int*)(uintptr_t)0x8A6078 == 3; }
 inline int WaterMode() {
     if (g_cfg.waterTest >= 1 && g_cfg.waterTest <= 3) return g_cfg.waterTest;
-    return g_cfg.riverWater == 1 || (g_cfg.riverWater == 2 && InScene()) ? 3 : 0;
+    return g_cfg.riverWater == 1 || (g_cfg.riverWater == 2 && InRiverScene()) ? 3 : 0;
 }
 // Which scene and which event scripts run while a record-less water draw (the river) is on screen: one log line per change, to
 // tie the fix to one scene by its number. Scene id at 008A6078h; live event threads at 00BDC960h (80 x C4h, +18h in use,
