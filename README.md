@@ -28,7 +28,7 @@ _Універсальний фікс для_ **Deadly Premonition: The Director'
 One DLL in the game folder instead of DPfix, a stability fix, a map fix and a crash fix.
 No installer: press **F10** in game and everything is there. The mod also gives the game 4 GB of memory by itself (from the second start).
 
-> **Version 0.7.13.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
+> **Version 0.7.14.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
 > <br>Newest: a posed character next to York in the photo mode, play as other characters, a spawner for cars and items, a partner on the gamepad and a first mission editor — see [What's new](#whats-new-in-0713). Earlier versions: [CHANGELOG.md](CHANGELOG.md).
 
 ### Features
@@ -165,6 +165,18 @@ port with the Xbox 360 original:
   Checked in the game at the river; other water (the lake, puddles,
   interiors) has not been compared yet.
 
+### What's new in 0.7.14
+
+**An important fix: missing buildings and a freeze while driving.** If Greenvale had no buildings at all, or the game froze while you drove through it, this was the mod's own fault, in every version from 0.7.1 to 0.7.13.
+- **What went wrong.** The fix "Game threads in turn (world)" (`[Fixes] SerialSetThread`, on by default) woke the game's thread that builds the objects of the open world and at once took away its sign to work. Buildings were built only when that thread happened to run first, which depends on the processor and the load: fine on most computers, never on some. The requests piled up, and when all 4096 places of the game's queue were taken, the game froze for good.
+- **What changed.** The thread now keeps its sign until it has finished its turn (one millisecond, as in the game itself). Checked in the game on the save a player sent: the buildings are back, the queue stays empty, the frame rate is the same.
+- **If you switched the fix off** to get your buildings back, you can switch it on again (F10 → Fixes → "Game threads in turn (world)").
+- A line `world build: …` goes to `ufx.log` if that queue ever grows again.
+
+**The photo mode in a window of its own** (_not yet checked in the game_). The photo key (F6) or "Open the photo mode" on the cheats page opens a window with five sections in place of the menu's own: camera and picture, picture look, suits, motions, spawner. Every section has "Back to the menu".
+
+**For finding faults:** `[Debug] Bisect` in `UltimateFix.ini` leaves groups of the mod's hooks out for one run (the numbers are in the source, `main.cpp`). This is how the fault above was narrowed down.
+
 ### What's new in 0.7.13
 
 A small update after 0.7.12.
@@ -172,20 +184,6 @@ A small update after 0.7.12.
 - **The update card** no longer cuts its second line with "…" when a gamepad is in use.
 - **No spoilers in the menu:** the playable characters past York and Emily are not named in the "Play as" row.
 - **The talk with a placed character** (mission editor, `[Debug] MissionLab=1`) runs in the game's own talk mode: York turns to the character and the camera frames it.
-
-### What's new in 0.7.12
-
-**Photo mode: a whole scene, not only York.** The second picture at the top of this page was made entirely in the mod's photo mode.
-- **A character next to York.** Any of Greenvale's 49 residents can be put in front of York as a still figure for the picture: no behaviour, no schedule, never in a save. It has its own rows to move it left / right, back / forward, lower / higher and to turn it, its own body motion (set, number, frame, playback), and the page's face rows work on it too ("The face of: York / The character"). One stands at a time; it goes when the photo mode ends or a cutscene begins.
-- **York placed by hand.** Four rows move York from where he stood (sideways, forward, up) and turn him; zeros put him back on the ground.
-- **One row of suits.** All the game's suits in one row of 30 instead of a set and a suit.
-
-**Cheats: play as, spawner.**
-- **Play as** another of the game's own playable characters, with its model and motions: York, Emily and three more (not named here: spoilers). It works in free play, no photo mode needed. The game writes who you play into the save: put your own character back before saving.
-- **Spawner.** Any of the game's 16 cars by name, put in front of York (outdoors in Greenvale); any item by number and name, given with the game's own call.
-- **A partner on the gamepad** (_experimental, not yet checked in the game_): a second character walks by the gamepad's left stick while York keeps the keyboard and mouse. A first try at local co-op: the partner is a figure that enemies do not see, it does not fight, and it keeps York's height instead of finding the ground.
-
-**Mission editor, a first version** (_experimental_; needs `[Debug] MissionLab=1` in `UltimateFix.ini`). F10 → Mission editor: a mission is one character, a talk with a choice of two answers and an item for the first one, and a start banner. Its texts live in `UltimateFix\missions\missionN.ini` (the editor opens it in Notepad), the rest is picked in the menu; "Run the mission now" puts the character, shows the banner and waits for you to walk up and press E. The talk runs in the game's own dialogue mode, with the mod's texts added to the game's messages. Checked in the game so far: the banner, the character, the talk and the choice. Not yet: the item, and what the talk looks like in every place.
 
 Earlier versions: [CHANGELOG.md](CHANGELOG.md).
 
@@ -329,7 +327,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 Одна DLL у теці гри замість DPfix, фіксу стабільності, фіксу мапи й фіксу вильотів.
 Без інсталятора: натисніть **F10** у грі, і все там. Мод також сам дає грі 4 ГБ пам'яті (з другого запуску).
 
-> **Версія 0.7.13.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
+> **Версія 0.7.14.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
 > <br>Найновіше: персонаж поруч із Йорком у фоторежимі, гра за інших персонажів, спавнер машин і предметів, напарник із ґеймпада і перший редактор місій — див. [Що нового](#що-нового-в-0713). Попередні версії: [CHANGELOG_UA.md](CHANGELOG_UA.md).
 
 ### Можливості
@@ -465,6 +463,18 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
   Перевірено у грі біля річки; іншу воду (озеро, калюжі, приміщення) ще не
   порівнювали.
 
+### Що нового в 0.7.14
+
+**Важливе виправлення: зниклі будівлі й зависання під час їзди.** Якщо у Грінвейлі не було жодної будівлі або гра зависала, коли ви їхали містом, це була помилка самого мода, у всіх версіях від 0.7.1 до 0.7.13.
+- **Що було не так.** Фікс «Потоки гри по черзі (світ)» (`[Fixes] SerialSetThread`, типово ввімкнений) будив потік гри, який будує об'єкти відкритого світу, і тут же забирав у нього знак «працюй». Будівлі з'являлися лише тоді, коли цей потік устигав першим, а це залежить від процесора й навантаження: на більшості комп'ютерів усе було гаразд, на деяких — ніколи. Запити накопичувалися, і коли всі 4096 місць черги гри були зайняті, гра зависала назавжди.
+- **Що змінено.** Потік тепер тримає свій знак, доки не відпрацює хід (одну мілісекунду, як у самій грі). Перевірено у грі на збереженні, яке надіслав гравець: будівлі на місці, черга порожня, частота кадрів та сама.
+- **Якщо ви вимикали цей фікс**, щоб повернути будівлі, його можна ввімкнути знову (F10 → Виправлення → «Потоки гри по черзі (світ)»).
+- Якщо ця черга колись знову почне рости, у `ufx.log` з'явиться рядок `world build: …`.
+
+**Фоторежим у власному вікні** (_у грі ще не перевірено_). Клавіша фоторежиму (F6) або «Відкрити фоторежим» на сторінці читкодів відкриває вікно з п'ятьма розділами замість розділів меню: камера і знімок, картинка, костюми, анімації, спавнер. У кожному розділі є «Назад до меню».
+
+**Для пошуку несправностей:** `[Debug] Bisect` в `UltimateFix.ini` на один запуск вимикає групи хуків мода (числа — у коді, `main.cpp`). Саме так знайшли помилку вище.
+
 ### Що нового в 0.7.13
 
 Невелике оновлення після 0.7.12.
@@ -472,20 +482,6 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 - **Плашка оновлення** більше не обрізає другий рядок «…», коли підключено ґеймпад.
 - **Без спойлерів у меню:** персонажі, за яких можна грати, окрім Йорка та Емілі, у рядку «Грати за» не названі.
 - **Розмова з поставленим персонажем** (редактор місій, `[Debug] MissionLab=1`) іде у власному режимі розмови гри: Йорк повертається до персонажа, камера бере його в кадр.
-
-### Що нового в 0.7.12
-
-**Фоторежим: ціла сцена, а не лише Йорк.** Другий знімок угорі цієї сторінки повністю зроблено у фоторежимі мода.
-- **Персонаж поруч із Йорком.** Будь-кого з 49 жителів Грінвейла можна поставити перед Йорком як нерухому фігуру для знімка: без поведінки, без розкладу, у збереження не потрапляє. Має власні рядки пересування (ліворуч / праворуч, назад / вперед, нижче / вище) і повороту, власну анімацію тіла (набір, номер, кадр, програвання), і рядки міміки сторінки теж діють на нього («Міміка для: Йорк / Персонаж»). Одночасно стоїть один; зникає, коли фоторежим закінчується або починається катсцена.
-- **Йорк, поставлений вручну.** Чотири рядки зсувають Йорка від місця, де він стояв (убік, уперед, угору), і повертають його; нулі ставлять його назад на землю.
-- **Один рядок костюмів.** Усі костюми гри в одному рядку на 30 замість набору й костюма.
-
-**Читкоди: «Грати за», спавнер.**
-- **Грати за** іншого персонажа, за якого гра сама дає грати, з його моделлю й анімаціями: Йорк, Емілі та ще троє (не називаю їх тут: спойлери). Працює у вільній грі, фоторежим не потрібен. Гра записує у збереження, ким ви граєте: перед збереженням поверніть свого персонажа.
-- **Спавнер.** Будь-яка з 16 машин гри за назвою, перед Йорком (надворі у Грінвейлі); будь-який предмет за номером і назвою, виданий власним викликом гри.
-- **Напарник із ґеймпада** (_експериментально, у грі ще не перевірено_): другий персонаж ходить за лівим стіком ґеймпада, а Йорк лишається на клавіатурі й миші. Перша проба локального кооперативу: напарник — фігура, якої вороги не бачать, він не б'ється і тримається висоти Йорка замість шукати землю.
-
-**Редактор місій, перша версія** (_експериментально_; потрібен `[Debug] MissionLab=1` в `UltimateFix.ini`). F10 → Редактор місій: місія — це один персонаж, розмова з вибором із двох відповідей і предметом за першу, та банер початку. Тексти лежать у `UltimateFix\missions\missionN.ini` (редактор відкриває його в Блокноті), решта вибирається в меню; «Запустити місію зараз» ставить персонажа, показує банер і чекає, поки ви підійдете й натиснете E. Розмова йде у власному режимі діалогу гри, а тексти мод додає до повідомлень гри. У грі вже перевірено: банер, персонаж, розмова й вибір. Ще ні: предмет і те, як розмова виглядає в кожному місці.
 
 Попередні версії: [CHANGELOG_UA.md](CHANGELOG_UA.md).
 

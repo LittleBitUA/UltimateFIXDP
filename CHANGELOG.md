@@ -2,6 +2,20 @@
 
 The two newest versions are in the [README](README.md).
 
+## What's new in 0.7.12
+
+**Photo mode: a whole scene, not only York.** The second picture at the top of the README was made entirely in the mod's photo mode.
+- **A character next to York.** Any of Greenvale's 49 residents can be put in front of York as a still figure for the picture: no behaviour, no schedule, never in a save. It has its own rows to move it left / right, back / forward, lower / higher and to turn it, its own body motion (set, number, frame, playback), and the page's face rows work on it too ("The face of: York / The character"). One stands at a time; it goes when the photo mode ends or a cutscene begins.
+- **York placed by hand.** Four rows move York from where he stood (sideways, forward, up) and turn him; zeros put him back on the ground.
+- **One row of suits.** All the game's suits in one row of 30 instead of a set and a suit.
+
+**Cheats: play as, spawner.**
+- **Play as** another of the game's own playable characters, with its model and motions: York, Emily and three more (not named here: spoilers). It works in free play, no photo mode needed. The game writes who you play into the save: put your own character back before saving.
+- **Spawner.** Any of the game's 16 cars by name, put in front of York (outdoors in Greenvale); any item by number and name, given with the game's own call.
+- **A partner on the gamepad** (_experimental, not yet checked in the game_): a second character walks by the gamepad's left stick while York keeps the keyboard and mouse. A first try at local co-op: the partner is a figure that enemies do not see, it does not fight, and it keeps York's height instead of finding the ground.
+
+**Mission editor, a first version** (_experimental_; needs `[Debug] MissionLab=1` in `UltimateFix.ini`). F10 → Mission editor: a mission is one character, a talk with a choice of two answers and an item for the first one, and a start banner. Its texts live in `UltimateFix\missions\missionN.ini` (the editor opens it in Notepad), the rest is picked in the menu; "Run the mission now" puts the character, shows the banner and waits for you to walk up and press E. The talk runs in the game's own dialogue mode, with the mod's texts added to the game's messages. Checked in the game so far: the banner, the character, the talk and the choice. Not yet: the item, and what the talk looks like in every place.
+
 ## What's new in 0.7.11
 
 **The river fix now belongs to its scene.** In 0.7.10 the river was drawn with its ripples, glints and reflection everywhere. From 0.7.11 the fix works by default only in the scene by the river, "Welcome to Greenvale" (York's arrival), the one place the game shows the river up close; everywhere else the water stays as the port draws it. The row "River water as on the Xbox 360" on the Fixes page has three values: Off, Always, Only in the river scene (`[Fixes] RiverWater=0 / 1 / 2`), switched at once. Checked in the game: fixed in the scene, the port's water right after it. A file that still had the 0.7.10 default (Always) is moved to the new default once; pick Always again if you prefer it.
