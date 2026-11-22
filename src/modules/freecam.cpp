@@ -47,15 +47,23 @@ bool Pressed(int index, int vk) {
 
 void FlyFrame(bool menuOpen);  // the fly cheat, below
 
+// The minimap is a task of its own and does not look at the HUD flag: it draws while its "on" byte 8C29F8h is set (the game
+// writes that byte only when a scripted "restricted" mode starts or ends, FUN_004FFC40 / FUN_004FFC70, and at its init).
 void SetHud(bool hidden) {
     volatile u8* flag = (volatile u8*)(uintptr_t)kHudFlagVa;
+    volatile u8* minimap = (volatile u8*)(uintptr_t)0x8C29F8;
+    static u8 minimapSaved = 1;
     if (hidden && !g_hudHidden) {
         g_hudSaved = *flag;
+        minimapSaved = *minimap;
         g_hudHidden = true;
     }
-    if (hidden) *flag = 0;
-    else if (g_hudHidden) {
+    if (hidden) {
+        *flag = 0;
+        *minimap = 0;
+    } else if (g_hudHidden) {
         *flag = g_hudSaved ? g_hudSaved : 1;
+        *minimap = minimapSaved;
         g_hudHidden = false;
     }
 }
@@ -158,13 +166,22 @@ void __attribute__((cdecl)) CameraWorker() {
             ui::PhotoLookReset();
             g_cfg.photoRoll = 0;
             g_cfg.photoFovOn = 0;
-            if (g_cfg.photoAnim) RequestPose(1);  // state 0: calm
-            g_cfg.photoAnim = 0;
-            g_cfg.photoBodyNo = g_cfg.photoFace = g_cfg.photoFace2 = g_cfg.photoNoBlink = g_cfg.photoPlay = 0;  // York as the game moves him
             g_cfg.photoCostume = 0;
         }
         if (enter) ui::OpenPhotoPage();
         Log("photo mode: %s", enter ? "on" : "off");
+    }
+    {   // However the photo mode ends (F6, the camera key, the rows of the menu): once neither the camera flies nor the time
+        // stands, York gets the game's own motion and face back. The suit stays: it is a thing he wears, not a pose.
+        static bool wasPhoto = false;
+        const bool photo = g_cfg.photoActive || g_cfg.photoFreeze;
+        if (wasPhoto && !photo) {
+            if (g_cfg.photoAnim) RequestPose(1);  // state 0: calm
+            g_cfg.photoAnim = 0;
+            g_cfg.photoBodyNo = g_cfg.photoFaceOn = g_cfg.photoNoBlink = g_cfg.photoPlay = 0;  // PhotoAnimTick puts York's own motion back
+            Log("photo mode: over, York's own motion and face again");
+        }
+        wasPhoto = photo;
     }
     SetHud(g_cfg.photoHud != 0 || ui::ScreenshotHidesHud());
     if ((g_cfg.photoActive != 0) != g_active) {

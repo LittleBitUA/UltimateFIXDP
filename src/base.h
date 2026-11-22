@@ -155,8 +155,9 @@ struct Config {
     int photoBodyNo;         // 0 = untouched, n = the n-th motion of the set
     int photoFrame;          // the held frame, percent of the motion's length
     int photoPlay;           // 1 = the motion runs instead of holding the frame
-    int photoFace, photoFaceAmt;    // face channel (0 = the game's own face) and its weight in percent
-    int photoFace2, photoFace2Amt;  // a second channel mixed in
+    int photoFaceOn;         // 1 = the face page drives York's face
+    int photoFaceAdd;        // 1 = over the game's own face of the frame instead of in its place
+    int photoFaceW[58];      // weight of face channel i+2 in percent (-100..150; channels 0 and 1 scale the blink and the darts)
     int photoNoBlink;        // 1 = no blinking and no eye darts
     int freeCam;             // the free camera (fly with the mouse and keys, hide the HUD)
     int freeCamKey;          // virtual key that switches it on and off

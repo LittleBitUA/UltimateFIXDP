@@ -84,12 +84,12 @@ void __attribute__((thiscall)) H_FaceWeights(void* actor, float* w, int n) {
         Log("photo face: the face weights of York pass the hook (%d channels)", n);
     }
     if ((u32)(uintptr_t)actor != g_playerObject || !w || n < 4 || n > 64) return;
-    if (!g_cfg.photoFace && !g_cfg.photoFace2 && !g_cfg.photoNoBlink) return;
-    if (g_cfg.photoFace || g_cfg.photoFace2) {  // a chosen expression stands alone: the game's own face of this frame is cleared
-        for (int i = 2; i < n; ++i) w[i] = 0.f;
-        const int a = g_cfg.photoFace + 1, b = g_cfg.photoFace2 + 1;  // channels 0 and 1 scale the blink and the darts
-        if (g_cfg.photoFace && a < 64) w[a] = (float)g_cfg.photoFaceAmt / 100.f;
-        if (g_cfg.photoFace2 && b < 64) w[b] = (float)g_cfg.photoFace2Amt / 100.f;
+    if (!g_cfg.photoFaceOn && !g_cfg.photoNoBlink) return;
+    if (g_cfg.photoFaceOn) {
+        if (!g_cfg.photoFaceAdd)  // the page's face stands alone: the game's own face of this frame is cleared
+            for (int i = 2; i < n; ++i) w[i] = 0.f;
+        for (int i = 0; i < 58; ++i)  // the buffer has 64 floats; channels past n reach poses the game's data never use
+            if (g_cfg.photoFaceW[i]) w[i + 2] += (float)g_cfg.photoFaceW[i] / 100.f;
     }
     if (g_cfg.photoNoBlink) {
         w[0] = -1.f;
@@ -286,7 +286,6 @@ bool InstallCombatStrafe() {
         Log("strafe: the player update tail at %08X differs from DP.exe 1.01b, skipped", s.va);
         return false;
     }
-    g_cfg.photoFaceAmt = g_cfg.photoFace2Amt = 100;
     // the face: CPlayer's virtual slot +68h, only when it holds the game's own function
     if (*(volatile u32*)(uintptr_t)kPlayerFaceSlot == kFaceWeightsFn &&
         SwapImport((void**)(uintptr_t)kPlayerFaceSlot, (void*)H_FaceWeights, (void**)&r_faceWeights))
