@@ -146,10 +146,6 @@ void FormatDoll(int v, wchar_t* out) {
     if (DollName(v, name)) wsprintfW(out, L"%d %S", v, name);
     else wsprintfW(out, L"%d", v);
 }
-int g_streamDo = 0;
-const int kStreamValues[1] = {1};
-const Tr kStreamNames[1] = {{L"Повернути", L"Bring back"}};
-void DoStreamRepair() { g_streamDo = 0; WorldStreamRepair(); PhotoThaw(30); }
 void FormatMove(int v, wchar_t* out) { wsprintfW(out, L"%s%d.%d", v < 0 ? L"-" : v > 0 ? L"+" : L"", (v < 0 ? -v : v) / 10, (v < 0 ? -v : v) % 10); }
 void FormatTenths(int v, wchar_t* out) { wsprintfW(out, L"%d.%d", v / 10, v % 10); }
 void FormatStops(int v, wchar_t* out) {
@@ -545,13 +541,6 @@ Item g_pageFixes[] = {
     {{L"Автоприціл у груди", L"Lock-on aims at the chest"}, &g_cfg.lockOnAim, kBool, 0, 1, 1, true, L"Fixes", L"LockOnAim", nullptr, nullptr,
      {L"Автоприціл гри цілиться в пояс ворога й опускає точку на десяту частину відстані: за кілька метрів це вже стегна чи коліна. З цим точка не опускається і стоїть трохи вище пояса (висота: LockOnHeight в UltimateFix.ini). Потрібен перезапуск.",
       L"The game's lock-on aims at the enemy's waist and lowers the point by a tenth of the distance: a few metres away that is the hips or the knees. With this the point does not drop and sits a little above the waist (height: LockOnHeight in UltimateFix.ini). Restart needed."}, NOTR},
-    {{L"Світ після сцен (зниклі будівлі)", L"The world after scenes (vanished buildings)"}, &g_cfg.sceneStreamFix, kBool, 0, 1, 1, false, L"Fixes", L"SceneStreamFix", nullptr, nullptr,
-     {L"Під час сцен гра щокадру вмикає й вимикає підвантаження відкритого світу, і що лишив останній кадр сцени, те й діє далі. Якщо останній момент сцени вимкнув його (а до того воно було ввімкнене), після сцени у Грінвейлі немає жодної будівлі. З цим мод у такому разі вмикає підвантаження назад. Змінюється одразу. У грі ще не перевірено.",
-      L"During scenes the game switches the streaming of the open world on and off every frame, and whatever the scene's last frame left stays. If the scene's last moment switched it off (after it had been on), no building of Greenvale is there after the scene. With this the mod switches it back on in that case. Changes at once. Not yet verified in the game."}, NOTR},
-    {{L"Повернути будівлі", L"Bring the buildings back"}, &g_streamDo, kInt, 0, 1, 1, false, nullptr, nullptr, DoStreamRepair, nullptr,
-     {L"Для гри, де будівлі вже зникли: вмикає підвантаження відкритого світу вручну. Натисніть надворі у вільній грі; якщо будівлі не з'явилися одразу, зайдіть у будь-які двері й вийдіть. Потім збережіться, щоб стан записався у збереження.",
-      L"For a game where the buildings are already gone: switches the streaming of the open world on by hand. Press it outdoors in free play; if the buildings do not appear at once, go through any door and back. Then save, so the state goes into the save."},
-     NOTR, kStreamValues, 1, kStreamNames, nullptr, false},
     {{L"Вода річки, як на Xbox 360", L"River water as on the Xbox 360"}, &g_cfg.riverWater, kInt, 0, 2, 1, false, L"Fixes", L"RiverWater", nullptr, kRiverTr,
      {L"На ПК річка пласка й синя: гра має для неї запис «_river» (відбиття, освітлені хвилі, відблиски), але не застосовує його. Мод дає річці значення з цього запису і збільшує карту хвиль у 16 разів, бо з масштабом гри хвилі дрібніші за піксель. Масштаб підібрано на око за знімками Xbox 360. «Лише в сцені біля річки»: вода виправлена тільки в сцені «Ласкаво просимо до Грінвейла» (приїзд Йорка), а всюди далі лишається як у порті. Змінюється одразу.",
       L"On PC the river is flat and blue: the game has a \"_river\" record for it (reflection, lit waves, sparkle) but never applies it. The mod gives the river the values of that record and makes the wave map 16 times larger, because at the game's scale the waves are smaller than a pixel. The scale was picked by eye against Xbox 360 pictures. \"Only in the river scene\": the water is fixed only in the scene \"Welcome to Greenvale\" (York's arrival) and stays as the port draws it everywhere else. Changes at once."}, NOTR},

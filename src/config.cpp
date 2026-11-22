@@ -59,9 +59,6 @@ static const char kDefaultIni[] =
     "\r\n"
     "\r\n"
     "[Fixes]\r\n"
-    "; 1 = when a scene ends with the open world's streaming switched off in its very last moment, it is switched back on\r\n"
-    "; (otherwise every building of Greenvale is missing after the scene). Changes at once.\r\n"
-    "SceneStreamFix=1\r\n"
     "; 1 = the river is drawn with the values of the game's own \"_river\" water record (reflection, lit waves, sparkle), which\r\n"
     "; the PC version never applies (flat blue water), and with a wave map 16 times larger. 0 = off, 1 = always,\r\n"
     "; 2 = only in the scene by the river, Welcome to Greenvale (the port's water everywhere else). Changes at once.\r\n"
@@ -842,7 +839,6 @@ void LoadConfig(const wchar_t* ini) {
     if (g_cfg.nearPlane > 200) g_cfg.nearPlane = 200;
     g_cfg.shadowBiasFix = GetPrivateProfileIntW(L"Graphics", L"ShadowBiasFix", 1, ini) ? 1 : 0;
     g_cfg.dollBodySet = 1;  // the residents' motions for the doll
-    g_cfg.sceneStreamFix = GetPrivateProfileIntW(L"Fixes", L"SceneStreamFix", 1, ini) ? 1 : 0;
     g_cfg.photoDollId = 6;  // Emily: the first pick of the photo page's character row (not saved)
     g_cfg.riverWater = (int)GetPrivateProfileIntW(L"Fixes", L"RiverWater", 2, ini);
     if (g_cfg.riverWater < 0 || g_cfg.riverWater > 2) g_cfg.riverWater = 2;

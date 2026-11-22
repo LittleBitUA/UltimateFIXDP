@@ -118,7 +118,6 @@ struct Config {
     int gameLook;            // a photo filter applied all the time (0 = none), [Graphics] GameLook
     int generateMips;        // build the mipmaps of world textures stored without them (far shimmer), at load
     int shadowBiasFix;       // more depth bias on the two far sun shadow cascades (crawling stripes far away)
-    int sceneStreamFix;      // the world's streaming bits put back when a scene's last moment cleared them (the vanished houses)
     int riverWater;          // the river gets the values of its own "_river" water record and a wave map 16 times larger (as on the Xbox)
     int farShadowFilter;     // the far sun shadow cascade gets the game's own 4-tap filter of the near two (patched shader copies)
     int gameFov;             // field of view in play, percent of the game's own (100 = unchanged), 70..150
@@ -467,8 +466,7 @@ bool DollStands();
 void LabSetGiveItem(int id, int count);
 int GiveItemNow(int id, int count);   // cheats.cpp: the game's give-item call, on the game thread; its answer (-3 = went to the storage)
 int LabRunEvent(u32 event);
-void WorldStreamFrame();              // world_stream.cpp, once a frame: the world's streaming bits across scenes
-void WorldStreamRepair();             // sets them by hand (the Fixes page)
+void WorldStreamFrame();              // world_stream.cpp, once a frame: the queue of world objects to build, watched
 void LabWatchFrame();                 // once a frame: which answer the running talk took
 struct Mission {  // one mission of the editor: UltimateFix\missions\missionN.ini
     int slot, exists, resident, placed, x, y, z, yaw, motionSet, motion, giveItem, giveCount;
