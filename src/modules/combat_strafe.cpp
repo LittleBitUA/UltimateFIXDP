@@ -573,27 +573,30 @@ void DollSpawn(u8* player) {
         (int)g_dollBase[2], (u32)(uintptr_t)obj, g_dollHandle, idle ? "played" : "not in memory");
 }
 
-// Photo mode: another playable character in York's place. The game has five player kinds with their own models and motion
+// Cheats: play as another of the game's playable characters. The game has five player kinds with their own models and motion
 // sets and switches between them itself with FUN_0044F360 (thiscall on CGame, kind 0..4, ret 4; script command 8Fh/1Eh):
 // CGame+8CA13h = the kind wanted, +8CA12h = the kind loaded; when they differ it reloads the player's model through the
-// costume function. The kind is part of the save, so York's own kind is put back as soon as the photo mode ends.
+// costume function. The row asks once (playAsOn) and then shows whoever the game plays, so a switch the story makes
+// itself is never undone. The kind is part of the save.
 constexpr u32 kPlayerKindFn = 0x44F360, kKindLoadedOff = 0x8CA12;
 typedef void(__attribute__((thiscall)) * PlayerKindFn)(void* game, int kind);
-int g_ownKind = -1;  // the kind the game had before the photo page changed it, -1 = untouched
-void PlayAsTick(u8* player, bool free, bool photo) {
+void PlayAsTick(u8* player, bool free) {
     static const u8 kFn[8] = {0xA1, 0xA4, 0x9B, 0x8A, 0x00, 0x53, 0x56, 0x6A};
     u8* game = *(u8* volatile*)(uintptr_t)kGameManagerPtrVa;
-    if (!game || !BytesMatch(kPlayerKindFn, kFn, 8)) return;
-    const int loaded = *(volatile signed char*)(game + kKindLoadedOff);
-    if (!photo) g_cfg.photoPlayAs = g_ownKind >= 0 ? g_ownKind : loaded;  // the row shows who the game plays
-    const int want = g_cfg.photoPlayAs;
-    if (want == loaded || want < 0 || want > 4) {
-        if (g_ownKind >= 0 && loaded == g_ownKind) g_ownKind = -1;
+    if (!game) return;
+    const int loaded = *(volatile signed char*)(game + kKindLoadedOff), wanted = *(volatile signed char*)(game + kKindLoadedOff + 1);
+    if (!g_cfg.playAsOn) {
+        g_cfg.photoPlayAs = loaded;  // the row shows who the game plays
         return;
     }
+    const int want = g_cfg.photoPlayAs;
+    if (want == loaded || want < 0 || want > 4 || !BytesMatch(kPlayerKindFn, kFn, 8)) {
+        g_cfg.playAsOn = 0;
+        return;
+    }
+    if (wanted == want) return;  // asked already, the game is loading the model
     if (!free || *(volatile u32*)player != kPlayerVtable) return;  // waits for free play on foot
-    if (g_ownKind < 0) g_ownKind = loaded;
-    Log("play as: player kind %d -> %d (the game's own kind %d)", loaded, want, g_ownKind);
+    Log("play as: player kind %d -> %d", loaded, want);
     ((PlayerKindFn)(uintptr_t)kPlayerKindFn)(game, want);
 }
 
@@ -605,7 +608,7 @@ void DollTick(void* playerPtr) {
     const bool photo = g_cfg.photoActive || g_cfg.photoFreeze;
     if (g_doll && (scene || (wasPhoto && !photo))) DollRemove(scene ? "a scene began" : "the photo mode ended");
     wasPhoto = photo;
-    PlayAsTick(player, free, photo);
+    PlayAsTick(player, free);
     const int req = g_dollRequest;
     if (req) {
         g_dollRequest = 0;
