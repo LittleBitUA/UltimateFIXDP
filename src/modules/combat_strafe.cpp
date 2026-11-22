@@ -251,7 +251,10 @@ void LabTick(void* player) {
     // Numpad 7 = the smallest event (a fade), Numpad 8 = a line in the game's dialogue window with a yes / no choice,
     // Numpad 9 = a mission banner with its sound. 8 and 9 need the lab texts in the game's messages.
     static const int kKeys[3] = {VK_NUMPAD7, VK_NUMPAD8, VK_NUMPAD9};
-    static const u32 kEvents[3] = {kLabEvMin, kLabEvTalk, kLabEvBanner};
+    // The dialogue is the event without the talk wrappers of COMMON 0_0003 (events 6 and 74): the wrapper looks up the talk
+    // partner (FUN_004AC110 on the NPC manager, result to CEvent+3060h) and reads it without a check, so with no resident
+    // to talk to it crashed at 004BA360 (0.7.12-test1). The wrapped event (kLabEvTalk) waits for a spawned partner.
+    static const u32 kEvents[3] = {kLabEvMin, kLabEvChoice, kLabEvBanner};
     const bool ours = pid == GetCurrentProcessId() && !ui::IsOpen();
     int pick = -1;
     bool down = false;
