@@ -784,12 +784,23 @@ void PartnerTick(u8* player, u8* doll) {
         void* m = *(void* volatile*)(player + 0x18C);
         const int kind = v < 0.5f ? 0 : v < 9.f ? 1 : v < 40.f ? 2 : -1;  // faster than a run is a teleport
         const u32 state = *(volatile u32*)(player + 0x654);
-        if (kind >= 0 && m && state != 0x87 && state != 0x88 && g_partnerMotion[kind] != m) {
-            if (!g_partnerMotion[kind]) Log("partner: learnt York's %s motion (%08X, York at %d thousandths of a unit a second)",
-                                            kind == 0 ? "standing" : kind == 1 ? "walking" : "running", (u32)(uintptr_t)m, (int)(v * 1000.f));
-            g_partnerMotion[kind] = m;
+        // Each of the three is learnt once, from a motion York kept for half a second at that speed. (0.7.12 took whatever
+        // York had every update: his turns, aiming and door motions at rest became the partner's "standing", so the
+        // partner seemed to answer the keyboard and its motions fell apart.)
+        static void* cand[3];
+        static float held[3];
+        if (kind >= 0 && m && state != 0x87 && state != 0x88 && !g_partnerMotion[kind]) {
+            if (cand[kind] != m) {
+                cand[kind] = m;
+                held[kind] = 0.f;
+            } else if ((held[kind] += dt) >= 0.5f) {
+                g_partnerMotion[kind] = m;
+                Log("partner: learnt York's %s motion (%08X, York at %d thousandths of a unit a second)",
+                    kind == 0 ? "standing" : kind == 1 ? "walking" : "running", (u32)(uintptr_t)m, (int)(v * 1000.f));
+            }
         }
     }
+    const float yorkWas[3] = {g_yorkLast[0], g_yorkLast[1], g_yorkLast[2]};
     for (int i = 0; i < 3; ++i) g_yorkLast[i] = yp[i];
     // the pad
     float sx = 0.f, sy = 0.f;
@@ -824,7 +835,16 @@ void PartnerTick(u8* player, u8* doll) {
     // York's height, eased; Y / Triangle (WinMM button 4) or a long way off: back next to York
     g_dollBase[1] += (yp[1] - g_dollBase[1]) * (dt > 0.f ? (dt * 6.f > 1.f ? 1.f : dt * 6.f) : 0.f);
     const float ox = g_dollBase[0] - yp[0], oz = g_dollBase[2] - yp[2];
-    if ((buttons & 8u) || ox * ox + oz * oz > 400.f * 400.f) {
+    // York went somewhere at once (another location: the zone number at CGame+834FE0h changed; or a jump of more than 30
+    // units in one update: a door, a car, a script): the partner comes along
+    static u32 lastZone = 0xFFFFFFFFu;
+    const u8* game = *(const u8* volatile*)(uintptr_t)kGameManagerPtrVa;
+    const u32 zone = game ? *(volatile u32*)(game + 0x834FE0) : 0;
+    const float jx = yp[0] - yorkWas[0], jz = yp[2] - yorkWas[2];
+    const bool moved = zone != lastZone || jx * jx + jz * jz > 30.f * 30.f;
+    if (moved && lastZone != 0xFFFFFFFFu) Log("partner: York went elsewhere (zone %u -> %u), the partner comes along", lastZone, zone);
+    lastZone = zone;
+    if (moved || (buttons & 8u) || ox * ox + oz * oz > 400.f * 400.f) {
         const float yaw = *(volatile float*)(player + 0x7C);
         g_dollBase[0] = yp[0] + Cosf(yaw) * 6.f;
         g_dollBase[1] = yp[1];

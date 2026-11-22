@@ -4008,8 +4008,9 @@ void StartHint(void* device) {
     // With a pad in use (the game read one in the last 3 seconds) the card also names the pad's pair that opens the menu.
     const DWORD seen = g_padSeenAt;
     const bool pad = g_cfg.menuPadControl && r_joyGetPosEx && seen && now - seen < 3000;
-    if (pad) wsprintfW(settings, en ? L"F10 or %s: settings" : L"F10 або %s: налаштування", PadWord(3));
-    else lstrcpyW(settings, en ? L"F10 settings" : L"F10 налаштування");
+    // (the second line of the update card has no room for the pad's pair as well: with a pad in use it was cut with "…",
+    // and it changed length whenever the pad went quiet for 3 seconds; the pad's pair stays on the plain card below)
+    lstrcpyW(settings, en ? L"F10 settings" : L"F10 налаштування");
     if (st == 1) {
         wsprintfW(line, en ? L"Version %S is out: press F9 to update" : L"Вийшла версія %S: натисніть F9, щоб оновити", UpdateVersion());
         wsprintfW(sub, en ? L"the game restarts by itself  ·  %s" : L"гра перезапуститься сама  ·  %s", settings);
