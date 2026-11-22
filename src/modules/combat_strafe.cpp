@@ -97,6 +97,30 @@ void __attribute__((thiscall)) H_FaceWeights(void* actor, float* w, int n) {
     }
 }
 
+// While the photo mode holds a motion on York, the game's own requests to play another are left out. The log of 0.7.10-test5
+// showed the idle state putting its motion back every frame (100 times in 0.6 s) and nothing of ours on the screen. The two
+// "play" slots of the player's virtual table (+50h by resource id, +54h by pointer; both thiscall with 5 stack words, ret 14h)
+// are wrapped; ours goes straight to the engine (FUN_006C0480) and is not affected.
+constexpr u32 kPlayerPlayByIdSlot = 0x77684C, kPlayerPlayByPtrSlot = 0x776850, kPlayByIdFn = 0x417650, kPlayByPtrFn = 0x4174C0;
+typedef u32(__attribute__((thiscall)) * PlaySlotFn)(void* actor, u32 a, u32 b, u32 c, u32 d, u32 e);
+PlaySlotFn r_playById = nullptr, r_playByPtr = nullptr;
+int g_photoBlocked = 0;
+bool PhotoHoldsMotion(void* actor) { return g_photoMotion && (u32)(uintptr_t)actor == g_playerObject; }
+u32 __attribute__((thiscall)) H_PlayById(void* actor, u32 a, u32 b, u32 c, u32 d, u32 e) {
+    if (PhotoHoldsMotion(actor)) {
+        ++g_photoBlocked;
+        return 0;
+    }
+    return r_playById(actor, a, b, c, d, e);
+}
+u32 __attribute__((thiscall)) H_PlayByPtr(void* actor, u32 a, u32 b, u32 c, u32 d, u32 e) {
+    if (PhotoHoldsMotion(actor)) {
+        ++g_photoBlocked;
+        return 0;
+    }
+    return r_playByPtr(actor, a, b, c, d, e);
+}
+
 void PhotoAnimTick(void* player) {
     u8* p = (u8*)player;
     if (*(volatile u32*)p != kPlayerVtable) return;  // York, Zach and the others of the player class only
@@ -107,8 +131,9 @@ void PhotoAnimTick(void* player) {
             g_photoMotionKey = -1;
             *(volatile float*)(p + 0x1F8) = 1.f;
             g_poseRequest = 1;  // state 0, calm: PoseTick runs right after this in the next update
-            Log("photo motion: off, York's own motions again (%d times the game had replaced ours)", g_photoReplays);
+            Log("photo motion: off, York's own motions again (%d of the game's own motions left out, %d put back over one)", g_photoBlocked, g_photoReplays);
             g_photoReplays = 0;
+            g_photoBlocked = 0;
         }
         return;
     }
@@ -292,6 +317,12 @@ bool InstallCombatStrafe() {
         Log("photo face: the player's face weights hooked (expressions in the photo mode)");
     else
         Log("photo face: the player's virtual table differs from DP.exe 1.01b, no expressions");
+    if (*(volatile u32*)(uintptr_t)kPlayerPlayByIdSlot == kPlayByIdFn && *(volatile u32*)(uintptr_t)kPlayerPlayByPtrSlot == kPlayByPtrFn &&
+        SwapImport((void**)(uintptr_t)kPlayerPlayByIdSlot, (void*)H_PlayById, (void**)&r_playById) &&
+        SwapImport((void**)(uintptr_t)kPlayerPlayByPtrSlot, (void*)H_PlayByPtr, (void**)&r_playByPtr))
+        Log("photo motion: the player's play slots wrapped (the game's own motions wait while the photo mode holds one)");
+    else
+        Log("photo motion: the player's play slots differ from DP.exe 1.01b: the game may put its own motion back");
     u8* stub = AllocStub(48);
     if (!stub) return false;
     BuildStrafeBridge(stub, (u32)(uintptr_t)stub, (u32)(uintptr_t)StrafeWorker, kStrafeReturn);
