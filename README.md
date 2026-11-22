@@ -26,8 +26,8 @@ _Універсальний фікс для_ **Deadly Premonition: The Director'
 One DLL in the game folder instead of DPfix, a stability fix, a map fix and a crash fix.
 No installer: press **F10** in game and everything is there. The mod also gives the game 4 GB of memory by itself (from the second start).
 
-> **Version 0.7.11.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
-> <br>New in 0.7.11: the river fix works by default only in its scene — see [What's new](#whats-new-in-0711). In 0.7.10: **the river has water again** (ripples, glints and reflection as on the Xbox 360), **York's face in the photo mode** — see [What's new](#whats-new-in-0710). In 0.7.9: **a new Mods page** with each mod's picture and description, **the F10 menu on a gamepad**, no stutter without a pad, adaptive sharpening (AMD RCAS) — see [What's new](#whats-new-in-079). In 0.7.8: **a redesigned F10 menu** (crisp text, the website's palette, quiet motion, changed settings marked) and **five graphics options** (filters under the interface, smoother far shadows, smooth glow, dither against banding, the game's own edge filter) — see [What's new](#whats-new-in-078). In 0.7.7: **an Xbox pad without Steam Input**. In 0.7.6: **PlayStation icons on a DualSense (Edge too)**. In 0.7.5: texture replacements in mod folders work. In 0.7.4: **York can fly** (cheats, F3), the lock-on aims at the chest instead of the hips. In 0.7.3: a mod's name, author and version in a plain `mod.txt`. In 0.7.2: **updates itself** (F9 on the start card), a much smaller archive — see [What's new](#whats-new-in-072). In 0.7.1: fixes for the **thread races** behind the crashes and hangs on entering buildings, the **QTE at high FPS**, **4 GB of memory by itself**, checked and compressed save backups, the game's own Xbox icons — see [What's new](#whats-new-in-071).
+> **Version 0.7.12.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
+> <br>New in 0.7.12: **a posed character next to York in the photo mode**, **play as Emily or Zach**, a **spawner** for cars and items, a first **mission editor** — see [What's new](#whats-new-in-0712). In 0.7.11: the river fix works by default only in its scene — see [What's new](#whats-new-in-0711). In 0.7.10: **the river has water again** (ripples, glints and reflection as on the Xbox 360), **York's face in the photo mode** — see [What's new](#whats-new-in-0710). In 0.7.9: **a new Mods page** with each mod's picture and description, **the F10 menu on a gamepad**, no stutter without a pad, adaptive sharpening (AMD RCAS) — see [What's new](#whats-new-in-079). In 0.7.8: **a redesigned F10 menu** (crisp text, the website's palette, quiet motion, changed settings marked) and **five graphics options** (filters under the interface, smoother far shadows, smooth glow, dither against banding, the game's own edge filter) — see [What's new](#whats-new-in-078). In 0.7.7: **an Xbox pad without Steam Input**. In 0.7.6: **PlayStation icons on a DualSense (Edge too)**. In 0.7.5: texture replacements in mod folders work. In 0.7.4: **York can fly** (cheats, F3), the lock-on aims at the chest instead of the hips. In 0.7.3: a mod's name, author and version in a plain `mod.txt`. In 0.7.2: **updates itself** (F9 on the start card), a much smaller archive — see [What's new](#whats-new-in-072). In 0.7.1: fixes for the **thread races** behind the crashes and hangs on entering buildings, the **QTE at high FPS**, **4 GB of memory by itself**, checked and compressed save backups, the game's own Xbox icons — see [What's new](#whats-new-in-071).
 
 ### Features
 
@@ -130,6 +130,22 @@ port with the Xbox 360 original:
   default since 0.7.11); switched in the F10 menu at once.
   Checked in the game at the river; other water (the lake, puddles,
   interiors) has not been compared yet.
+
+### What's new in 0.7.12
+
+<img src="docs/screenshots/photo-emily.jpg" alt="Emily, posed and photographed in the mod's photo mode"/>
+
+**Photo mode: a whole scene, not only York.** The picture above was made entirely in the mod's photo mode.
+- **A character next to York.** Any of Greenvale's 49 residents can be put in front of York as a still figure for the picture: no behaviour, no schedule, never in a save. It has its own rows to move it left / right, back / forward, lower / higher and to turn it, its own body motion (set, number, frame, playback), and the page's face rows work on it too ("The face of: York / The character"). One stands at a time; it goes when the photo mode ends or a cutscene begins.
+- **York placed by hand.** Four rows move York from where he stood (sideways, forward, up) and turn him; zeros put him back on the ground.
+- **One row of suits.** All the game's suits in one row of 30 instead of a set and a suit.
+
+**Cheats: play as, spawner.**
+- **Play as** another of the game's own playable characters, with its model and motions: York, Emily, York as a child, Zach (and one more the game calls CBS02). It works in free play, no photo mode needed. The game writes who you play into the save: put your own character back before saving.
+- **Spawner.** Any of the game's 16 cars by name, put in front of York (outdoors in Greenvale); any item by number and name, given with the game's own call.
+- **A partner on the gamepad** (_experimental, not yet checked in the game_): a second character walks by the gamepad's left stick while York keeps the keyboard and mouse. A first try at local co-op: the partner is a figure that enemies do not see, it does not fight, and it keeps York's height instead of finding the ground.
+
+**Mission editor, a first version** (_experimental_; needs `[Debug] MissionLab=1` in `UltimateFix.ini`). F10 → Mission editor: a mission is one character, a talk with a choice of two answers and an item for the first one, and a start banner. Its texts live in `UltimateFix\missions\missionN.ini` (the editor opens it in Notepad), the rest is picked in the menu; "Run the mission now" puts the character, shows the banner and waits for you to walk up and press E. The talk runs in the game's own dialogue mode, with the mod's texts added to the game's messages. Checked in the game so far: the banner, the character, the talk and the choice. Not yet: the item, and what the talk looks like in every place.
 
 ### What's new in 0.7.11
 
@@ -418,8 +434,8 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 Одна DLL у теці гри замість DPfix, фіксу стабільності, фіксу мапи й фіксу вильотів.
 Без інсталятора: натисніть **F10** у грі, і все там. Мод також сам дає грі 4 ГБ пам'яті (з другого запуску).
 
-> **Версія 0.7.11.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
-> <br>Нове в 0.7.11: виправлення річки типово діє лише у своїй сцені — див. [Що нового](#що-нового-в-0711). У 0.7.10: **у річці знову є вода** (брижі, відблиски й відбиття, як на Xbox 360), **міміка Йорка у фоторежимі** — див. [Що нового](#що-нового-в-0710). У 0.7.9: **нова сторінка модів** з картинкою й описом кожного мода, **меню F10 з ґеймпада**, без ривків без пада, адаптивна різкість (AMD RCAS) — див. [Що нового](#що-нового-в-079). У 0.7.8: **оновлене меню F10** (чіткий текст, палітра сайту, тихий рух, позначки змінених налаштувань) і **п'ять графічних опцій** (фільтри під інтерфейсом, згладжені далекі тіні, плавне світіння, дизеринг проти смуг, власний фільтр країв гри) — див. [Що нового](#що-нового-в-078). У 0.7.7: **Xbox-пад без Steam Input**. У 0.7.6: **іконки PlayStation на DualSense (і Edge)**. У 0.7.5: заміни текстур у теках модів працюють. У 0.7.4: **Йорк літає** (читкоди, F3), автоприціл цілиться в груди, а не в стегна. У 0.7.3: назва, автор і версія мода у звичайному `mod.txt`. У 0.7.2: **оновлюється сам** (F9 на стартовій плашці), значно менший архів — див. [Що нового](#що-нового-в-072). У 0.7.1: виправлено **гонки потоків**, через які гра падала й зависала при вході в будівлі, **QTE на високому FPS**, **4 ГБ пам'яті самі собою**, перевірені й стиснені копії збережень, оригінальні іконки Xbox — див. [Що нового](#що-нового-в-071).
+> **Версія 0.7.12.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
+> <br>Нове в 0.7.12: **персонаж поруч із Йорком у фоторежимі**, **гра за Емілі чи Зака**, **спавнер** машин і предметів, перший **редактор місій** — див. [Що нового](#що-нового-в-0712). У 0.7.11: виправлення річки типово діє лише у своїй сцені — див. [Що нового](#що-нового-в-0711). У 0.7.10: **у річці знову є вода** (брижі, відблиски й відбиття, як на Xbox 360), **міміка Йорка у фоторежимі** — див. [Що нового](#що-нового-в-0710). У 0.7.9: **нова сторінка модів** з картинкою й описом кожного мода, **меню F10 з ґеймпада**, без ривків без пада, адаптивна різкість (AMD RCAS) — див. [Що нового](#що-нового-в-079). У 0.7.8: **оновлене меню F10** (чіткий текст, палітра сайту, тихий рух, позначки змінених налаштувань) і **п'ять графічних опцій** (фільтри під інтерфейсом, згладжені далекі тіні, плавне світіння, дизеринг проти смуг, власний фільтр країв гри) — див. [Що нового](#що-нового-в-078). У 0.7.7: **Xbox-пад без Steam Input**. У 0.7.6: **іконки PlayStation на DualSense (і Edge)**. У 0.7.5: заміни текстур у теках модів працюють. У 0.7.4: **Йорк літає** (читкоди, F3), автоприціл цілиться в груди, а не в стегна. У 0.7.3: назва, автор і версія мода у звичайному `mod.txt`. У 0.7.2: **оновлюється сам** (F9 на стартовій плашці), значно менший архів — див. [Що нового](#що-нового-в-072). У 0.7.1: виправлено **гонки потоків**, через які гра падала й зависала при вході в будівлі, **QTE на високому FPS**, **4 ГБ пам'яті самі собою**, перевірені й стиснені копії збережень, оригінальні іконки Xbox — див. [Що нового](#що-нового-в-071).
 
 ### Можливості
 
@@ -521,6 +537,22 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
   від 0.7.11); перемикається в меню F10 одразу.
   Перевірено у грі біля річки; іншу воду (озеро, калюжі, приміщення) ще не
   порівнювали.
+
+### Що нового в 0.7.12
+
+<img src="docs/screenshots/photo-emily.jpg" alt="Emily, posed and photographed in the mod's photo mode"/>
+
+**Фоторежим: ціла сцена, а не лише Йорк.** Знімок вище повністю зроблено у фоторежимі мода.
+- **Персонаж поруч із Йорком.** Будь-кого з 49 жителів Грінвейла можна поставити перед Йорком як нерухому фігуру для знімка: без поведінки, без розкладу, у збереження не потрапляє. Має власні рядки пересування (ліворуч / праворуч, назад / вперед, нижче / вище) і повороту, власну анімацію тіла (набір, номер, кадр, програвання), і рядки міміки сторінки теж діють на нього («Міміка для: Йорк / Персонаж»). Одночасно стоїть один; зникає, коли фоторежим закінчується або починається катсцена.
+- **Йорк, поставлений вручну.** Чотири рядки зсувають Йорка від місця, де він стояв (убік, уперед, угору), і повертають його; нулі ставлять його назад на землю.
+- **Один рядок костюмів.** Усі костюми гри в одному рядку на 30 замість набору й костюма.
+
+**Читкоди: «Грати за», спавнер.**
+- **Грати за** іншого персонажа, за якого гра сама дає грати, з його моделлю й анімаціями: Йорк, Емілі, Йорк у дитинстві, Зак (і ще один, якого гра зве CBS02). Працює у вільній грі, фоторежим не потрібен. Гра записує у збереження, ким ви граєте: перед збереженням поверніть свого персонажа.
+- **Спавнер.** Будь-яка з 16 машин гри за назвою, перед Йорком (надворі у Грінвейлі); будь-який предмет за номером і назвою, виданий власним викликом гри.
+- **Напарник із ґеймпада** (_експериментально, у грі ще не перевірено_): другий персонаж ходить за лівим стіком ґеймпада, а Йорк лишається на клавіатурі й миші. Перша проба локального кооперативу: напарник — фігура, якої вороги не бачать, він не б'ється і тримається висоти Йорка замість шукати землю.
+
+**Редактор місій, перша версія** (_експериментально_; потрібен `[Debug] MissionLab=1` в `UltimateFix.ini`). F10 → Редактор місій: місія — це один персонаж, розмова з вибором із двох відповідей і предметом за першу, та банер початку. Тексти лежать у `UltimateFix\missions\missionN.ini` (редактор відкриває його в Блокноті), решта вибирається в меню; «Запустити місію зараз» ставить персонажа, показує банер і чекає, поки ви підійдете й натиснете E. Розмова йде у власному режимі діалогу гри, а тексти мод додає до повідомлень гри. У грі вже перевірено: банер, персонаж, розмова й вибір. Ще ні: предмет і те, як розмова виглядає в кожному місці.
 
 ### Що нового в 0.7.11
 
