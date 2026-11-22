@@ -713,6 +713,37 @@ const int kApplyValues[1] = {1};
 const Tr kApplyNames[1] = {{L"Застосувати", L"Apply"}};
 void ApplyCostumeNow();
 void ApplyPoseNow();
+// ---- York's face on the photo page: one named pick per part of the face, each with its strength, mixed together ----
+// The channels were named from York's pose library (CHARA/11_FC/CPL01.XFE: which face bones each of its 60 poses moves). The
+// picks are turned into the 58 channel weights that combat_strafe.cpp adds to the face each frame.
+int g_faceSel[4] = {0, 0, 0, 0}, g_faceAmt[4] = {100, 100, 100, 100}, g_faceNose = 0;
+const int kFaceCh0[] = {0, 42, 21, 22, 28, 30, 29, 40, 44, 45, 24, 39, 34, 23, 35, 31, 36, 37, 32, 33, 48};
+const Tr kFaceTr0[] = {{L"як у грі", L"the game's"}, {L"Легка усмішка", L"Slight smile"}, {L"Усмішка (закрита)", L"Smile, closed"}, {L"Широка усмішка (з зубами)", L"Broad smile"}, {L"Усмішка з примруженням", L"Grin with a squint"}, {L"Сміх", L"Laugh"}, {L"Усмішка лівим кутиком", L"Smirk left"}, {L"Самовпевнена усмішка", L"Cocky smirk right"}, {L"Легка зацікавленість", L"Mild attentive"}, {L"М'який погляд", L"Soft look"}, {L"Сум", L"Sad"}, {L"Ридання", L"Sob"}, {L"Біль / плач", L"Pain / crying"}, {L"Страх / розпач", L"Fear / distress"}, {L"Переляканий оскал", L"Scared grimace"}, {L"Подив (рот «о»)", L"Surprise (mouth in an o)"}, {L"Огида", L"Disgust"}, {L"Гримаса праворуч", L"Wince right"}, {L"Гнівний крик", L"Angry shout"}, {L"Оскал люті", L"Snarl"}, {L"Крик / ревіння", L"Scream / roar"}};
+const int kFaceCh1[] = {0, 16, 18, 17, 19, 20, 43};
+const Tr kFaceTr1[] = {{L"як у грі", L"the game's"}, {L"Внутрішні кінці брів вгору", L"Inner brows up"}, {L"Сумні брови (будиночком)", L"Sad brows"}, {L"Насуплені брови", L"Frown (both brows)"}, {L"Насуплена права брова", L"Frown right brow"}, {L"Насуплена ліва брова", L"Frown left brow"}, {L"Скептичні брови", L"Skeptical brows"}};
+const int kFaceCh2[] = {0, 41, 2, 3, 12, 13, 14};
+const Tr kFaceTr2[] = {{L"як у грі", L"the game's"}, {L"Заплющені очі", L"Eyes closed"}, {L"Моргання правим оком", L"Blink right"}, {L"Моргання лівим оком", L"Blink left"}, {L"Широко розплющені очі", L"Eyes wide"}, {L"Нижня повіка права вгору", L"Lower lid right up"}, {L"Нижня повіка ліва вгору", L"Lower lid left up"}};
+const int kFaceCh3[] = {0, 4, 5, 6, 7, 8, 9, 25, 26, 27, 38, 10, 11};
+const Tr kFaceTr3[] = {{L"як у грі", L"the game's"}, {L"Фонема А (відкритий рот)", L"Viseme A (jaw open)"}, {L"Фонема Е (кутики назад)", L"Viseme E (corners back)"}, {L"Фонема О (округлений рот)", L"Viseme O (round)"}, {L"Фонема У (губи трубочкою)", L"Viseme U (pucker)"}, {L"Фонема І (розтягнуті губи)", L"Viseme I (stretched)"}, {L"Стиснуті губи (М/Б/П)", L"Lips pressed (M/B/P)"}, {L"Надуті губи", L"Pout"}, {L"Розтулені губи, зуби", L"Lips parted, teeth"}, {L"Губи закочені всередину", L"Lips rolled inward"}, {L"Вишкірені зуби", L"Teeth bared"}, {L"Вищир праворуч", L"Sneer right"}, {L"Вищир ліворуч", L"Sneer left"}};
+void FaceCompose() {
+    const int* const tables[4] = {kFaceCh0, kFaceCh1, kFaceCh2, kFaceCh3};
+    bool any = g_faceNose != 0;
+    for (int& w : g_cfg.photoFaceW) w = 0;
+    for (int g = 0; g < 4; ++g) {
+        const int ch = tables[g][g_faceSel[g]];
+        if (!ch) continue;
+        g_cfg.photoFaceW[ch - 2] += g_faceAmt[g];
+        any = true;
+    }
+    g_cfg.photoFaceW[15 - 2] += g_faceNose;  // channel 15: the nose wrinkle
+    g_cfg.photoFaceOn = any;
+    PhotoThaw(6);
+}
+void FaceForget() {  // the photo mode ended: the rows show the game's own face again
+    for (int& v : g_faceSel) v = 0;
+    g_faceNose = 0;
+}
+void FormatFace(int v, wchar_t* out) { wsprintfW(out, L"%d %%", v); }
 const Tr kBodySetTr[4] = {{L"Йорк", L"York"}, {L"Жителі (день)", L"Residents (day)"}, {L"Катсцени", L"Cutscenes"}, {L"Вбивця в дощовику", L"Raincoat Killer"}};
 // A change of the motion or of the face has to be worked out by the game: a few frames of running time, as for a pose
 void PhotoAnimChanged() { PhotoThaw(6); }
@@ -878,8 +909,32 @@ Item g_pagePhoto[] = {
      {L"Який момент анімації тримати: 0 початок, 100 кінець. Діє, поки «Програвати анімацію» вимкнено.", L"Which moment of the motion to hold: 0 the start, 100 the end. Used while \"Play the motion\" is off."}, NOTR},
     {{L"Програвати анімацію", L"Play the motion"}, &g_cfg.photoPlay, kBool, 0, 1, 1, false, nullptr, nullptr, PhotoAnimChanged, nullptr,
      {L"Увімкнено: анімація йде сама (вимкніть «Зупинити час», інакше вона стоїть). Вимкнено: тримається кадр із повзунка вище.", L"On: the motion runs by itself (turn \"Freeze time\" off or it stands). Off: the frame of the slider above is held."}, NOTR},
-    {{L"Міміку редагує розділ «Міміка»", L"The face is edited in the \"Face\" section"}, &g_cfg.photoFaceOn, kBool, 0, 1, 1, false, nullptr, nullptr, PhotoAnimChanged, nullptr,
-     {L"Вмикає власну міміку Йорка. Самі повзунки (брови, повіки, губи, щелепа, погляд) у розділі «Міміка» ліворуч.", L"Turns York's own face on. The sliders (brows, lids, lips, jaw, gaze) are in the \"Face\" section on the left."}, NOTR},
+    {{L"Емоція", L"Emotion"}, &g_faceSel[0], kInt, 0, 20, 1, false, nullptr, nullptr, FaceCompose, kFaceTr0,
+     {L"Вираз усього обличчя: усмішка, сум, сміх, страх, огида, крик. Окремо від анімації тіла. Нижче можна додати брови, повіки й рот поверх.", L"The expression of the whole face: smile, sadness, laughter, fear, disgust, shout. Apart from the body motion. Brows, lids and mouth below can be added over it."}, {L"Міміка Йорка (експериментально)", L"York's face (experimental)"}},
+    {{L"Емоція: сила", L"Emotion: strength"}, &g_faceAmt[0], kInt, -100, 150, 5, false, nullptr, nullptr, FaceCompose, nullptr,
+     {L"100 = повний рух, як у грі; більше перебільшує, від'ємне рухає у зворотний бік.", L"100 = the full movement as the game uses it; more exaggerates, a negative value moves the other way."},
+     NOTR, nullptr, 0, nullptr, FormatFace},
+    {{L"Брови", L"Brows"}, &g_faceSel[1], kInt, 0, 6, 1, false, nullptr, nullptr, FaceCompose, kFaceTr1,
+     {L"Брови поверх емоції: підняті, сумні, насуплені, скептичні.", L"Brows over the emotion: raised, sad, frowning, skeptical."}, NOTR},
+    {{L"Брови: сила", L"Brows: strength"}, &g_faceAmt[1], kInt, -100, 150, 5, false, nullptr, nullptr, FaceCompose, nullptr,
+     {L"100 = повний рух, як у грі; більше перебільшує, від'ємне рухає у зворотний бік.", L"100 = the full movement as the game uses it; more exaggerates, a negative value moves the other way."},
+     NOTR, nullptr, 0, nullptr, FormatFace},
+    {{L"Повіки", L"Lids"}, &g_faceSel[2], kInt, 0, 6, 1, false, nullptr, nullptr, FaceCompose, kFaceTr2,
+     {L"Повіки: заплющені очі, моргання одним оком (підморгування), широко розплющені, примруження.", L"Lids: eyes closed, one eye shut (a wink), eyes wide, a squint."}, NOTR},
+    {{L"Повіки: сила", L"Lids: strength"}, &g_faceAmt[2], kInt, -100, 150, 5, false, nullptr, nullptr, FaceCompose, nullptr,
+     {L"100 = повний рух, як у грі; більше перебільшує, від'ємне рухає у зворотний бік.", L"100 = the full movement as the game uses it; more exaggerates, a negative value moves the other way."},
+     NOTR, nullptr, 0, nullptr, FormatFace},
+    {{L"Рот", L"Mouth"}, &g_faceSel[3], kInt, 0, 12, 1, false, nullptr, nullptr, FaceCompose, kFaceTr3,
+     {L"Форма рота: фонеми А Е О У І, стиснуті чи надуті губи, вишкірені зуби, вищир.", L"The shape of the mouth: visemes A E O U I, pressed or pouting lips, bared teeth, a sneer."}, NOTR},
+    {{L"Рот: сила", L"Mouth: strength"}, &g_faceAmt[3], kInt, -100, 150, 5, false, nullptr, nullptr, FaceCompose, nullptr,
+     {L"100 = повний рух, як у грі; більше перебільшує, від'ємне рухає у зворотний бік.", L"100 = the full movement as the game uses it; more exaggerates, a negative value moves the other way."},
+     NOTR, nullptr, 0, nullptr, FormatFace},
+    {{L"Зморщений ніс", L"Nose wrinkle"}, &g_faceNose, kInt, 0, 150, 5, false, nullptr, nullptr, FaceCompose, nullptr,
+     {L"Додає зморщений ніс до будь-якого виразу.", L"Adds a wrinkled nose to any expression."}, NOTR, nullptr, 0, nullptr, FormatFace},
+    {{L"Поверх міміки гри", L"Over the game's face"}, &g_cfg.photoFaceAdd, kBool, 0, 1, 1, false, nullptr, nullptr, PhotoAnimChanged, nullptr,
+     {L"Вимкнено: обличчя лише з рядків вище. Увімкнено: вони додаються до того, що гра робить сама (розмова, біль).", L"Off: the face comes from the rows above alone. On: they are added to what the game does itself (talking, pain)."}, NOTR},
+    {{L"Без моргання", L"No blinking"}, &g_cfg.photoNoBlink, kBool, 0, 1, 1, false, nullptr, nullptr, PhotoAnimChanged, nullptr,
+     {L"Йорк не моргає: для знімка з відкритими очима.", L"York does not blink: for a picture with open eyes."}, NOTR},
 };
 
 // ---- Cheats and world control. Each button is a one-shot action: the pick variable is put back to 0 at once.
@@ -965,138 +1020,6 @@ Item g_pageDiag[] = {
      NOTR, kOneValue, 1, kWriteNames, nullptr, false},
 };
 
-// ---- The "Face" section: the channels of York's face as sliders (combat_strafe.cpp adds them to the face weights) ----
-// The channels were named from York's pose library (CHARA/11_FC/CPL01.XFE: 31 face bones, 60 poses; which bones each pose
-// moves and where). The names are a reading of that data, not the game's own. Channels 46, 47 and 49..59 hold nothing.
-struct FaceRow {
-    int channel;  // index into the weights (photoFaceW[channel - 2])
-    const wchar_t* uk;
-    const wchar_t* en;
-    const wchar_t* groupUk;  // a heading starts here
-    const wchar_t* groupEn;
-};
-const FaceRow kFaceRowsTable[] = {
-    {42, L"Легка усмішка", L"Slight smile", L"Емоції цілком", L"Whole emotions"},
-    {21, L"Усмішка (закрита)", L"Smile, closed", nullptr, nullptr},
-    {22, L"Широка усмішка (з зубами)", L"Broad smile", nullptr, nullptr},
-    {28, L"Усмішка з примруженням", L"Grin with a squint", nullptr, nullptr},
-    {30, L"Сміх", L"Laugh", nullptr, nullptr},
-    {29, L"Усмішка лівим кутиком", L"Smirk left", nullptr, nullptr},
-    {40, L"Самовпевнена усмішка", L"Cocky smirk right", nullptr, nullptr},
-    {44, L"Легка зацікавленість", L"Mild attentive", nullptr, nullptr},
-    {45, L"М'який погляд", L"Soft look", nullptr, nullptr},
-    {24, L"Сум", L"Sad", nullptr, nullptr},
-    {39, L"Ридання", L"Sob", nullptr, nullptr},
-    {34, L"Біль / плач", L"Pain / crying", nullptr, nullptr},
-    {23, L"Страх / розпач", L"Fear / distress", nullptr, nullptr},
-    {35, L"Переляканий оскал", L"Scared grimace", nullptr, nullptr},
-    {31, L"Подив (рот «о»)", L"Surprise (mouth in an o)", nullptr, nullptr},
-    {36, L"Огида", L"Disgust", nullptr, nullptr},
-    {37, L"Гримаса праворуч", L"Wince right", nullptr, nullptr},
-    {32, L"Гнівний крик", L"Angry shout", nullptr, nullptr},
-    {33, L"Оскал люті", L"Snarl", nullptr, nullptr},
-    {48, L"Крик / ревіння", L"Scream / roar", nullptr, nullptr},
-    {16, L"Внутрішні кінці брів вгору", L"Inner brows up", L"Брови", L"Brows"},
-    {18, L"Сумні брови (будиночком)", L"Sad brows", nullptr, nullptr},
-    {17, L"Насуплені брови", L"Frown (both brows)", nullptr, nullptr},
-    {19, L"Насуплена права брова", L"Frown right brow", nullptr, nullptr},
-    {20, L"Насуплена ліва брова", L"Frown left brow", nullptr, nullptr},
-    {43, L"Скептичні брови", L"Skeptical brows", nullptr, nullptr},
-    {41, L"Заплющені очі", L"Eyes closed", L"Повіки", L"Lids"},
-    {2, L"Моргання правим оком", L"Blink right", nullptr, nullptr},
-    {3, L"Моргання лівим оком", L"Blink left", nullptr, nullptr},
-    {12, L"Широко розплющені очі", L"Eyes wide", nullptr, nullptr},
-    {13, L"Нижня повіка права вгору", L"Lower lid right up", nullptr, nullptr},
-    {14, L"Нижня повіка ліва вгору", L"Lower lid left up", nullptr, nullptr},
-    {4, L"Фонема А (відкритий рот)", L"Viseme A (jaw open)", L"Рот", L"Mouth"},
-    {5, L"Фонема Е (кутики назад)", L"Viseme E (corners back)", nullptr, nullptr},
-    {6, L"Фонема О (округлений рот)", L"Viseme O (round)", nullptr, nullptr},
-    {7, L"Фонема У (губи трубочкою)", L"Viseme U (pucker)", nullptr, nullptr},
-    {8, L"Фонема І (розтягнуті губи)", L"Viseme I (stretched)", nullptr, nullptr},
-    {9, L"Стиснуті губи (М/Б/П)", L"Lips pressed (M/B/P)", nullptr, nullptr},
-    {25, L"Надуті губи", L"Pout", nullptr, nullptr},
-    {26, L"Розтулені губи, зуби", L"Lips parted, teeth", nullptr, nullptr},
-    {27, L"Губи закочені всередину", L"Lips rolled inward", nullptr, nullptr},
-    {38, L"Вишкірені зуби", L"Teeth bared", nullptr, nullptr},
-    {10, L"Вищир праворуч", L"Sneer right", nullptr, nullptr},
-    {11, L"Вищир ліворуч", L"Sneer left", nullptr, nullptr},
-    {15, L"Зморщений ніс", L"Nose wrinkle", L"Ніс", L"Nose"},
-};
-constexpr int kFaceSliders = (int)(sizeof(kFaceRowsTable) / sizeof(FaceRow));
-struct FacePreset {
-    struct { int channel, percent; } w[4];
-};
-const FacePreset kFacePresets[] = {
-    {{{0, 0}}},
-    {{{21, 100}}},
-    {{{22, 100}}},
-    {{{24, 100}}},
-    {{{17, 100}, {15, 40}, {26, 50}}},
-    {{{12, 100}, {16, 100}}},
-    {{{36, 100}, {10, 30}, {11, 30}}},
-    {{{41, 100}}},
-    {{{3, 100}, {14, 60}, {29, 30}}},
-    {{{32, 100}}},
-    {{{40, 100}}},
-    {{{43, 100}, {9, 40}, {13, 30}, {14, 30}}},
-};
-const Tr kFacePresetTr[] = {{L"свій", L"custom"}, {L"Усмішка", L"Smile"}, {L"Широка усмішка", L"Broad smile"}, {L"Сум", L"Sad"}, {L"Злість", L"Angry"}, {L"Подив", L"Surprised"}, {L"Огида", L"Disgust"}, {L"Заплющені очі", L"Eyes closed"}, {L"Підморгування", L"Wink"}, {L"Крик", L"Shout"}, {L"Самовпевненість", L"Smirk"}, {L"Задума", L"Thinking"}};
-int g_facePick = 0, g_facePreset = 0;
-void FaceReset() {
-    g_facePick = 0;
-    g_facePreset = 0;
-    for (int& w : g_cfg.photoFaceW) w = 0;
-    PhotoThaw(6);
-}
-// A ready expression: every slider to zero, then the preset's few channels. The sliders can be moved on from there.
-void FacePresetChosen() {
-    if (g_facePreset <= 0) return;
-    for (int& w : g_cfg.photoFaceW) w = 0;
-    for (const auto& e : kFacePresets[g_facePreset].w)
-        if (e.channel >= 2 && e.channel < 60) g_cfg.photoFaceW[e.channel - 2] = e.percent;
-    g_cfg.photoFaceOn = 1;
-    PhotoThaw(6);
-}
-void FaceChanged() {
-    g_cfg.photoFaceOn = 1;  // moving a slider is asking for the face
-    PhotoThaw(6);
-}
-void FormatFace(int v, wchar_t* out) { wsprintfW(out, L"%d %%", v); }
-const int kFaceResetValues[1] = {1};
-const Tr kFaceResetNames[1] = {{L"Скинути", L"Reset"}};
-constexpr int kFaceRows = 5 + kFaceSliders;
-Item g_pageFace[kFaceRows];
-void BuildFacePage() {
-    int n = 0;
-    g_pageFace[n++] = {{L"Своя міміка", L"Own face"}, &g_cfg.photoFaceOn, kBool, 0, 1, 1, false, nullptr, nullptr, PhotoAnimChanged, nullptr,
-        {L"Увімкнено: обличчя Йорка задають повзунки нижче, окремо від анімації тіла (біг, зброя, пози). Вимкнено: міміка гри. Зупиніть час на сторінці фоторежиму, щоб обличчя не рухалось. Утримуйте праву кнопку миші або L3, щоб сховати меню й глянути.",
-         L"On: York's face is set by the sliders below, apart from the body motion (running, weapons, poses). Off: the game's own face. Freeze time on the photo page to keep the face still. Hold the right mouse button or L3 to hide the menu and look."},
-        {L"Загальне", L"General"}};
-    g_pageFace[n++] = {{L"Готовий вираз", L"Ready expression"}, &g_facePreset, kInt, 0, (int)(sizeof(kFacePresets) / sizeof(FacePreset)) - 1, 1, false, nullptr, nullptr, FacePresetChosen, kFacePresetTr,
-        {L"Ставить повзунки на готовий вираз; далі їх можна підправити. Вирази складено за даними гри й у грі ще не підібрано: поправте повзунками.",
-         L"Sets the sliders to a ready expression; they can be adjusted from there. The expressions were put together from the game's data and are not tuned in the game yet: adjust with the sliders."}, NOTR};
-    g_pageFace[n++] = {{L"Поверх міміки гри", L"Over the game's face"}, &g_cfg.photoFaceAdd, kBool, 0, 1, 1, false, nullptr, nullptr, PhotoAnimChanged, nullptr,
-        {L"Вимкнено: обличчя лише з повзунків. Увімкнено: повзунки додаються до того, що гра робить сама (розмова, біль, емоції сцен).",
-         L"Off: the face comes from the sliders alone. On: the sliders are added to what the game does itself (talking, pain, emotions of scenes)."}, NOTR};
-    g_pageFace[n++] = {{L"Без моргання", L"No blinking"}, &g_cfg.photoNoBlink, kBool, 0, 1, 1, false, nullptr, nullptr, PhotoAnimChanged, nullptr,
-        {L"Йорк не моргає і губи не ворушаться самі: для знімка з відкритими очима.", L"York does not blink and his lips do not move by themselves: for a picture with open eyes."}, NOTR};
-    g_pageFace[n] = {{L"Усі повзунки в нуль", L"All sliders to zero"}, &g_facePick, kInt, 0, 1, 1, false, nullptr, nullptr, FaceReset, nullptr,
-        {L"Повертає всі канали міміки в 0 (нейтральне обличчя).", L"Puts every face channel back to 0 (a neutral face)."}, NOTR};
-    g_pageFace[n].presets = kFaceResetValues;
-    g_pageFace[n].presetCount = 1;
-    g_pageFace[n].presetNames = kFaceResetNames;
-    ++n;
-    for (int i = 0; i < kFaceSliders; ++i, ++n) {
-        const FaceRow& f = kFaceRowsTable[i];
-        g_pageFace[n] = {{f.uk, f.en}, &g_cfg.photoFaceW[f.channel - 2], kInt, -100, 150, 5, false, nullptr, nullptr, FaceChanged, nullptr,
-            {L"0 = нейтрально, 100 = повний рух, як у грі; більше 100 перебільшує, від'ємне рухає у зворотний бік. Тягніть мишею або ← →; Backspace повертає 0. Назву дано за тим, які кістки обличчя рухає цей канал.",
-             L"0 = neutral, 100 = the full movement as the game uses it; above 100 exaggerates, a negative value moves the other way. Drag with the mouse or use ← →; Backspace puts 0 back. The name comes from which face bones this channel moves."},
-            {f.groupUk, f.groupEn}};
-        g_pageFace[n].format = FormatFace;
-        g_pageFace[n].def = 0;
-    }
-}
-
 struct Page {
     Tr title;
     Tr subtitle;
@@ -1108,14 +1031,13 @@ struct Page {
     bool mods = false;       // the mod manager (mods_page.cpp)
 };
 void DrawStory();
-constexpr int kPhotoPage = 3, kFacePage = 4;  // the face section previews on the live picture too  // the photo mode section (the camera keys and the preview of the filters know it)
+constexpr int kPhotoPage = 3;  // the photo mode section (the camera keys and the preview of the filters know it)
 // Eight sections, most used first. Some are several pages of settings put together once at start (MergePages), each part under its heading.
 Page g_pages[] = {
     {{L"Екран і графіка", L"Screen and graphics"}, {L"Вікно, роздільність, тіні, різкість, іконки", L"Window, resolution, shadows, sharpness, icons"}, nullptr, 0, false},
     {{L"Керування", L"Controls"}, {L"Ґеймпад, стіки, вібрація", L"Gamepad, sticks, vibration"}, g_pageInput, (int)(sizeof(g_pageInput) / sizeof(Item)), false},
     {{L"Гра і світ", L"Game and world"}, {L"Складність, бій, дальність, мапа", L"Difficulty, combat, distance, map"}, nullptr, 0, false},
     {{L"Фоторежим і читкоди", L"Photo mode and cheats"}, {L"Камера, фільтри, знімок, гроші, час, погода", L"Camera, filters, picture, money, time, weather"}, nullptr, 0, false},
-    {{L"Міміка", L"Face"}, {L"Обличчя Йорка: брови, повіки, погляд, губи, щелепа", L"York's face: brows, lids, gaze, lips, jaw"}, g_pageFace, kFaceRows, false},
     {{L"Виправлення", L"Fixes"}, {L"Час, помилки гри, мова, захист dp.sav, діагностика", L"Time, game bugs, language, protection of dp.sav, diagnostics"}, nullptr, 0, false},
     {{L"Сюжет", L"Story"}, {L"Епізод, побічні завдання, поточна ціль (лише перегляд)", L"Episode, side quests, current destination (read-only)"}, nullptr, 0, true, DrawStory},
     {{L"Жителі", L"Residents"}, {L"Де хто зараз за розкладом гри і куди піде далі", L"Where everyone is now by the game's timetable, and where next"}, nullptr, 0, true, nullptr, true},
@@ -1206,7 +1128,6 @@ int PendingCount() {
 void MergePages() {
     if (g_pagesMerged) return;
     g_pagesMerged = true;
-    BuildFacePage();
     const PageSource screen[2] = {{g_pageDisplay, (int)(sizeof(g_pageDisplay) / sizeof(Item)), {L"Вікно і екран", L"Window and screen"}},
                                   {g_pageGraphics, (int)(sizeof(g_pageGraphics) / sizeof(Item)), {L"Графіка", L"Graphics"}}};
     const PageSource game[3] = {{g_pageWorld, (int)(sizeof(g_pageWorld) / sizeof(Item)), {L"Світ", L"World"}},
@@ -1220,7 +1141,7 @@ void MergePages() {
     MergeInto(g_pages[0], g_screenStore, screen, 2);
     MergeInto(g_pages[2], g_gameStore, game, 3);
     MergeInto(g_pages[kPhotoPage], g_photoStore, photo, 2);
-    MergeInto(g_pages[5], g_fixesStore, fixes, 3);
+    MergeInto(g_pages[4], g_fixesStore, fixes, 3);
     SnapshotBoot();
 }
 
@@ -2091,7 +2012,7 @@ void HandleInput(bool foreground) {
     // The photo page previews the filters on the live picture, and the panel covers most of it: held, the right mouse button
     // or L3 fades the panel away (OnFrame) and nothing else of the menu reacts meanwhile (a click or a key would act on rows
     // nobody can see). Not over a question: its answer must stay in sight.
-    const bool peeking = (g_page == kPhotoPage || g_page == kFacePage) && !g_confirm && (Down(VK_RBUTTON) || (g_padHeld & kPadPeek));
+    const bool peeking = g_page == kPhotoPage && !g_confirm && (Down(VK_RBUTTON) || (g_padHeld & kPadPeek));
     if (peeking != g_peeking) {
         g_peeking = peeking;
         static bool logged = false;
@@ -3066,13 +2987,9 @@ u32 Fade(u32 c) {
 
 void Draw() {
     if (g_rowCount == 0) BuildRows();  // never an empty page
-    // A light dimming on every page, so the picture does not change when you switch pages; but not on the photo page, whose
-    // filters are judged on this very picture (a quarter darker, Brightness and Contrast were tuned on a wrong image).
-    const bool photo = g_page == kPhotoPage || g_page == kFacePage;
-    if (!photo) {
-        SetOverlayFade(g_openAlpha, 0.f);  // the dimming fades in with the panel but does not rise: it covers the whole picture
-        FillRect(0, 0, 1280, 720, Fade(0x50000000));
-    }
+    // No dimming behind the panel on any page: the photo page must show the real picture (its filters are judged on it), and
+    // a dimming on the other pages only made the game's brightness jump when the section changed.
+    const bool photo = g_page == kPhotoPage;
     SetOverlayFade(g_openAlpha, g_openRise);
     FillRect(kPx, kPy, kPw, kPh, Fade(kPanelBg));
     // Without the dimming a bright scene shows through a see-through panel and the rows get hard to read: the list, the
@@ -4076,7 +3993,10 @@ void OnFrame(void* device) {
     OverlayEnd();
 }
 
-void PhotoLookReset() { ResetLook(); }
+void PhotoLookReset() {
+    ResetLook();
+    FaceForget();
+}
 bool GameLookValues(int* out) { return GameLookValuesImpl(out); }
 
 }  // namespace ui
