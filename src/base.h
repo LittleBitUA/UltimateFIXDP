@@ -151,6 +151,13 @@ struct Config {
     int photoSuitSet;        // costume set: York 1..2, Zach 1..3
     int photoCostume;        // costume choice, 0 = untouched
     int photoAnim;           // animation choice, 0 = untouched
+    int photoBodySet;        // which set of body motions: 0 York, 1 residents (day), 2 cutscene extras, 3 Raincoat Killer
+    int photoBodyNo;         // 0 = untouched, n = the n-th motion of the set
+    int photoFrame;          // the held frame, percent of the motion's length
+    int photoPlay;           // 1 = the motion runs instead of holding the frame
+    int photoFace, photoFaceAmt;    // face channel (0 = the game's own face) and its weight in percent
+    int photoFace2, photoFace2Amt;  // a second channel mixed in
+    int photoNoBlink;        // 1 = no blinking and no eye darts
     int freeCam;             // the free camera (fly with the mouse and keys, hide the HUD)
     int freeCamKey;          // virtual key that switches it on and off
     int freeCamHudKey;       // virtual key that hides / shows the HUD

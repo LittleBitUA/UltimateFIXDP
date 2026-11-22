@@ -55,6 +55,103 @@ void PoseTick(void* player) {
     Log("pose: player state %d requested", state);
 }
 
+volatile u32 g_playerObject = 0;  // the player object of the last update
+
+// ---- Photo mode: any body motion with a held frame, and the face on its own (EXPERIMENTAL, from static analysis) ----
+// The actor keeps its animators inside itself: the main one at +178h (motion +18Ch, time in frames +194h), the speed of all of
+// them at +1F8h. FUN_006C0480 (thiscall, ret 14h) starts a motion given by pointer; FUN_006B2BE0 gives the pointer of a
+// resident motion by its resource id (0 when it is not loaded: only sets the game keeps in memory are offered).
+// The face is bones driven by 50 weights a frame; the engine hands them to the actor's virtual slot +68h (CPlayer: the pointer
+// at 776864h, FUN_00410210, thiscall(float* w, int n), ret 8) before it adds the blink (scaled by w[0], -1 = none) and the eye
+// darts (scaled by w[1]). The slot is wrapped: the chosen channels are written there, which leaves the body's motion alone.
+constexpr u32 kPlayerVtable = 0x7767FC, kPlayerFaceSlot = 0x776864, kFaceWeightsFn = 0x410210;
+constexpr u32 kResourceMgrFn = 0x4051F0, kMotionByIdFn = 0x6B2BE0, kPlayMotionFn = 0x6C0480;
+typedef void*(__cdecl* ResourceMgrFn)();
+typedef void*(__attribute__((thiscall)) * MotionByIdFn)(void* mgr, int id, int one);
+typedef void(__attribute__((thiscall)) * PlayMotionFn)(void* actor, void* motion, float startFrame, float blendFrames, int keepIfSame, int mode);
+typedef void(__attribute__((thiscall)) * FaceWeightsFn)(void* actor, float* weights, int count);
+const struct { u16 first, last; } kBodySets[4] = {{0x2413, 0x2554}, {0x2557, 0x25DC}, {0x2CD6, 0x2DC9}, {0x2861, 0x2898}};
+FaceWeightsFn r_faceWeights = nullptr;
+void* g_photoMotion = nullptr;  // the motion the photo mode put on York
+int g_photoMotionKey = -1;      // set * 1000 + number it was chosen by
+int g_photoReplays = 0;
+
+void __attribute__((thiscall)) H_FaceWeights(void* actor, float* w, int n) {
+    r_faceWeights(actor, w, n);
+    static bool told = false;
+    if (!told && (u32)(uintptr_t)actor == g_playerObject) {
+        told = true;
+        Log("photo face: the face weights of York pass the hook (%d channels)", n);
+    }
+    if ((u32)(uintptr_t)actor != g_playerObject || !w || n < 4 || n > 64) return;
+    if (!g_cfg.photoFace && !g_cfg.photoFace2 && !g_cfg.photoNoBlink) return;
+    if (g_cfg.photoFace || g_cfg.photoFace2) {  // a chosen expression stands alone: the game's own face of this frame is cleared
+        for (int i = 2; i < n; ++i) w[i] = 0.f;
+        const int a = g_cfg.photoFace + 1, b = g_cfg.photoFace2 + 1;  // channels 0 and 1 scale the blink and the darts
+        if (g_cfg.photoFace && a < 64) w[a] = (float)g_cfg.photoFaceAmt / 100.f;
+        if (g_cfg.photoFace2 && b < 64) w[b] = (float)g_cfg.photoFace2Amt / 100.f;
+    }
+    if (g_cfg.photoNoBlink) {
+        w[0] = -1.f;
+        w[1] = 0.f;
+    }
+}
+
+void PhotoAnimTick(void* player) {
+    u8* p = (u8*)player;
+    if (*(volatile u32*)p != kPlayerVtable) return;  // York, Zach and the others of the player class only
+    const int no = g_cfg.photoBodyNo;
+    if (!no) {
+        if (g_photoMotion) {  // back to the game's own motions
+            g_photoMotion = nullptr;
+            g_photoMotionKey = -1;
+            *(volatile float*)(p + 0x1F8) = 1.f;
+            g_poseRequest = 1;  // state 0, calm: PoseTick runs right after this in the next update
+            Log("photo motion: off, York's own motions again (%d times the game had replaced ours)", g_photoReplays);
+            g_photoReplays = 0;
+        }
+        return;
+    }
+    if (*(volatile u32*)(uintptr_t)kGameplayModeVa != 3 || (*(volatile u32*)(uintptr_t)kEventModeVa & 0x80000000u)) return;
+    const u32 state = *(volatile u32*)(p + 0x654);
+    if (state == 0x87 || state == 0x88) return;  // at the wheel
+    const int set = g_cfg.photoBodySet & 3, key = set * 1000 + no;
+    if (key != g_photoMotionKey) {
+        g_photoMotionKey = key;
+        g_photoMotion = nullptr;
+        int id = kBodySets[set].first + no - 1;
+        if (id > kBodySets[set].last) id = kBodySets[set].last;
+        void* mgr = ((ResourceMgrFn)(uintptr_t)kResourceMgrFn)();
+        u8* m = mgr ? (u8*)((MotionByIdFn)(uintptr_t)kMotionByIdFn)(mgr, id, 1) : nullptr;
+        const u8* cur = *(u8* volatile*)(p + 0x18C);
+        if (!m || (uintptr_t)m < 0x10000) {
+            Log("photo motion: resource %04X is not in memory here, skipped", id);
+            return;
+        }
+        const int bones = *(const u16*)(m + 8), frames = *(const u16*)(m + 0xA);
+        if (cur && (uintptr_t)cur > 0x10000 && *(const u16*)(cur + 8) != bones) {
+            Log("photo motion: resource %04X has %d bones, York's motion has %d, skipped", id, bones, *(const u16*)(cur + 8));
+            return;
+        }
+        ((PlayMotionFn)(uintptr_t)kPlayMotionFn)(player, m, 0.f, 0.f, 0, 0);
+        g_photoMotion = m;
+        Log("photo motion: resource %04X on York (%d frames, %s; player state %u)", id, frames,
+            (*(const u16*)(m + 0xC) & 0x8000) ? "loops" : "plays once", state);
+    }
+    if (!g_photoMotion) return;
+    if (*(void* volatile*)(p + 0x18C) != g_photoMotion) {  // a state handler put its own motion back
+        ((PlayMotionFn)(uintptr_t)kPlayMotionFn)(player, g_photoMotion, 0.f, 0.f, 0, 0);
+        if (++g_photoReplays <= 3 || g_photoReplays == 100) Log("photo motion: the game replaced the motion, put back (%d so far, state %u)", g_photoReplays, state);
+    }
+    if (g_cfg.photoPlay) {
+        *(volatile float*)(p + 0x1F8) = 1.f;
+    } else {
+        const int frames = *(const u16*)((const u8*)g_photoMotion + 0xA);
+        *(volatile float*)(p + 0x194) = frames > 1 ? (float)(frames - 1) * (float)g_cfg.photoFrame / 100.f : 0.f;
+        *(volatile float*)(p + 0x1F8) = 0.f;  // nothing advances: the frame of the slider stays
+    }
+}
+
 // Logs every change of the player state (Debug.TraceStates=1): the labelled table that static analysis cannot give.
 void __cdecl StateTrace(void* player, int newState) {
     if (!g_cfg.traceStates || !player) return;
@@ -140,11 +237,10 @@ void LayoutTick(void* player) {
 
 volatile DWORD g_playerTickMs = 0;  // when the player object was last updated: the main menu and the title screen have none
 
-volatile u32 g_playerObject = 0;
 
 void __cdecl StrafeWorker(void* player) {
     if (player) { g_playerTickMs = GetTickCount(); g_playerObject = (u32)(uintptr_t)player; }
-    if (player) { SuitTick(player); PoseTick(player); CheatsTick(player); LayoutTick(player); }
+    if (player) { SuitTick(player); PhotoAnimTick(player); PoseTick(player); CheatsTick(player); LayoutTick(player); }
     if (!player || !g_cfg.combatStrafe) return;
     unsigned now = PadButtons() & 0x30;  // buttons 4 (LB) and 5 (RB)
     unsigned rising = now & ~g_prevShoulders;
@@ -190,6 +286,13 @@ bool InstallCombatStrafe() {
         Log("strafe: the player update tail at %08X differs from DP.exe 1.01b, skipped", s.va);
         return false;
     }
+    g_cfg.photoFaceAmt = g_cfg.photoFace2Amt = 100;
+    // the face: CPlayer's virtual slot +68h, only when it holds the game's own function
+    if (*(volatile u32*)(uintptr_t)kPlayerFaceSlot == kFaceWeightsFn &&
+        SwapImport((void**)(uintptr_t)kPlayerFaceSlot, (void*)H_FaceWeights, (void**)&r_faceWeights))
+        Log("photo face: the player's face weights hooked (expressions in the photo mode)");
+    else
+        Log("photo face: the player's virtual table differs from DP.exe 1.01b, no expressions");
     u8* stub = AllocStub(48);
     if (!stub) return false;
     BuildStrafeBridge(stub, (u32)(uintptr_t)stub, (u32)(uintptr_t)StrafeWorker, kStrafeReturn);

@@ -160,6 +160,7 @@ void __attribute__((cdecl)) CameraWorker() {
             g_cfg.photoFovOn = 0;
             if (g_cfg.photoAnim) RequestPose(1);  // state 0: calm
             g_cfg.photoAnim = 0;
+            g_cfg.photoBodyNo = g_cfg.photoFace = g_cfg.photoFace2 = g_cfg.photoNoBlink = g_cfg.photoPlay = 0;  // York as the game moves him
             g_cfg.photoCostume = 0;
         }
         if (enter) ui::OpenPhotoPage();

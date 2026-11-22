@@ -713,6 +713,17 @@ const int kApplyValues[1] = {1};
 const Tr kApplyNames[1] = {{L"Застосувати", L"Apply"}};
 void ApplyCostumeNow();
 void ApplyPoseNow();
+const Tr kBodySetTr[4] = {{L"Йорк", L"York"}, {L"Жителі (день)", L"Residents (day)"}, {L"Катсцени", L"Cutscenes"}, {L"Вбивця в дощовику", L"Raincoat Killer"}};
+// A change of the motion or of the face has to be worked out by the game: a few frames of running time, as for a pose
+void PhotoAnimChanged() { PhotoThaw(6); }
+void FormatBodyNo(int v, wchar_t* out) {
+    if (v) wsprintfW(out, L"№ %d", v);
+    else lstrcpyW(out, g_cfg.language == 1 ? L"untouched" : L"не змінювати");
+}
+void FormatFaceNo(int v, wchar_t* out) {
+    if (v) wsprintfW(out, L"№ %d", v);
+    else lstrcpyW(out, g_cfg.language == 1 ? L"the game's" : L"як у грі");
+}
 
 
 
@@ -839,6 +850,28 @@ Item g_pagePhoto[] = {
      NOTR},
     {{L"Застосувати позу", L"Apply the pose"}, &g_applyPick, kInt, 0, 1, 1, false, nullptr, nullptr, ApplyPoseNow, nullptr, {nullptr, nullptr}, NOTR,
      kApplyValues, 1, kApplyNames, nullptr, false},
+    {{L"Набір анімацій тіла (експериментально)", L"Body motion set (experimental)"}, &g_cfg.photoBodySet, kInt, 0, 3, 1, false, nullptr, nullptr, PhotoAnimChanged, kBodySetTr,
+     {L"Звідки брати анімацію тіла: Йорк (322), жителі вдень (134), додаткові з катсцен (244), Вбивця в дощовику (56). Лише набори, які гра тримає в пам'яті. Назв анімації не мають, лише номери.",
+      L"Where the body motion comes from: York (322), residents by day (134), cutscene extras (244), the Raincoat Killer (56). Only sets the game keeps in memory. The motions have numbers, not names."}, NOTR},
+    {{L"Анімація тіла", L"Body motion"}, &g_cfg.photoBodyNo, kInt, 0, 322, 1, false, nullptr, nullptr, PhotoAnimChanged, nullptr,
+     {L"0 = не змінювати. Інакше Йорк отримує анімацію з цим номером із вибраного набору; обличчя нижче керується окремо. Не за кермом і не в катсцені. Збережіться перед спробами. У грі ще не перевірено.",
+      L"0 = untouched. Otherwise York gets the motion with this number of the chosen set; the face below is controlled on its own. Not at the wheel and not in a cutscene. Save first. Not yet verified in the game."},
+     NOTR, nullptr, 0, nullptr, FormatBodyNo},
+    {{L"Кадр анімації, %", L"Frame of the motion, %"}, &g_cfg.photoFrame, kInt, 0, 100, 1, false, nullptr, nullptr, PhotoAnimChanged, nullptr,
+     {L"Який момент анімації тримати: 0 початок, 100 кінець. Діє, поки «Програвати анімацію» вимкнено.", L"Which moment of the motion to hold: 0 the start, 100 the end. Used while \"Play the motion\" is off."}, NOTR},
+    {{L"Програвати анімацію", L"Play the motion"}, &g_cfg.photoPlay, kBool, 0, 1, 1, false, nullptr, nullptr, PhotoAnimChanged, nullptr,
+     {L"Увімкнено: анімація йде сама (вимкніть «Зупинити час», інакше вона стоїть). Вимкнено: тримається кадр із повзунка вище.", L"On: the motion runs by itself (turn \"Freeze time\" off or it stands). Off: the frame of the slider above is held."}, NOTR},
+    {{L"Вираз обличчя", L"Facial expression"}, &g_cfg.photoFace, kInt, 0, 58, 1, false, nullptr, nullptr, PhotoAnimChanged, nullptr,
+     {L"0 = обличчя як у грі. 1–58: один із каналів міміки Йорка (брови, повіки, губи, щелепа, погляд), окремо від анімації тіла. Що робить кожен номер, ще не описано: гортайте й дивіться.",
+      L"0 = the game's own face. 1-58: one of the channels of York's face (brows, lids, lips, jaw, gaze), apart from the body motion. What each number does is not described yet: step through and look."},
+     NOTR, nullptr, 0, nullptr, FormatFaceNo},
+    {{L"Сила виразу, %", L"Expression strength, %"}, &g_cfg.photoFaceAmt, kInt, 0, 100, 5, false, nullptr, nullptr, PhotoAnimChanged, nullptr, {nullptr, nullptr}, NOTR},
+    {{L"Другий вираз (змішати)", L"Second expression (mixed in)"}, &g_cfg.photoFace2, kInt, 0, 58, 1, false, nullptr, nullptr, PhotoAnimChanged, nullptr,
+     {L"Ще один канал міміки поверх першого: наприклад брови з одного номера й губи з іншого.", L"One more face channel over the first: brows from one number and lips from another, for example."},
+     NOTR, nullptr, 0, nullptr, FormatFaceNo},
+    {{L"Сила другого виразу, %", L"Second expression strength, %"}, &g_cfg.photoFace2Amt, kInt, 0, 100, 5, false, nullptr, nullptr, PhotoAnimChanged, nullptr, {nullptr, nullptr}, NOTR},
+    {{L"Без моргання й рухів очей", L"No blinking, no eye darts"}, &g_cfg.photoNoBlink, kBool, 0, 1, 1, false, nullptr, nullptr, PhotoAnimChanged, nullptr,
+     {L"Йорк не моргає й не водить очима: для знімка з відкритими очима.", L"York does not blink or dart his eyes: for a picture with open eyes."}, NOTR},
 };
 
 // ---- Cheats and world control. Each button is a one-shot action: the pick variable is put back to 0 at once.
