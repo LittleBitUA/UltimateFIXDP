@@ -833,12 +833,13 @@ void LoadConfig(const wchar_t* ini) {
     }
     g_cfg.smaaQuality = (int)GetPrivateProfileIntW(L"Graphics", L"SmaaQuality", 2, ini);
     if (g_cfg.smaaQuality < 0 || g_cfg.smaaQuality > 2) g_cfg.smaaQuality = 2;
+    // the four numbers below were picked in the game by the user on 2026-11-23 (0.7.17-test25); the menu shows only the switch
     g_cfg.smokeTune = GetPrivateProfileIntW(L"Fixes", L"SmokeSheet", 1, ini) ? 1 : 0;
-    g_cfg.smokeDensity = (int)GetPrivateProfileIntW(L"Fixes", L"SmokeDensity", 80, ini);
-    g_cfg.smokeCurve = (int)GetPrivateProfileIntW(L"Fixes", L"SmokeCurve", 20, ini);
-    g_cfg.smokeEdge = (int)GetPrivateProfileIntW(L"Fixes", L"SmokeEdge", 20, ini);
+    g_cfg.smokeDensity = (int)GetPrivateProfileIntW(L"Fixes", L"SmokeDensity", 25, ini);
+    g_cfg.smokeCurve = (int)GetPrivateProfileIntW(L"Fixes", L"SmokeCurve", 15, ini);
+    g_cfg.smokeEdge = (int)GetPrivateProfileIntW(L"Fixes", L"SmokeEdge", 6, ini);
     g_cfg.smokeGrey = (int)GetPrivateProfileIntW(L"Fixes", L"SmokeGrey", 0, ini);
-    g_cfg.smokeVoid = (int)GetPrivateProfileIntW(L"Fixes", L"SmokeVoid", 100, ini);
+    g_cfg.smokeVoid = (int)GetPrivateProfileIntW(L"Fixes", L"SmokeVoid", 0, ini);
     g_cfg.sharpen = (int)GetPrivateProfileIntW(L"Graphics", L"Sharpen", 50, ini);
     if (g_cfg.sharpen < 0) g_cfg.sharpen = 0;
     if (g_cfg.sharpen > 100) g_cfg.sharpen = 100;
