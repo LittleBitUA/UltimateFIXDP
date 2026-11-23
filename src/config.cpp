@@ -988,6 +988,9 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.traceWater = (int)GetPrivateProfileIntW(L"Debug", L"TraceWater", 0, ini);
     g_cfg.frameCapture = (int)GetPrivateProfileIntW(L"Debug", L"FrameCapture", 0, ini);
     g_cfg.missionLab = (int)GetPrivateProfileIntW(L"Debug", L"MissionLab", 0, ini);
+    g_cfg.netPartner = (int)GetPrivateProfileIntW(L"Coop", L"NetPartner", 0, ini);
+    g_cfg.netPort = (int)GetPrivateProfileIntW(L"Coop", L"NetPort", 47900, ini);
+    GetPrivateProfileStringW(L"Coop", L"NetPeer", L"", g_cfg.netPeer, 48, ini);
     g_cfg.waterTest = (int)GetPrivateProfileIntW(L"Debug", L"WaterTest", 0, ini);
     g_cfg.menu = (int)GetPrivateProfileIntW(L"Menu", L"Enabled", 1, ini);
     g_cfg.startHint = (int)GetPrivateProfileIntW(L"Menu", L"StartHint", 1, ini);

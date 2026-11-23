@@ -808,6 +808,39 @@ void PartnerTick(u8* player, u8* doll) {
         }
     }
     const float yorkWas[3] = {g_yorkLast[0], g_yorkLast[1], g_yorkLast[2]};
+    int want = 0;
+    if (NetCoopOn()) {
+        // A friend over the network: this York's place goes out, the figure stands where the friend's York is (at the friend's own
+        // height: the friend's game found the ground). In another location, or with nothing heard, the figure is kept out of sight.
+        static int mine = 0;
+        if (dt > 0.f) {
+            const float vx = (yp[0] - yorkWas[0]) / dt, vz = (yp[2] - yorkWas[2]) / dt, v = Sqrtf(vx * vx + vz * vz);
+            if (v < 60.f) mine = v < 0.5f ? 0 : v < 9.f ? 1 : 2;
+        }
+        for (int i = 0; i < 3; ++i) g_yorkLast[i] = yp[i];
+        const u8* gm = *(const u8* volatile*)(uintptr_t)kGameManagerPtrVa;
+        const u32 zoneNow = gm ? *(volatile u32*)(gm + 0x834FE0) : 0;
+        const u32 st = *(volatile u32*)(player + 0x654);
+        NetCoopExchange(yp, *(volatile float*)(player + 0x7C), zoneNow, mine, st == 0x87 || st == 0x88);
+        NetPeerState peer;
+        static bool shown = false;
+        const bool see = NetCoopPeer(&peer) && peer.zone == zoneNow;
+        if (see) {
+            const float ex = peer.pos[0] - g_dollBase[0], ey = peer.pos[1] - g_dollBase[1], ez = peer.pos[2] - g_dollBase[2];
+            const float k = !shown || ex * ex + ez * ez > 40.f * 40.f || dt <= 0.f ? 1.f : (dt * 12.f > 1.f ? 1.f : dt * 12.f);  // eased; a jump is taken at once
+            g_dollBase[0] += ex * k;
+            g_dollBase[1] += ey * k;
+            g_dollBase[2] += ez * k;
+            g_dollYaw = peer.yaw;
+            want = peer.kind;
+        } else {
+            g_dollBase[0] = yp[0];
+            g_dollBase[1] = yp[1] - 400.f;  // far under the ground
+            g_dollBase[2] = yp[2];
+        }
+        if (see != shown) Log("net partner: the friend's figure is %s", see ? "shown" : "hidden (another location or nothing heard)");
+        shown = see;
+    } else {
     for (int i = 0; i < 3; ++i) g_yorkLast[i] = yp[i];
     // the pad
     float sx = 0.f, sy = 0.f;
@@ -857,10 +890,11 @@ void PartnerTick(u8* player, u8* doll) {
         g_dollBase[1] = yp[1];
         g_dollBase[2] = yp[2] - Sinf(yaw) * 6.f;
     }
+    want = mag <= 0.f ? 0 : run ? 2 : 1;
+    }
     for (int i = 0; i < 3; ++i) *(volatile float*)(doll + 0x58 + 4 * i) = g_dollBase[i];
     *(volatile float*)(doll + 0x7C) = *(volatile float*)(doll + 0x6C) = g_dollYaw;
     // the motion of the case
-    const int want = mag <= 0.f ? 0 : run ? 2 : 1;
     void* m = g_partnerMotion[want] ? g_partnerMotion[want] : g_partnerMotion[want == 2 ? 1 : 0];
     if (m && (want != g_partnerState || *(void* volatile*)(doll + 0x18C) != m)) {
         const u8* cur = *(u8* volatile*)(doll + 0x18C);
@@ -880,7 +914,7 @@ void DollTick(void* playerPtr) {
     static bool wasPhoto = false;
     const bool photo = g_cfg.photoActive || g_cfg.photoFreeze;
     // (with the mission lab on the doll stays after the photo mode: it is the one York talks to)
-    if (g_doll && (scene || (wasPhoto && !photo && !g_cfg.missionLab && !MissionActive() && !g_cfg.coopPartner))) DollRemove(scene ? "a scene began" : "the photo mode ended");
+    if (g_doll && (scene || (wasPhoto && !photo && !g_cfg.missionLab && !MissionActive() && !g_cfg.coopPartner && !NetCoopOn()))) DollRemove(scene ? "a scene began" : "the photo mode ended");
     wasPhoto = photo;
     PlayAsTick(player, free);
     const int req = g_dollRequest;
@@ -893,17 +927,17 @@ void DollTick(void* playerPtr) {
     {   // the partner: there while its switch is on, gone when it goes off
         static bool wasPartner = false;
         static DWORD asked = 0;
-        if (g_cfg.coopPartner && !g_doll && free && *(volatile u32*)player == kPlayerVtable && GetTickCount() - asked > 3000) {
+        if ((g_cfg.coopPartner || NetCoopOn()) && !g_doll && free && *(volatile u32*)player == kPlayerVtable && GetTickCount() - asked > 3000) {
             asked = GetTickCount();
             g_partnerState = -1;
             g_dollRequest = 1;
         }
-        if (!g_cfg.coopPartner && wasPartner && g_doll) DollRemove("the partner was switched off");
-        wasPartner = g_cfg.coopPartner != 0;
+        if (!(g_cfg.coopPartner || NetCoopOn()) && wasPartner && g_doll) DollRemove("the partner was switched off");
+        wasPartner = g_cfg.coopPartner != 0 || NetCoopOn();
     }
     u8* doll = DollAlive();
     if (!doll) return;
-    if (g_cfg.coopPartner) {
+    if (g_cfg.coopPartner || NetCoopOn()) {
         PartnerTick(player, doll);
         return;
     }
