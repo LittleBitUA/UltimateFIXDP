@@ -455,7 +455,20 @@ bool TriggerLayoutActive() { return g_triggerLayout; }
 // True while a game world is being played (the player is updated): the main menu and the title screen draw through the same final
 // composite, but their depth buffer holds no scene.
 bool WorldActive() { return g_playerTickMs && (GetTickCount() - g_playerTickMs) < 300; }
-u32 PlayerObjectNow() { return WorldActive() ? g_playerObject : 0; }
+// The player object of the last update, for code that runs between the game's updates (the Present hook). A level change frees
+// the object while its update was still "a moment ago": a player's crash on leaving the window peek of the hotel, 0.7.17, read
+// York's place from freed memory in WaypointFrame (issue #3). So the memory is looked at before the pointer is given out: mapped
+// and readable over the fields the mod reads, and still beginning with a virtual table of DP.exe.
+u32 PlayerObjectNow() {
+    if (!WorldActive()) return 0;
+    const u32 p = g_playerObject;
+    MEMORY_BASIC_INFORMATION mbi;
+    if (p < 0x10000 || (p & 3) || !VirtualQuery((const void*)(uintptr_t)p, &mbi, sizeof(mbi)) || mbi.State != MEM_COMMIT ||
+        (mbi.Protect & (PAGE_NOACCESS | PAGE_GUARD)) || (uintptr_t)mbi.BaseAddress + mbi.RegionSize < (uintptr_t)p + 0xA10)
+        return 0;
+    const u32 vt = *(volatile u32*)(uintptr_t)p;
+    return vt >= 0x0076E000u && vt < 0x00885000u ? p : 0;  // .rdata of DP.exe 1.01b
+}
 
 // The class (1..11) of the weapon York holds, or -1: the item table is a pointer at CGame+835000h, 0DCh per entry, class at +6Dh.
 int WeaponClassNow() {
