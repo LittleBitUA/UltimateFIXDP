@@ -72,7 +72,7 @@ void Do(int action, int row) {
         case kJoinAddress: Join(g_address); break;
         case kLeave: Focus(-1); NetLeave(); break;
         case kRefresh: NetDiscover(); g_askedAt = GetTickCount(); break;
-        case kMirror: Focus(-1); NetMirrorStart(); break;
+        case kMirror: Focus(-1); if (g_cfg.netTest) NetMirrorStart(); break;
         case kRow:
             Focus(-1);
             if (row == g_sel && row < g_rowCount) Join(g_rows[row].address);  // a second click on the chosen row joins
@@ -283,11 +283,12 @@ void NetPage(float left, float top, float right, float bottom) {
     const float ny = bottom - noteH + 8;
     FillRect(left, ny - 8, w, 1, kLine);
     const wchar_t* mirror = T(L"Тест наодинці", L"Test for one");
-    const float mw = mode == kNetOff ? TextWidth(mirror, 14, kSemibold) + 28 : 0;
+    const bool test = mode == kNetOff && g_cfg.netTest;  // only for whoever asked for it in the ini: [Coop] NetTest=1
+    const float mw = test ? TextWidth(mirror, 14, kSemibold) + 28 : 0;
     DrawLines(T(L"Список показує сервери вашої мережі (також ZeroTier, Radmin VPN, Hamachi) і недавні адреси. Через інтернет: адреса того, хто створив сервер, і відкритий у нього UDP-порт 47900. Грають двоє.",
                 L"The list shows the servers of your network (also ZeroTier, Radmin VPN, Hamachi) and recent addresses. Over the internet: the address of whoever runs the server, with UDP port 47900 open there. Two players."),
               left, ny, kFaint, 12, 16, w - mw - 16, 3, true);
-    if (mode == kNetOff) Button(mirror, right - mw, ny + 6, kMirror);
+    if (test) Button(mirror, right - mw, ny + 6, kMirror);
 }
 
 }  // namespace ui

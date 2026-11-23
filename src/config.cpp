@@ -993,6 +993,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.netPeerPort = (int)GetPrivateProfileIntW(L"Coop", L"NetPeerPort", g_cfg.netPort, ini);
     g_cfg.netCarCollision = (int)GetPrivateProfileIntW(L"Coop", L"NetCarCollision", 1, ini);
     g_cfg.netWeapons = (int)GetPrivateProfileIntW(L"Coop", L"NetWeapons", 1, ini);
+    g_cfg.netTest = (int)GetPrivateProfileIntW(L"Coop", L"NetTest", 0, ini);  // the "test for one" button of the multiplayer page
     GetPrivateProfileStringW(L"Coop", L"NetPeer", L"", g_cfg.netPeer, 48, ini);
     GetPrivateProfileStringW(L"Coop", L"NetNick", L"York", g_cfg.netNick, 16, ini);
     GetPrivateProfileStringW(L"Coop", L"ServerName", L"Greenvale", g_cfg.netServerName, 24, ini);

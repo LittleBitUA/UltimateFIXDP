@@ -10,6 +10,7 @@
 //   [Coop] Recent1..4          the addresses joined last
 //   [Coop] NetPartner=1        start at once with the game: NetPeer=address joins it, NetPeer=mirror is the test for one player
 //                              (the figure repeats this York a second and a half late, 30 units aside), no NetPeer = a server
+//   [Coop] NetTest=1           shows the "test for one" button on the page (the mirror); off by default
 //   [Coop] NetCarCollision=1, NetWeapons=1   switches for the two riskiest parts (see combat_strafe.cpp)
 //
 // The list of servers is the local network's: a broadcast question on NetPort, answered by every server there (virtual networks

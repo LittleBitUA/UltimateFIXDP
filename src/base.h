@@ -165,7 +165,7 @@ struct Config {
     int photoMoveX, photoMoveY, photoMoveZ, photoTurn;  // photo mode: York moved right / up / forward (tenths of a unit) and turned (degrees) from where he stood
     int photoPlay;           // 1 = the motion runs instead of holding the frame
     int photoFaceOn;         // 1 = the face page drives York's face
-    int netPartner, netPort, netPeerPort, netCarCollision, netWeapons;   // [Coop]: the partner figure shows the York of a friend's game on another computer (net_coop.cpp)
+    int netPartner, netPort, netPeerPort, netCarCollision, netWeapons, netTest;   // [Coop]: the partner figure shows the York of a friend's game on another computer (net_coop.cpp)
     wchar_t netServerName[24]; // the name of this game's server in the other players' lists
     wchar_t netNick[16];       // the name the friend sees over this York and in the chat
     wchar_t netPeer[48];       // the address of the friend's computer, or "mirror"
