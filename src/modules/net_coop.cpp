@@ -6,7 +6,7 @@
 //                              and a half late, some steps aside (a test for one player)
 //   [Coop] NetPort=47900       UDP port, the same on both sides; both listen on it and send to it
 //
-// One UDP datagram of 40 bytes about 20 times a second, sent and read on the game thread without waiting (a socket that does not
+// One UDP datagram of 52 bytes about 20 times a second, sent and read on the game thread without waiting (a socket that does not
 // block). Only datagrams from the friend's address with our mark and version are taken, and only a newer one than the last. No
 // address is looked up, nothing is sent anywhere but to NetPeer; it is meant for a home network or a virtual one (ZeroTier,
 // Radmin VPN, Hamachi). ws2_32 is loaded at run time, as in editor_server.cpp.
@@ -30,17 +30,18 @@ struct Sock {
 struct Packet {
     u32 mark;     // 'UFXP'
     u16 version;  // kNetVersion
-    u16 kind;     // 0 stands, 1 walks, 2 runs
+    u16 kind;     // 0 stands, 1 walks, 2 runs, 3 sits at the wheel
     u32 seq;
     u32 zone;     // the location number (CGame+834FE0h): the figure is shown only in the same one
     float pos[3];
     float yaw;
     u32 flags;    // bit 0: in a car
     u32 car;      // the number of the car York drives (the game's numbered cars), 0 = not known
+    float carPos[3];  // where that car is (York himself sits a little aside of its middle)
 };
 #pragma pack(pop)
 constexpr u32 kMark = 0x50584655u;
-constexpr u16 kNetVersion = 1;
+constexpr u16 kNetVersion = 2;
 
 int g_state = 0;  // 0 not tried, 1 mirror, 2 socket open, -1 failed
 SOCKET g_sock = INVALID_SOCKET;
@@ -119,7 +120,7 @@ bool Open() {
     g_peer = me;
     g_peer.sin_addr.s_addr = ip;
     g_state = 2;
-    Log("net partner: UDP port %d open, the friend is %u.%u.%u.%u (40 bytes about 20 times a second, to that address only)", port, ip & 255, (ip >> 8) & 255,
+    Log("net partner: UDP port %d open, the friend is %u.%u.%u.%u (52 bytes about 20 times a second, to that address only)", port, ip & 255, (ip >> 8) & 255,
         (ip >> 16) & 255, ip >> 24);
     return true;
 }
@@ -129,7 +130,7 @@ bool Open() {
 bool NetCoopOn() { return g_cfg.netPartner != 0; }
 
 // This York's place goes out (20 times a second at most) and what came in is read. Game thread, never waits.
-void NetCoopExchange(const float pos[3], float yaw, u32 zone, int kind, bool inCar, int car) {
+void NetCoopExchange(const float pos[3], float yaw, u32 zone, int kind, bool inCar, int car, const float carPos[3]) {
     if (!Open()) return;
     const DWORD now = GetTickCount();
     if (g_state == 1) {
@@ -141,6 +142,9 @@ void NetCoopExchange(const float pos[3], float yaw, u32 zone, int kind, bool inC
             p.s.kind = kind;
             p.s.inCar = inCar;
             p.s.car = car;
+            p.s.carPos[0] = carPos[0] + 8.f;
+            p.s.carPos[1] = carPos[1];
+            p.s.carPos[2] = carPos[2];
             p.s.yaw = yaw;
             p.s.pos[0] = pos[0] + 8.f;
             p.s.pos[1] = pos[1];
@@ -160,6 +164,7 @@ void NetCoopExchange(const float pos[3], float yaw, u32 zone, int kind, bool inC
         p.yaw = yaw;
         p.flags = inCar ? 1u : 0u;
         p.car = (u32)car;
+        for (int i = 0; i < 3; ++i) p.carPos[i] = carPos[i];
         g_ws.sendto(g_sock, (const char*)&p, sizeof p, 0, (const sockaddr*)&g_peer, sizeof g_peer);
     }
     for (int i = 0; i < 32; ++i) {
@@ -171,9 +176,9 @@ void NetCoopExchange(const float pos[3], float yaw, u32 zone, int kind, bool inC
         if (got != (int)sizeof p || p.mark != kMark || p.version != kNetVersion || from.sin_addr.s_addr != g_peer.sin_addr.s_addr) continue;
         // a newer one than the last; a much older number is the friend's game started again
         if (g_haveLast && (int)(p.seq - g_seqIn) <= 0 && g_seqIn - p.seq < 2000) continue;
-        bool sane = p.kind <= 2;
+        bool sane = p.kind <= 3;
         for (int k = 0; k < 3; ++k)
-            if (!(p.pos[k] > -1.0e6f && p.pos[k] < 1.0e6f)) sane = false;  // also turns down what is not a number
+            if (!(p.pos[k] > -1.0e6f && p.pos[k] < 1.0e6f) || !(p.carPos[k] > -1.0e6f && p.carPos[k] < 1.0e6f)) sane = false;  // also turns down what is not a number
         if (!(p.yaw > -100.f && p.yaw < 100.f) || !sane) continue;
         g_seqIn = p.seq;
         g_last.zone = p.zone;
@@ -181,7 +186,7 @@ void NetCoopExchange(const float pos[3], float yaw, u32 zone, int kind, bool inC
         g_last.inCar = (p.flags & 1) != 0;
         g_last.car = (int)(p.car & 0xFF);
         g_last.yaw = p.yaw;
-        for (int k = 0; k < 3; ++k) g_last.pos[k] = p.pos[k];
+        for (int k = 0; k < 3; ++k) { g_last.pos[k] = p.pos[k]; g_last.carPos[k] = p.carPos[k]; }
         g_haveLast = true;
         g_lastHeard = now;
         if (!g_toldHeard) {

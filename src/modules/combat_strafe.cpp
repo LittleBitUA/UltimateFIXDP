@@ -770,7 +770,41 @@ void DollTalkTick(u8* player, u8* doll, bool free) {
 // It walks where the left stick points, relative to the camera, at York's height (a doll has no physics and the game finds no
 // ground for it). Its standing, walking and running motions are learnt from York: whatever motion York has at rest, at a
 // walk and at a run is remembered and played on the partner in the same three cases.
-void* g_partnerMotion[3];  // York's motion at rest, walking, running
+void* g_partnerMotion[4];  // York's motion at rest, walking, running, at the wheel
+// The car York sits in: the player object holds a pointer to it somewhere; the place is found once by looking through the object
+// for a pointer to a CObjectCar (vtable 00773F74h) that is near York, each candidate checked with VirtualQuery before it is read.
+int g_carPtrOffset = -1;
+bool CarReadable(const void* p) {
+    MEMORY_BASIC_INFORMATION mbi;
+    if ((uintptr_t)p < 0x10000 || ((uintptr_t)p & 3) || !VirtualQuery(p, &mbi, sizeof(mbi))) return false;
+    return mbi.State == MEM_COMMIT && (mbi.Protect & (PAGE_READWRITE | PAGE_READONLY | PAGE_EXECUTE_READWRITE | PAGE_WRITECOPY)) && !(mbi.Protect & PAGE_GUARD) &&
+           (uintptr_t)mbi.BaseAddress + mbi.RegionSize >= (uintptr_t)p + 0x80;
+}
+u8* DrivenCar(u8* player) {
+    auto isNear = [player](u8* c) {
+        const float dx = *(volatile float*)(c + 0x58) - *(volatile float*)(player + 0x58), dz = *(volatile float*)(c + 0x60) - *(volatile float*)(player + 0x60);
+        return dx * dx + dz * dz < 12.f * 12.f;
+    };
+    if (g_carPtrOffset >= 0) {
+        u8* c = *(u8* volatile*)(player + g_carPtrOffset);
+        if (CarReadable(c) && *(volatile u32*)c == 0x773F74u && isNear(c)) return c;
+        return nullptr;
+    }
+    static DWORD tried = 0;
+    if (GetTickCount() - tried < 2000) return nullptr;
+    tried = GetTickCount();
+    for (int off = 0x100; off < 0x1800; off += 4) {
+        u8* c = *(u8* volatile*)(player + off);
+        if (!CarReadable(c) || *(volatile u32*)c != 0x773F74u || !isNear(c)) continue;
+        g_carPtrOffset = off;
+        Log("net partner: York's car is the object at player+%Xh (%08X; its place %d %d %d, its angles %d %d %d thousandths, York's heading %d)", off, (u32)(uintptr_t)c,
+            (int)*(volatile float*)(c + 0x58), (int)*(volatile float*)(c + 0x5C), (int)*(volatile float*)(c + 0x60), (int)(*(volatile float*)(c + 0x68) * 1000.f),
+            (int)(*(volatile float*)(c + 0x6C) * 1000.f), (int)(*(volatile float*)(c + 0x70) * 1000.f), (int)(*(volatile float*)(player + 0x7C) * 1000.f));
+        return c;
+    }
+    Log("net partner: no pointer to York's car found in the player object (the car is taken to be where York sits)");
+    return nullptr;
+}
 int g_partnerState = -1;
 float g_yorkLast[3];
 LARGE_INTEGER g_partnerClock;
@@ -796,6 +830,12 @@ void PartnerTick(u8* player, u8* doll) {
         // partner seemed to answer the keyboard and its motions fell apart.)
         static void* cand[3];
         static float held[3];
+        static void* candDrive;
+        static float heldDrive;
+        if (state == 0x87 && m && !g_partnerMotion[3]) {  // at the wheel: the sitting motion, kept for a second
+            if (candDrive != m) { candDrive = m; heldDrive = 0.f; }
+            else if ((heldDrive += dt) >= 1.f) { g_partnerMotion[3] = m; Log("partner: learnt York's motion at the wheel (%08X)", (u32)(uintptr_t)m); }
+        }
         if (kind >= 0 && m && state != 0x87 && state != 0x88 && !g_partnerMotion[kind]) {
             if (cand[kind] != m) {
                 cand[kind] = m;
@@ -824,7 +864,12 @@ void PartnerTick(u8* player, u8* doll) {
         // which of the game's cars York has: CGame+9906Ch, the number the game itself takes for "York's car" (FUN_005F1840)
         const bool driving = st == 0x87 || st == 0x88;
         const int myCar = gm ? (int)*(volatile u16*)(gm + 0x9906C) : 0;
-        NetCoopExchange(yp, *(volatile float*)(player + 0x7C), zoneNow, mine, driving, myCar);
+        float myCarAt[3] = {yp[0], yp[1], yp[2]};
+        if (driving) {
+            u8* c = DrivenCar(player);
+            if (c) for (int i = 0; i < 3; ++i) myCarAt[i] = *(volatile float*)(c + 0x58 + 4 * i);
+        }
+        NetCoopExchange(yp, *(volatile float*)(player + 0x7C), zoneNow, driving ? 3 : mine, driving, myCar, myCarAt);
         NetPeerState peer;
         static bool shown = false;
         const bool see = NetCoopPeer(&peer) && peer.zone == zoneNow;
@@ -835,7 +880,7 @@ void PartnerTick(u8* player, u8* doll) {
             // A car of the same number as the one this York sits in would be pulled from under him, so another one stands in.
             int n = peer.car == 7 || peer.car == 8 || (peer.car >= 77 && peer.car <= 90) ? peer.car : 7;
             if (driving && n == myCar) n = n == 7 ? 8 : 7;
-            const float ex = peer.pos[0] - carAt[0], ey = peer.pos[1] - carAt[1], ez = peer.pos[2] - carAt[2];
+            const float ex = peer.carPos[0] - carAt[0], ey = peer.carPos[1] - carAt[1], ez = peer.carPos[2] - carAt[2];
             const float k = !carShown || ex * ex + ez * ez > 60.f * 60.f || dt <= 0.f ? 1.f : (dt * 14.f > 1.f ? 1.f : dt * 14.f);
             carAt[0] += ex * k;
             carAt[1] += ey * k;
@@ -843,9 +888,17 @@ void PartnerTick(u8* player, u8* doll) {
             const bool ok = NetCarAt(n, carAt, peer.yaw);
             if (ok != carShown) Log("net partner: the friend's car is %s", ok ? "shown" : "not shown (needs free play outdoors in Greenvale)");
             carShown = ok;
-            g_dollBase[0] = yp[0];
-            g_dollBase[1] = yp[1] - 400.f;
-            g_dollBase[2] = yp[2];
+            if (ok && g_partnerMotion[3]) {  // the driver: the figure where the friend's York sits, in York's motion at the wheel
+                g_dollBase[0] = carAt[0] + (peer.pos[0] - peer.carPos[0]);
+                g_dollBase[1] = carAt[1] + (peer.pos[1] - peer.carPos[1]);
+                g_dollBase[2] = carAt[2] + (peer.pos[2] - peer.carPos[2]);
+                g_dollYaw = peer.yaw;
+                want = 3;
+            } else {
+                g_dollBase[0] = yp[0];
+                g_dollBase[1] = yp[1] - 400.f;
+                g_dollBase[2] = yp[2];
+            }
             shown = false;
         } else if (see) {
             carShown = false;
@@ -920,6 +973,7 @@ void PartnerTick(u8* player, u8* doll) {
     *(volatile float*)(doll + 0x7C) = *(volatile float*)(doll + 0x6C) = g_dollYaw;
     // the motion of the case
     void* m = g_partnerMotion[want] ? g_partnerMotion[want] : g_partnerMotion[want == 2 ? 1 : 0];
+    if (want == 3) m = g_partnerMotion[3];
     if (m && (want != g_partnerState || *(void* volatile*)(doll + 0x18C) != m)) {
         const u8* cur = *(u8* volatile*)(doll + 0x18C);
         if (!cur || (uintptr_t)cur < 0x10000 || *(const u16*)(cur + 8) == *(const u16*)((const u8*)m + 8)) {
