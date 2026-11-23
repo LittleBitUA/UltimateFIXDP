@@ -304,6 +304,10 @@ async function fillSlots() {
 
 // ---------- outliner ----------
 function stepName(s, i) { return s.Title || (s.Kind <= 1 ? (resName(s.Resident) + (s.Line ? ": " + s.Line : "")) : KIND()[s.Kind]) || T("Крок ", "Step ") + (i + 1); }
+// Items for a list: a weapon the game lets York own none of (max 0 in its item table) is left out, unless it is the one already chosen.
+function itemOptions(chosen) {
+  return lists.items.filter(c => c.max !== 0 || c.id === chosen).map(c => [c.id, c.id + " · " + c.name + (c.max === 0 ? T(" (гра не дає)", " (the game gives none)") : "")]);
+}
 function resName(id) { const r = lists.residents.find(r => r.id === id); return r && r.name ? r.name : "#" + id; }
 function renderSteps() {
   const ul = $("steps"); ul.innerHTML = "";
@@ -410,7 +414,7 @@ function renderProps() {
     row(g, T("Погода", "Weather"), h2);
     const h3 = document.createElement("div"); h3.className = "hrow"; h3.append(pick(car, "v", lists.cars.map(c => [c.id, c.name])), button(T("Поставити", "Put"), () => needGame() && cmd("do=car&v=" + car.v)));
     row(g, T("Машина", "Car"), h3);
-    const h4 = document.createElement("div"); h4.className = "hrow"; h4.append(pick(it, "v", lists.items.map(c => [c.id, c.id + " · " + c.name])), button(T("Дати", "Give"), () => needGame() && cmd("do=item&v=" + it.v + "&n=1")));
+    const h4 = document.createElement("div"); h4.className = "hrow"; h4.append(pick(it, "v", itemOptions(it.v)), button(T("Дати", "Give"), () => needGame() && cmd("do=item&v=" + it.v + "&n=1")));
     row(g, T("Предмет", "Item"), h4);
     note(g, T("Ці кнопки нічого не міняють у квесті: вони для того, щоб швидко підготувати сцену під час перевірки.", "These buttons change nothing in the quest: they prepare the scene quickly while you test."));
     P.scrollTop = keep; return;
@@ -486,7 +490,8 @@ function renderProps() {
   }
 
   r = section("reward", s.Kind === 0 ? T("Нагорода (за відповідь 1)", "Reward (for answer 1)") : T("Нагорода", "Reward"));
-  row(r, T("Предмет", "Item"), pick(s, "GiveItem", [[0, T("нічого", "nothing")]].concat(lists.items.map(c => [c.id, c.id + " · " + c.name]))));
+  row(r, T("Предмет", "Item"), pick(s, "GiveItem", [[0, T("нічого", "nothing")]].concat(itemOptions(s.GiveItem))));
+  if (s.GiveItem >= 1 && s.GiveItem <= 66) note(r, T("Зброя: гра дає лише ті види, які дозволяє її таблиця предметів, тому частини звичайних тут немає. «<127>» у назві означає зброю без зносу.", "Weapons: the game gives only the kinds its item table allows, so some plain ones are not listed. \"<127>\" in a name marks a weapon that does not wear out."));
   row(r, T("Кількість", "Count"), num(s, "GiveCount", 1, 99));
   row(r, T("Гроші, $", "Money, $"), num(s, "Money", 0, 9999));
 

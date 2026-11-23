@@ -15,6 +15,7 @@
 // thread never touches the game: it leaves requests that the game thread picks up (MissionRequest and the cheats' own).
 #include "../base.h"
 #include "../inflate.h"
+#include "../item_limits.h"
 #include "../item_names.h"
 #include "../sites.h"
 #include <winsock2.h>
@@ -223,7 +224,7 @@ void Lists(SOCKET s) {
         if (!kItemNames[id] || !kItemNames[id][0]) continue;
         n += wsprintfA(j + n, "%s{\"id\":%d,\"name\":\"", first ? "" : ",", id);
         n += JsonText(j + n, kItemNames[id]);
-        n += wsprintfA(j + n, "\"}");
+        n += wsprintfA(j + n, "\",\"max\":%d}", id <= 66 ? (int)kItemMax[id] : -1);  // weapons: how many the game lets York own (0 = none)
         first = false;
     }
     n += wsprintfA(j + n, "],\"cars\":[");

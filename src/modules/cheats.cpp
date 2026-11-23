@@ -4,6 +4,8 @@
 // Requests come from the F10 menu and are carried out from the player update (the game thread), once per frame, so nothing is
 // touched from the middle of a draw call.
 #include "../base.h"
+#include "../item_limits.h"
+#include "../item_names.h"
 #include "../sites.h"
 
 namespace ufx {
@@ -303,17 +305,14 @@ int GiveItemNow(int id, int count) {
     // what York carries (+98270h) and what lies in the storage (+97698h), by item id: read around the call to see what it did
     volatile int* carried = (volatile int*)(game + 0x98270 + id * 4);
     volatile int* stored = (volatile int*)(game + 0x97698 + id * 4);
+    if (id <= 66 && kItemMax[id] == 0) {  // a weapon the game's item table lets York own none of: its own call would answer -2
+        Log("give: item %d (%s) not given: the game's item table lets York own none of it (see the <127> one of the same weapon)", id, kItemNames[id]);
+        return -2;
+    }
     const int c0 = *carried, s0 = *stored;
     int r = ((GiveItemFn)(uintptr_t)kGiveItemFn)(game, id, count, 1, 0, 0);
     Log("give: item %d x %d, the game answered %d; carried %d -> %d, stored %d -> %d", id, count, r, c0, *carried, s0, *stored);
-    if (*carried == c0 && *stored == s0 && c0 < 1 && id >= 0x16 && id <= 0x42) {
-        // A weapon without wear (22..66) that the call left out (FUN_005019B0 multiplies the count by a field of the item's record,
-        // which is 0 for some of them): what its own branch at 00502041 does for these ids, one piece.
-        *carried = c0 + 1;
-        *(volatile u8*)(game + 0x98F5C + (id >> 3)) |= (u8)(1u << (id & 7));
-        Log("give: item %d put among York's things directly (the game's call added nothing)", id);
-        r = 0;
-    } else if (*carried == c0 && *stored == s0 && r != -3) {
+    if (*carried == c0 && *stored == s0 && r != -3) {
         r = -2;  // nothing was added: York has it already, or there is no room for more
     }
     return r;
