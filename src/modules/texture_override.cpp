@@ -10,6 +10,7 @@
 #include "../base.h"
 #include "../hash.h"
 #include "../inflate.h"
+#include "../mipgen.h"
 
 namespace ufx {
 namespace {
@@ -481,6 +482,9 @@ bool VoidTextureLoad(void* dev, const void* data, UINT size, void** out) {
     return true;
 }
 
+void* MipAlloc(u32 bytes) { return HeapAlloc(GetProcessHeap(), 0, bytes); }
+void MipFree(void* p) { HeapFree(GetProcessHeap(), 0, p); }
+
 HRESULT FromMemoryInner(void* dev, const void* data, UINT size, UINT w, UINT h, UINT mips, DWORD usage, DWORD fmt, DWORD pool,
                         DWORD filter, DWORD mipFilter, DWORD colorKey, void* info, void* palette, void** out) {
     // One start for every path below: a file that cannot be loaded and the original made after it are one load to the game.
@@ -542,12 +546,28 @@ HRESULT FromMemoryInner(void* dev, const void* data, UINT size, UINT w, UINT h, 
         const u32 height = dds[3], width = dds[4], levels = dds[7], caps2 = dds[28];
         const bool square2 = (width & (width - 1)) == 0 && (height & (height - 1)) == 0;  // the atlases are not powers of two
         if (dds[0] == 0x20534444 /*"DDS "*/ && levels <= 1 && width >= 128 && height >= 128 && square2 && !(caps2 & 0x200) /*cube*/) {
+            // The levels are built here in memory and the texture goes to D3DX once, as a file that came with them (mipgen.h).
+            // Asked for "all levels", D3DX made them one by one through the device, and each of those calls waited for the
+            // picture's thread: about three frames per texture, most of a loading screen at 60 Hz (issue #3).
+            static u32 made = 0, slow = 0;
+            u32 chainSize = 0;
+            u8* chain = mip::BuildChain(data, size, &chainSize, MipAlloc, MipFree);
+            if (chain) {
+                HRESULT hr = g_real(dev, chain, chainSize, w, h, 0xFFFFFFFDu /*D3DX_FROM_FILE*/, usage, fmt, pool, filter, mipFilter, colorKey, info, palette, out);
+                MipFree(chain);
+                if (hr >= 0) {
+                    NoteLoad(0, started, data, size);
+                    if (++made <= 5 || made % 200 == 0) Log("textures: mipmaps made for a %ux%u texture without them (%u so far, built in memory)", width, height, made);
+                    return hr;
+                }
+                Log("textures: a %ux%u texture with levels built in memory was refused (%08X), the old way is used", width, height, (u32)hr);
+            }
             HRESULT hr = g_real(dev, data, size, w, h, 0 /*all levels*/, usage, fmt, pool, filter, 5 /*D3DX_FILTER_BOX*/, colorKey, info,
                                 palette, out);
             if (hr >= 0) {
                 NoteLoad(0, started, data, size);
-                static u32 made = 0;
-                if (++made <= 5 || made % 200 == 0) Log("textures: mipmaps made for a %ux%u texture without them (%u so far)", width, height, made);
+                if (++slow <= 5 || slow % 200 == 0)
+                    Log("textures: mipmaps made by D3DX for a %ux%u texture of a format the mod does not pack (fourcc %08X, %u bits; %u so far)", width, height, dds[21], dds[22], slow);
                 return hr;
             }
         }
