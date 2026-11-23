@@ -1056,7 +1056,8 @@ void NetPartnerStep(u8* player, u8* doll, const float yp[3], const float yorkWas
     if (gm) {
         int row = *(volatile int*)(gm + 0xCED48);
         if (*(volatile u8*)(gm + 0x8CA12) == 4) row += 10;
-        if (*(volatile int*)(gm + 0x8C5E4) != 1) row += 20;
+        if (*(volatile u8*)(gm + 0x8C5E4) != 1) row += 20;  // a byte (0.7.17-test12 read four: always "not 1", York stood without his jacket)
+        if (*(volatile u8*)(gm + 0x8CA12) == 4 && *(volatile u8*)(gm + 0x8C5E4) == 3) row = 40;
         me.suit = row >= 0 && row < 41 ? row : 0;
     }
     if (myCar) {
