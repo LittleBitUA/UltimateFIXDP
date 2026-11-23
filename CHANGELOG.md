@@ -2,6 +2,19 @@
 
 The two newest versions are in the [README](README.md).
 
+## What's new in 0.7.15
+
+**Driving on the triggers.** Behind the wheel the gas is on R2 / RT and the brake (and reverse, when the car stands) on L2 / LT, as on the console. The car's other buttons stay where the game has them. On by default; the row "Gas on R2, brake on L2 in the car" on the Controls page (`[Input] TriggerDrive`) puts the game's layout back (brake L1, gas R1) at once. Checked in the game.
+
+**DualSense adaptive triggers in the car, each on its own.** A group "Triggers in the car (DualSense)" on the Controls page with three rows for the gas trigger and three for the brake:
+- **Effect:** off, resistance, a click (a wall that gives way) or vibration.
+- **Strength**, 0–100 %.
+- **Where it begins** along the trigger's travel, 0 (at once) to 8 (near the end).
+
+The effect stays while the F10 menu is open, so you can tune it on the road: change a row, press the trigger. By default both triggers push back (gas 30 %, brake 60 %). It needs "DualSense adaptive triggers" on and Steam Input off for the game. Checked in the game.
+
+Earlier versions: [CHANGELOG.md](CHANGELOG.md).
+
 ## What's new in 0.7.14
 
 **An important fix: missing buildings and a freeze while driving.** If Greenvale had no buildings at all, or the game froze while you drove through it, this was the mod's own fault, in every version from 0.7.1 to 0.7.13.

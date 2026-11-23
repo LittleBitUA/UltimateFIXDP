@@ -28,7 +28,7 @@ _Універсальний фікс для_ **Deadly Premonition: The Director'
 One DLL in the game folder instead of DPfix, a stability fix, a map fix and a crash fix.
 No installer: press **F10** in game and everything is there. The mod also gives the game 4 GB of memory by itself (from the second start).
 
-> **Version 0.7.16.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
+> **Version 0.7.17.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
 > <br>Newest: a posed character next to York in the photo mode, play as other characters, a spawner for cars and items, a partner on the gamepad and a first mission editor — see [What's new](#whats-new-in-0713). Earlier versions: [CHANGELOG.md](CHANGELOG.md).
 
 ### Features
@@ -73,6 +73,7 @@ No installer: press **F10** in game and everything is there. The mod also gives 
 - 🧰 **Cheats** — money, time of day, weather, ammunition, god mode, York flies (F3)
 - 👥 **Play as** another of the game's own playable characters, with its model and motions, in free play
 - 🚗 **Spawner** — any of the game's 16 cars by name in front of York; any item by number and name
+- 🌐 **Multiplayer for two** (_experimental_) — your own server or joining by address; the other player is a second York with his name, weapon, shots and car; chat on T
 - 🎮 **A partner on the gamepad** (_experimental_) — a first try at local co-op: a second character walks by the gamepad while York keeps the keyboard and mouse
 
 #### Mission editor
@@ -165,6 +166,23 @@ port with the Xbox 360 original:
   Checked in the game at the river; other water (the lake, puddles,
   interiors) has not been compared yet.
 
+### What's new in 0.7.17
+
+**The smoke of the prologue is smoke again.** On PC it was a solid black blob with a straight rim and a black wedge next to the door. Now it is a dark smoke with grey wisps, as on the console. Checked in the game.
+- The fix has two halves: a smoke texture from the Xbox 360 version, found and shared by **Darkanioid1997**, and the mod's own repair of the second smoke sheet and of the black shape behind the door. It works only in the prologue.
+- One switch: F10 → Fixes → "Prologue smoke fix" (on by default, needs a restart).
+
+**The texture mod "Fix" by Darkanioid1997 comes with the mod** (`UltimateFix\mods\Fix`, switched on by itself, F10 → Mods): the smoke texture above and three signs that say Greenvale instead of the town's old name. The signs are not checked in the game yet.
+
+**Multiplayer for two** (_experimental_; so far it was tried by one player with a test copy of himself, never between two computers). F10 → Multiplayer: your name, "Start a server", joining by address, a list of the servers of your network.
+- Each player stays in their own game with their own story; the other one is shown as a second York with his name over the head, his suit, his motions, the weapon in his hand, aiming and the flash and sound of his shots (they hurt nobody), and the car he drives.
+- **Chat on T**, with `/nick`, `/tp` (go to the other player), `/clear`, `/help`. A mark with the name on the pause map.
+- Not there: more than two players, riding as a passenger, shared cars, time, weather and enemies, a server list of the whole internet (over the internet: the host's address and UDP port 47900 open there, or a virtual network).
+
+**Quest editor** (_experimental_): the map is the game's own, a light, dark and game-coloured theme, markers are dragged on the map, a "Nodes" view where steps are linked by dragging, a check of the quest, a car can be put beside, behind or at an exact place, a step with a character waits while York drives.
+
+**Small things:** giving an item says honestly when the game refuses it (some weapons can only be owned in their other version).
+
 ### What's new in 0.7.16
 
 **A quest editor in the browser** (_experimental, not yet checked in the game_; needs `[Debug] MissionLab=1` in `UltimateFix.ini`). F10 → Mission editor → "Open the quest editor (browser)" opens a page served by the mod itself on this computer only (`http://127.0.0.1:47800/`), next to the running game:
@@ -176,18 +194,6 @@ port with the Xbox 360 original:
 
 **A guard against a crash at a level change.** A player's crash on entering a building (`DP.exe+55C49`): at a level change the game used an object of its grass pool that was already freed. The mod now checks that object first and skips a dead one, with a line in `ufx.log`. Part of `[Debug] CrashGuards` (on by default). Built from one crash dump; not reproduced in the game.
 
-### What's new in 0.7.15
-
-**Driving on the triggers.** Behind the wheel the gas is on R2 / RT and the brake (and reverse, when the car stands) on L2 / LT, as on the console. The car's other buttons stay where the game has them. On by default; the row "Gas on R2, brake on L2 in the car" on the Controls page (`[Input] TriggerDrive`) puts the game's layout back (brake L1, gas R1) at once. Checked in the game.
-
-**DualSense adaptive triggers in the car, each on its own.** A group "Triggers in the car (DualSense)" on the Controls page with three rows for the gas trigger and three for the brake:
-- **Effect:** off, resistance, a click (a wall that gives way) or vibration.
-- **Strength**, 0–100 %.
-- **Where it begins** along the trigger's travel, 0 (at once) to 8 (near the end).
-
-The effect stays while the F10 menu is open, so you can tune it on the road: change a row, press the trigger. By default both triggers push back (gas 30 %, brake 60 %). It needs "DualSense adaptive triggers" on and Steam Input off for the game. Checked in the game.
-
-Earlier versions: [CHANGELOG.md](CHANGELOG.md).
 
 ### Screenshots
 
@@ -214,6 +220,7 @@ The code is our own (MIT). The ideas, facts and addresses came from earlier comm
 | **[CrashFix](https://github.com/Behelit09/DeadlyPremonition-CrashFix)** · **[MapFix](https://github.com/Behelit09/Deadly-Premonition-The-Director-s-Cut-MapFix)** · **[FreeCam](https://github.com/Behelit09/DeadlyPremonition-FreeCam)** | Behelit09 | Navigation crash, the full map, free camera |
 | **[DPRecomp](https://github.com/LittleBitUA/DPRecomp)** | «Little Bit» | Our Xbox 360 recompilation: the reference the PC port is compared with |
 | **[Kenney Input Prompts](https://kenney.nl/assets/input-prompts)** | Kenney | Gamepad button icons (CC0) |
+| **Fix** (texture mod, shipped with the mod) | Darkanioid1997 | The smoke texture of the prologue and the Greenvale signs, from the Xbox 360 version; the finding that the PC port uses a black texture for the smoke |
 | **[AMD FidelityFX FSR 1](https://github.com/GPUOpen-Effects/FidelityFX-FSR)** | AMD | The RCAS formula of the adaptive sharpening, written in our own HLSL (MIT) |
 
 🧪 **Testers:** **Gold flin**, **Tree Fan** and **EliParker**. Thank you for playing the unfinished builds and reporting everything that broke.
@@ -329,7 +336,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 Одна DLL у теці гри замість DPfix, фіксу стабільності, фіксу мапи й фіксу вильотів.
 Без інсталятора: натисніть **F10** у грі, і все там. Мод також сам дає грі 4 ГБ пам'яті (з другого запуску).
 
-> **Версія 0.7.16.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
+> **Версія 0.7.17.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
 > <br>Найновіше: персонаж поруч із Йорком у фоторежимі, гра за інших персонажів, спавнер машин і предметів, напарник із ґеймпада і перший редактор місій — див. [Що нового](#що-нового-в-0713). Попередні версії: [CHANGELOG_UA.md](CHANGELOG_UA.md).
 
 ### Можливості
@@ -374,6 +381,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 - 🧰 **Читкоди** — гроші, час доби, погода, набої, невразливість, політ Йорка (F3)
 - 👥 **Грати за** іншого персонажа, за якого гра сама дає грати, з його моделлю й анімаціями, у вільній грі
 - 🚗 **Спавнер** — будь-яка з 16 машин гри за назвою перед Йорком; будь-який предмет за номером і назвою
+- 🌐 **Мультиплеєр на двох** (_експериментально_) — свій сервер або підключення за адресою; інший гравець — другий Йорк з ім'ям, зброєю, пострілами й машиною; чат на T
 - 🎮 **Напарник із ґеймпада** (_експериментально_) — перша проба локального кооперативу: другий персонаж ходить за ґеймпадом, а Йорк лишається на клавіатурі й миші
 
 #### Редактор місій
@@ -465,6 +473,23 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
   Перевірено у грі біля річки; іншу воду (озеро, калюжі, приміщення) ще не
   порівнювали.
 
+### Що нового в 0.7.17
+
+**Дим у пролозі знову дим.** На комп'ютері це була суцільна чорна пляма з рівним краєм і чорний клин біля дверей. Тепер це темний дим із сірими пасмами, як на консолі. Перевірено в грі.
+- Виправлення має дві половини: текстура диму з версії для Xbox 360, яку знайшов і дав **Darkanioid1997**, і власний ремонт мода для другого аркуша диму та чорної фігури за дверима. Діє лише в пролозі.
+- Один перемикач: F10 → Виправлення → «Виправлення диму в пролозі» (типово ввімкнено, потребує перезапуску).
+
+**Текстурний мод «Fix» від Darkanioid1997 іде разом із модом** (`UltimateFix\mods\Fix`, вмикається сам, F10 → Моди): текстура диму вище і три вивіски з написом Greenvale замість старої назви міста. Вивіски в грі ще не перевірено.
+
+**Мультиплеєр на двох** (_експериментально_; досі його пробував один гравець із тестовою копією самого себе, між двома комп'ютерами ще ніхто). F10 → Мультиплеєр: ваше ім'я, «Створити сервер», підключення за адресою, список серверів вашої мережі.
+- Кожен лишається у своїй грі зі своїм сюжетом; іншого гравця видно як другого Йорка з ім'ям над головою, у його костюмі, з його рухами, зброєю в руці, прицілюванням, спалахом і звуком пострілів (вони нікого не ранять) і з машиною, якою він їде.
+- **Чат на T**, з командами `/nick`, `/tp` (перейти до іншого гравця), `/clear`, `/help`. Мітка з ім'ям на мапі паузи.
+- Чого немає: більше двох гравців, пасажира в машині, спільних машин, часу, погоди й ворогів, списку серверів усього інтернету (через інтернет: адреса господаря й відкритий у нього UDP-порт 47900, або віртуальна мережа).
+
+**Редактор квестів** (_експериментально_): мапа береться з гри, світла, темна тема й тема в кольорах гри, мітки перетягуються по мапі, вигляд «Вузли», де кроки з'єднуються перетягуванням, перевірка квесту, машину можна поставити поруч, позаду чи в точному місці, крок із персонажем чекає, поки Йорк за кермом.
+
+**Дрібне:** видача предмета чесно каже, коли гра відмовляє (деяку зброю можна мати лише в іншій її версії).
+
 ### Що нового в 0.7.16
 
 **Редактор квестів у браузері** (_експериментально, у грі ще не перевірено_; потрібен `[Debug] MissionLab=1` в `UltimateFix.ini`). F10 → Редактор місій → «Відкрити редактор квестів (браузер)» відкриває сторінку, яку мод сам роздає лише на цьому комп'ютері (`http://127.0.0.1:47800/`), поруч із запущеною грою:
@@ -476,18 +501,6 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 
 **Запобіжник від вильоту при зміні рівня.** Виліт у гравця на вході в будівлю (`DP.exe+55C49`): при зміні рівня гра зверталася до об'єкта свого пулу трави, який уже було звільнено. Тепер мод спершу перевіряє цей об'єкт і пропускає мертвий, із рядком в `ufx.log`. Входить до `[Debug] CrashGuards` (типово ввімкнено). Зроблено за одним дампом; у грі виліт не відтворювали.
 
-### Що нового в 0.7.15
-
-**Їзда на триґерах.** За кермом газ на R2 / RT, гальмо (і задній хід, коли машина стоїть) на L2 / LT, як на консолі. Решта кнопок машини лишається там, де їх має гра. Типово ввімкнено; рядок «Газ на R2, гальмо на L2 в машині» на сторінці «Керування» (`[Input] TriggerDrive`) одразу повертає розкладку гри (гальмо L1, газ R1). Перевірено у грі.
-
-**Адаптивні триґери DualSense в машині, кожен окремо.** Група «Триґери в машині (DualSense)» на сторінці «Керування»: три рядки для триґера газу й три для гальма:
-- **Ефект:** вимкнено, опір, клік (стінка, яка піддається) або вібрація.
-- **Сила**, 0–100 %.
-- **Початок ходу**: з якого місця ходу триґера починається ефект, від 0 (одразу) до 8 (майже в кінці).
-
-Ефект не зникає, коли відкрите меню F10, тож налаштовувати можна просто в дорозі: змінили рядок — натиснули триґер. Типово обидва триґери мають опір (газ 30 %, гальмо 60 %). Потрібні ввімкнені «Адаптивні триґери DualSense» і вимкнений Steam Input для гри. Перевірено у грі.
-
-Попередні версії: [CHANGELOG_UA.md](CHANGELOG_UA.md).
 
 ### На чиїх плечах стоїмо
 
@@ -501,6 +514,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 | **[CrashFix](https://github.com/Behelit09/DeadlyPremonition-CrashFix)** · **[MapFix](https://github.com/Behelit09/Deadly-Premonition-The-Director-s-Cut-MapFix)** · **[FreeCam](https://github.com/Behelit09/DeadlyPremonition-FreeCam)** | Behelit09 | Виліт навігації, повна мапа, вільна камера |
 | **[DPRecomp](https://github.com/LittleBitUA/DPRecomp)** | «Little Bit» | Наша рекомпіляція версії для Xbox 360: еталон, з яким порівнюємо PC-порт |
 | **[Kenney Input Prompts](https://kenney.nl/assets/input-prompts)** | Kenney | Іконки кнопок ґеймпада (CC0) |
+| **Fix** (текстурний мод, іде разом із модом) | Darkanioid1997 | Текстура диму прологу й вивіски Greenvale з версії для Xbox 360; знахідка, що комп'ютерна версія малює дим чорною текстурою |
 | **[AMD FidelityFX FSR 1](https://github.com/GPUOpen-Effects/FidelityFX-FSR)** | AMD | Формула RCAS для адаптивної різкості, переписана нашим власним HLSL (MIT) |
 
 🧪 **Тестувальники:** **Gold flin**, **Tree Fan** і **EliParker**. Дякуємо, що грали в недороблені збірки й повідомляли про все, що ламалось.
