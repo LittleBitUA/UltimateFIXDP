@@ -122,6 +122,7 @@ struct Config {
     int exposureComp;        // exposure compensation in tenths of a stop (-30..30)
     int fullscreenEdgeFix;   // full-screen 2D quads (fades, item notice) cover the last pixel row and column above 720p
     int gameLook;            // a photo filter applied all the time (0 = none), [Graphics] GameLook
+    int smokeTune, smokeDensity, smokeCurve, smokeEdge, smokeGrey;  // the prologue smoke sheet made by the mod from the game's own (texture_override.cpp)
     int generateMips;        // build the mipmaps of world textures stored without them (far shimmer), at load
     int shadowBiasFix;       // more depth bias on the two far sun shadow cascades (crawling stripes far away)
     int riverWater;          // the river gets the values of its own "_river" water record and a wave map 16 times larger (as on the Xbox)
@@ -339,6 +340,7 @@ void ApplySurround();      // follows [Audio] Surround (also called from the men
 bool InstallMapFix();
 void ApplyMapFix();
 bool InstallTextureOverride();
+void SmokeTuneApply();  // the smoke sheet is filled again from the settings (the menu calls it after a change)
 // texture_override.cpp: what the texture loads cost (log only). Per kind of load: 0 = mipmaps made by D3DX (GenerateMips),
 // 1 = as the game gave it, 2 = a file of a pack or a mod. False when the texture hook is not in (then nothing is counted).
 constexpr int kLoadKinds = 3;

@@ -352,6 +352,78 @@ HRESULT WINAPI H_FromMemoryEx(void* dev, const void* data, UINT size, UINT w, UI
     return hr;
 }
 
+// ---- The smoke sheet of the prologue, made here from the game's own ----
+// The game draws that smoke with a black 256x128 DXT3 sheet (hash d7a18744) whose alpha is the cloud; the console multiplies it by
+// a mask, the PC port does not, so the sheets add up to a solid black blob with the sheet's straight rim showing. The sheet is
+// made again here as a plain 32-bit texture from the game's alpha and four settings that change at once from the F10 menu:
+// density (the alpha's scale), curve (thin parts get thinner), edge (the thick side fades in before the sheet's rim), grey (colour).
+constexpr u32 kSmokeSheetHash = 0xD7A18744u;
+constexpr int kSmokeW = 256, kSmokeH = 128;
+u8 g_smokeAlpha[kSmokeW * kSmokeH];
+void* g_smokeSheet = nullptr;  // the newest one made (one reference is ours)
+volatile LONG g_smokeDirty = 0;
+
+void SmokeFill() {
+    void* tex = g_smokeSheet;
+    if (!tex) return;
+    struct Locked { int pitch; void* bits; } lr = {0, nullptr};
+    typedef HRESULT(WINAPI * LockFn)(void*, UINT, Locked*, const void*, DWORD);
+    typedef HRESULT(WINAPI * UnlockFn)(void*, UINT);
+    void** vt = *(void***)tex;
+    if (((LockFn)vt[19])(tex, 0, &lr, nullptr, 0) < 0 || !lr.bits) return;
+    const int density = g_cfg.smokeDensity < 0 ? 0 : g_cfg.smokeDensity > 300 ? 300 : g_cfg.smokeDensity;
+    const float curve = (g_cfg.smokeCurve < 0 ? 0 : g_cfg.smokeCurve > 200 ? 200 : g_cfg.smokeCurve) / 100.f;
+    const float edge = (g_cfg.smokeEdge < 0 ? 0 : g_cfg.smokeEdge > 50 ? 50 : g_cfg.smokeEdge) / 100.f * kSmokeW;
+    const u32 grey = (u32)((g_cfg.smokeGrey < 0 ? 0 : g_cfg.smokeGrey > 100 ? 100 : g_cfg.smokeGrey) * 255 / 100);
+    for (int y = 0; y < kSmokeH; ++y) {
+        u32* row = (u32*)((u8*)lr.bits + y * lr.pitch);
+        for (int x = 0; x < kSmokeW; ++x) {
+            const float t = g_smokeAlpha[y * kSmokeW + x] / 255.f, t2 = t * t;
+            // curve 0 = the game's alpha as it is, 1 = squared, 2 = to the fourth: the thin parts go first
+            float a = curve <= 1.f ? t + (t2 - t) * curve : t2 + (t2 * t2 - t2) * (curve - 1.f);
+            if (edge >= 1.f && x < edge) {
+                const float u = x / edge;
+                a *= u * u * (3.f - 2.f * u);
+            }
+            int v = (int)(a * density * 2.55f + 0.5f);
+            if (v > 255) v = 255;
+            row[x] = ((u32)v << 24) | (grey << 16) | (grey << 8) | grey;
+        }
+    }
+    ((UnlockFn)vt[20])(tex, 0);
+}
+
+// The game loads its smoke sheet: ours is given instead. False = not that texture, or it could not be made.
+bool SmokeSheetLoad(void* dev, const void* data, UINT size, void** out) {
+    const u32* dds = (const u32*)data;
+    if (size < 128 + kSmokeW * kSmokeH || dds[0] != 0x20534444u || dds[3] != (u32)kSmokeH || dds[4] != (u32)kSmokeW || dds[21] != 0x33545844u /*DXT3*/) return false;
+    const u8* blocks = (const u8*)data + 128;
+    for (int by = 0; by < kSmokeH / 4; ++by)
+        for (int bx = 0; bx < kSmokeW / 4; ++bx) {
+            const u8* b = blocks + (by * (kSmokeW / 4) + bx) * 16;  // 8 bytes of 4-bit alpha, then the colour
+            for (int r = 0; r < 4; ++r) {
+                const u32 bits = b[r * 2] | (b[r * 2 + 1] << 8);
+                for (int c = 0; c < 4; ++c) g_smokeAlpha[(by * 4 + r) * kSmokeW + bx * 4 + c] = (u8)(((bits >> (c * 4)) & 15) * 17);
+            }
+        }
+    typedef HRESULT(WINAPI * CreateFn)(void*, UINT, UINT, UINT, DWORD, DWORD, DWORD, void**, void*);
+    typedef ULONG(WINAPI * RefFn)(void*);
+    void* tex = nullptr;
+    if (((CreateFn)(*(void***)dev)[23])(dev, kSmokeW, kSmokeH, 1, 0, 21 /*A8R8G8B8*/, 1 /*managed*/, &tex, nullptr) < 0 || !tex) return false;
+    if (g_smokeSheet) ((RefFn)(*(void***)g_smokeSheet)[2])(g_smokeSheet);
+    ((RefFn)(*(void***)tex)[1])(tex);
+    g_smokeSheet = tex;
+    SmokeFill();
+    static bool told = false;
+    if (!told) {
+        told = true;
+        Log("textures: the prologue's smoke sheet (d7a18744) is made by the mod: density %d, curve %d, edge %d, grey %d (F10 changes them at once)",
+            g_cfg.smokeDensity, g_cfg.smokeCurve, g_cfg.smokeEdge, g_cfg.smokeGrey);
+    }
+    *out = tex;
+    return true;
+}
+
 HRESULT FromMemoryInner(void* dev, const void* data, UINT size, UINT w, UINT h, UINT mips, DWORD usage, DWORD fmt, DWORD pool,
                         DWORD filter, DWORD mipFilter, DWORD colorKey, void* info, void* palette, void** out) {
     // One start for every path below: a file that cannot be loaded and the original made after it are one load to the game.
@@ -372,8 +444,13 @@ HRESULT FromMemoryInner(void* dev, const void* data, UINT size, UINT w, UINT h, 
     UINT hashed = size == 0x7FFFFFFFu ? (w * h / 2) : size;
     const bool dump = g_cfg.dumpTextures != 0;
     // one pass over the data, and only when something needs the hash (a pack or the dump)
-    const u32 hash = (data && hashed && (g_count || dump)) ? SuperFastHash((const u8*)data, (int)hashed) : 0;
+    const bool smoke = g_cfg.smokeTune && data && size == 128 + kSmokeW * kSmokeH && out;  // a DXT3 of that size without mipmaps
+    const u32 hash = (data && hashed && (g_count || dump || smoke)) ? SuperFastHash((const u8*)data, (int)hashed) : 0;
     if (dump && data && hashed) DumpTexture(hash, data, size);
+    if (smoke && hash == kSmokeSheetHash && SmokeSheetLoad(dev, data, size, out)) {
+        NoteLoad(2, started, data, size);
+        return 0;
+    }
     if (g_count && data && hashed) {
         const Entry* e = Find(hash);
         if (e) {
@@ -563,6 +640,14 @@ bool InstallTextureOverride() {
     Log("textures: %d replacement files indexed, texture loading hooked (what the loads cost is logged once a second while they run)",
         g_count);
     return true;
+}
+
+void SmokeTuneApply() {
+    // from the menu (the picture's thread); a managed texture may be locked there between frames
+    if (InterlockedExchange(&g_smokeDirty, 1) == 0) {
+        SmokeFill();
+        InterlockedExchange(&g_smokeDirty, 0);
+    }
 }
 
 }  // namespace ufx

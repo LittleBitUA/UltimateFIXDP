@@ -597,6 +597,18 @@ Item g_pageFixes[] = {
     {{L"Зберегти весь текст гри у файл", L"Save all game text to a file"}, &g_cfg.textDump, kBool, 0, 1, 1, true, L"Language", L"TextDump", nullptr, nullptr,
      {L"Під час запуску весь MES_ALL.MES, який завантажила гра, записується в UltimateFix\\mes_dump.json у тому самому вигляді, що й mes_all.json інструмента перекладу. Його можна порівняти з файлом, який дає DPMsgTool, і так перевірити, що мод читає текст правильно. Файл пишеться за кожного запуску, тож потім вимкніть.",
       L"At start the whole MES_ALL.MES the game loaded is written to UltimateFix\\mes_dump.json in the same form as the translation tool's mes_all.json. Compare it with the file DPMsgTool gives to check that the mod reads the text right. It is written at every start, so switch it off afterwards."}, NOTR},
+    {{L"Дим у пролозі: аркуш мода", L"Prologue smoke: the mod's sheet"}, &g_cfg.smokeTune, kBool, 0, 1, 1, true, L"Fixes", L"SmokeSheet", nullptr, nullptr,
+     {L"Гра малює дим у пролозі чорними аркушами, які зливаються в суцільну пляму з рівним краєм. Мод робить цей аркуш наново з рідного аркуша гри за чотирма налаштуваннями нижче; вони діють одразу, просто дивіться на дим. Сам перемикач потребує перезапуску.",
+      L"The game draws the prologue's smoke with black sheets that add up to a solid blob with a straight rim. The mod makes that sheet again from the game's own by the four settings below; they work at once, just look at the smoke. The switch itself needs a restart."},
+     {L"Дим у пролозі", L"Prologue smoke"}},
+    {{L"Густина диму, %", L"Smoke density, %"}, &g_cfg.smokeDensity, kInt, 0, 300, 5, false, L"Fixes", L"SmokeDensity", SmokeTuneApply, nullptr,
+     {L"Наскільки непрозорий кожен аркуш. 100 = як у грі (суцільна чорна пляма), менше = прозоріше.", L"How opaque each sheet is. 100 = as in the game (a solid black blob), less = more transparent."}, NOTR},
+    {{L"Крива диму", L"Smoke curve"}, &g_cfg.smokeCurve, kInt, 0, 200, 5, false, L"Fixes", L"SmokeCurve", SmokeTuneApply, nullptr,
+     {L"0 = прозорість аркуша як у грі. Більше = тонкі місця хмари тоншають швидше за густі: ядро лишається темним, краї стають димчастими.", L"0 = the sheet's transparency as in the game. More = the thin parts of the cloud thin out faster than the thick ones: the core stays dark, the edges turn smoky."}, NOTR},
+    {{L"М'який край аркуша, %", L"Soft rim of the sheet, %"}, &g_cfg.smokeEdge, kInt, 0, 50, 2, false, L"Fixes", L"SmokeEdge", SmokeTuneApply, nullptr,
+     {L"Густий бік хмари лежить на самому краї аркуша, тому край видно рівною чорною межею. Це частка ширини аркуша, на якій дим плавно з'являється. 0 = як у грі.", L"The thick side of the cloud lies on the sheet's very rim, so the rim shows as a straight black line. This is the share of the sheet's width over which the smoke fades in. 0 = as in the game."}, NOTR},
+    {{L"Колір диму: сірий, %", L"Smoke colour: grey, %"}, &g_cfg.smokeGrey, kInt, 0, 100, 2, false, L"Fixes", L"SmokeGrey", SmokeTuneApply, nullptr,
+     {L"0 = чорний, як у грі. Більше = світліший дим.", L"0 = black, as in the game. More = lighter smoke."}, NOTR},
     RESET_ITEM
 };
 Item g_pageSave[] = {
