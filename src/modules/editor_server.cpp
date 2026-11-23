@@ -4,6 +4,8 @@
 //   GET  /                     the page
 //   GET  /api/state            where York stands, the zone, the clock, what the quest runner does (JSON)
 //   GET  /api/lists            the residents, items and cars by name (JSON)
+//   GET  /api/maptile?n=0..63  one tile of the game's own map of Greenvale as a DDS file (1024x1024 DXT1), read from the game's
+//                              archive on this thread: nothing of the running game is touched
 //   GET  /api/mission?slot=N   the file of the quest, as it is on disk (404 = an empty slot)
 //   POST /api/mission?slot=N   the file written from the request's body
 //   POST /api/cmd?do=...       run, restart, stop (slot=N); tele (x y z yaw, thousandths); hour, weather, car, item (v, n)
@@ -12,6 +14,7 @@
 // site as its origin is refused, so a page on the internet cannot drive the game through the player's browser. The server
 // thread never touches the game: it leaves requests that the game thread picks up (MissionRequest and the cheats' own).
 #include "../base.h"
+#include "../inflate.h"
 #include "../item_names.h"
 #include "../sites.h"
 #include <winsock2.h>
@@ -76,6 +79,59 @@ void Reply(SOCKET s, const char* status, const char* type, const char* body, int
     if (n > 0) SendAll(s, body, n);
 }
 void ReplyText(SOCKET s, const char* status, const char* text) { Reply(s, status, "text/plain; charset=utf-8", text, lstrlenA(text)); }
+
+// A map tile: resource 937h + n ("UPDATA/BG/SMAP/00/SMAP00_00_0NN.XPC"). Its record in the game's resource index (in the exe
+// image, 20h bytes each from 008D8D78h: +0 where the record begins in the archive, the data 104h further; +8 size; +0Ch archive
+// number) says where it lies in UPDATA\_FLINK\DPSERIAL.00N; the file is an XPC2 with one zlib-packed DDS.
+void MapTile(SOCKET s, int n) {
+    const char* why = "no such tile";
+    u8 *xpc = nullptr, *dds = nullptr;
+    size_t ddsSize = 0;
+    if (n >= 0 && n < 64) {
+        const u32* e = (const u32*)(uintptr_t)(0x8D8D78u + (0x937u + (u32)n) * 0x20u);
+        const u32 off = e[0], size = e[2], arch = e[3];
+        why = "the game's index has no such record";
+        if (off != 0xFFFFFFFFu && size >= 0x60 && size <= (4u << 20) && arch <= 2) {
+            wchar_t path[MAX_PATH + 48];
+            wsprintfW(path, L"%sUPDATA\\_FLINK\\DPSERIAL.%03u", g_paths.gameDir, arch + 1);
+            HANDLE f = CreateFileW(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
+            why = "the game's archive could not be opened";
+            if (f != INVALID_HANDLE_VALUE) {
+                LONG high = 0;
+                DWORD got = 0;
+                xpc = (u8*)VirtualAlloc(nullptr, size, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+                SetFilePointer(f, (LONG)(off + 0x104u), &high, FILE_BEGIN);
+                why = "the tile could not be read";
+                if (xpc && ReadFile(f, xpc, size, &got, nullptr) && got == size) {
+                    size_t need = 0;
+                    XpcFirstPicture(xpc, size, nullptr, 0, &need);
+                    why = "the tile is not a picture the editor knows";
+                    if (need >= 128 && need <= (8u << 20)) {
+                        dds = (u8*)VirtualAlloc(nullptr, need, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+                        if (dds) ddsSize = XpcFirstPicture(xpc, size, dds, need, nullptr);
+                    }
+                }
+                CloseHandle(f);
+            }
+        }
+    }
+    if (ddsSize) {
+        char head[256];
+        const int h = wsprintfA(head, "HTTP/1.1 200 OK\r\nContent-Type: application/octet-stream\r\nContent-Length: %d\r\nCache-Control: max-age=86400\r\nConnection: close\r\n\r\n", (int)ddsSize);
+        SendAll(s, head, h);
+        SendAll(s, (const char*)dds, (int)ddsSize);
+    } else {
+        static int logged = 0;
+        if (logged < 3) {
+            ++logged;
+            Log("editor: map tile %d not served: %s", n, why);
+        }
+        Reply(s, "404 Not Found", "text/plain; charset=utf-8", why, lstrlenA(why));
+    }
+    if (xpc) VirtualFree(xpc, 0, MEM_RELEASE);
+    if (dds) VirtualFree(dds, 0, MEM_RELEASE);
+}
+
 
 // A whole file into memory the caller frees; null when it is missing
 char* ReadWhole(const wchar_t* path, int* size) {
@@ -263,6 +319,8 @@ void Handle(SOCKET s) {
         State(s);
     } else if (get && Find(url, 10, "/api/lists") == 0) {
         Lists(s);
+    } else if (get && Find(url, 12, "/api/maptile") == 0) {
+        MapTile(s, Query(url, "n", -1));
     } else if (Find(url, 12, "/api/mission") == 0) {
         int slot = Query(url, "slot", 1);
         if (slot < 1 || slot > 9) slot = 1;

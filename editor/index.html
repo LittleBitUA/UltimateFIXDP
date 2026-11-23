@@ -6,9 +6,23 @@
 <title>UltimateFIXDP · Quest editor</title>
 <style>
 :root{
-  --bg:#1d1d1f; --panel:#2a2a2d; --panel2:#323236; --head:#3a3a3f; --line:#18181a; --field:#1b1b1d;
-  --text:#dcdcde; --dim:#8e8e94; --accent:#e87d0d; --accent2:#4772b3; --ok:#6cc24a; --bad:#d9534f; --warn:#e0b341;
+  --bg:#d9dade; --panel:#f7f7f9; --panel2:#f0f0f3; --head:#e6e7ec; --line:#c9cbd2; --field:#ffffff; --edge:#c3c5cc;
+  --text:#1c1d22; --dim:#5c5f6a; --accent:#2f6fdb; --accent2:var(--accent); --ok:#2e9a48; --bad:#c9442e; --warn:#a56a00;
+  --btn-edge:#c3c5cc; --btn-hover:#d9dbe2; --btn-active:#cdcfd7; --canvas:#e9ebee; --grid:#d3d6dd; --grid0:#aeb2bc; --grid-text:#5f6370;
+  --node:#ffffff; --node-end:#e4e5ea; --mark-edge:#1c1d22; --toast:#ffffff;
   --r:4px; --font:13px/1.35 "Segoe UI",system-ui,-apple-system,"Helvetica Neue",Arial,sans-serif;
+}
+:root[data-theme=dark]{
+  --bg:#1d1d1f; --panel:#2a2a2d; --panel2:#323236; --head:#3a3a3f; --line:#18181a; --field:#1b1b1d; --edge:#111113;
+  --text:#dcdcde; --dim:#9a9aa1; --accent:#5b8fd6; --ok:#6cc24a; --bad:#e0685f; --warn:#e0b341;
+  --btn-edge:#1f1f22; --btn-hover:#4a4a50; --btn-active:#2f2f33; --canvas:#232326; --grid:#2c2c30; --grid0:#4a4a50; --grid-text:#8a8a90;
+  --node:#34343a; --node-end:#2f2f33; --mark-edge:#111113; --toast:#101012;
+}
+:root[data-theme=game]{
+  --bg:#120d0e; --panel:#211819; --panel2:#281c1e; --head:#33242a; --line:#0a0607; --field:#160f10; --edge:#0a0607;
+  --text:#efe6d8; --dim:#b5a595; --accent:#e5484d; --ok:#7fd28a; --bad:#f0a08a; --warn:#f0b35a;
+  --btn-edge:#0a0607; --btn-hover:#4a3438; --btn-active:#2c1f21; --canvas:#191213; --grid:#261b1d; --grid0:#4a383a; --grid-text:#a39384;
+  --node:#2c1f21; --node-end:#211819; --mark-edge:#0a0607; --toast:#0c0808;
 }
 *{box-sizing:border-box}
 html,body{height:100%;margin:0}
@@ -19,14 +33,14 @@ button,input,select,textarea{font:inherit;color:inherit}
 #top .brand{font-weight:600;letter-spacing:.2px;margin-right:6px}
 #top .brand b{color:var(--accent)}
 #top .sp{flex:1}
-.btn{background:var(--head);border:1px solid #1f1f22;border-radius:var(--r);padding:3px 10px;cursor:pointer;min-height:24px}
-.btn:hover{background:#4a4a50}
-.btn:active{background:#2f2f33}
-.btn.pri{background:var(--accent2);border-color:#2f4f82}
-.btn.pri:hover{background:#5683c7}
-.btn.go{background:#3f6d2f;border-color:#2c4d21}
+.btn{background:var(--head);border:1px solid var(--btn-edge);border-radius:var(--r);padding:3px 10px;cursor:pointer;min-height:24px}
+.btn:hover{background:var(--btn-hover)}
+.btn:active{background:var(--btn-active)}
+.btn.pri{background:var(--accent2);border-color:transparent;color:#fff}
+.btn.pri:hover{background:var(--accent2);filter:brightness(1.12)}
+.btn.go{background:#3f6d2f;border-color:#2c4d21;color:#fff}
 .btn.go:hover{background:#4d8539}
-.btn.stop{background:#7a3330;border-color:#572422}
+.btn.stop{background:#7a3330;border-color:#572422;color:#fff}
 .btn.stop:hover{background:#934039}
 .btn.sm{padding:1px 7px;min-height:20px;font-size:12px}
 .btn[disabled]{opacity:.45;cursor:default}
@@ -40,18 +54,18 @@ button,input,select,textarea{font:inherit;color:inherit}
 #steps{list-style:none;margin:0;padding:4px}
 #steps li{display:flex;align-items:center;gap:7px;padding:5px 7px;border-radius:var(--r);cursor:pointer}
 #steps li:hover{background:var(--panel2)}
-#steps li.sel{background:var(--accent2)}
+#steps li.sel{background:var(--accent2);color:#fff}
 #steps li.run{box-shadow:inset 3px 0 0 var(--ok)}
 #steps .n{color:var(--dim);width:18px;text-align:right;font-variant-numeric:tabular-nums}
-#steps li.sel .n{color:#dfe8f7}
+#steps li.sel .n{color:#eef3fc}
 #steps .t{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .ico{width:18px;height:18px;flex:none;border-radius:3px;display:grid;place-items:center;font-size:11px;font-weight:700;color:#111}
 .k0{background:#e8a33d}.k1{background:#d9c85a}.k2{background:#5fb0e8}.k3{background:#b58ae6}.kq{background:#9a9aa0}
-canvas{display:block;width:100%;height:100%;background:#232326;cursor:grab}
+canvas{display:block;width:100%;height:100%;background:var(--canvas);cursor:grab}
 canvas.drag{cursor:grabbing}
 #mapwrap{position:relative;flex:1;min-height:0}
 #maphint{position:absolute;left:8px;bottom:6px;color:var(--dim);font-size:12px;pointer-events:none}
-#flow{width:100%;height:100%;display:block;background:#232326}
+#flow{width:100%;height:100%;display:block;background:var(--canvas)}
 #flowwrap{overflow:auto;flex:1;min-height:0}
 .sec{border-bottom:1px solid var(--line)}
 .sec>h4{margin:0;padding:6px 8px;background:var(--panel2);font-size:12px;font-weight:600;cursor:pointer;display:flex;gap:6px;align-items:center}
@@ -62,7 +76,13 @@ canvas.drag{cursor:grabbing}
 .rows label{color:var(--dim);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .rows .wide{grid-column:1/3}
 .rows .note{grid-column:1/3;color:var(--dim);font-size:12px;line-height:1.35;user-select:text}
-input[type=text],input[type=number],select,textarea{background:var(--field);border:1px solid #111;border-radius:var(--r);padding:3px 6px;width:100%;min-width:0;user-select:text}
+input[type=text],input[type=number],select,textarea{background:var(--field);border:1px solid var(--edge);border-radius:var(--r);padding:3px 6px;width:100%;min-width:0;user-select:text}
+#maphint{background:var(--panel);padding:2px 7px;border-radius:var(--r);opacity:.9}
+#settings{position:fixed;right:8px;top:40px;width:320px;background:var(--panel);border:1px solid var(--edge);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:20;display:none}
+#settings.open{display:block}
+#settings h4{margin:0;padding:8px 10px;background:var(--head);border-radius:6px 6px 0 0;font-size:13px}
+#settings .rows{grid-template-columns:110px 1fr}
+input[type=color]{width:44px;height:26px;padding:1px;background:var(--field);border:1px solid var(--edge);border-radius:var(--r)}
 input:focus,select:focus,textarea:focus{outline:1px solid var(--accent2);outline-offset:0}
 textarea{resize:vertical;min-height:44px;line-height:1.35}
 .xyz{display:grid;grid-template-columns:repeat(3,1fr);gap:4px}
@@ -72,7 +92,7 @@ textarea{resize:vertical;min-height:44px;line-height:1.35}
 #status{grid-column:1/4;background:var(--panel);display:flex;align-items:center;gap:14px;padding:0 8px;color:var(--dim);white-space:nowrap;overflow:hidden;font-variant-numeric:tabular-nums}
 #status b{color:var(--text);font-weight:500}
 #status .sp{flex:1}
-#toast{position:fixed;left:50%;bottom:40px;transform:translateX(-50%);background:#101012;border:1px solid #444;border-radius:6px;padding:8px 14px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:70vw}
+#toast{position:fixed;left:50%;bottom:40px;transform:translateX(-50%);background:var(--toast);border:1px solid var(--edge);box-shadow:0 6px 18px rgba(0,0,0,.25);border-radius:6px;padding:8px 14px;opacity:0;transition:opacity .2s;pointer-events:none;max-width:70vw}
 #toast.show{opacity:1}
 #toast.bad{border-color:var(--bad)}
 .empty{color:var(--dim);padding:18px 12px;line-height:1.5}
@@ -97,6 +117,7 @@ textarea{resize:vertical;min-height:44px;line-height:1.35}
     <span class="sp"></span>
     <button class="btn" id="import" data-t="Імпорт файлу|Import file"></button>
     <button class="btn" id="export" data-t="Експорт файлу|Export file"></button>
+    <button class="btn" id="setbtn" data-t="Налаштування|Settings"></button>
     <button class="btn" id="lang">EN</button>
     <input type="file" id="file" accept=".ini,.txt" hidden>
   </div>
@@ -145,6 +166,15 @@ textarea{resize:vertical;min-height:44px;line-height:1.35}
     <span><span data-t="квест|quest"></span> <b id="qstate">—</b></span>
     <span class="sp"></span>
     <span id="ver"></span>
+  </div>
+</div>
+<div id="settings">
+  <h4 data-t="Налаштування редактора|Editor settings"></h4>
+  <div class="rows">
+    <label for="setTheme" data-t="Тема|Theme"></label><select id="setTheme"></select>
+    <label for="setAccent" data-t="Колір акценту|Accent colour"></label><div class="hrow"><input type="color" id="setAccent"><button class="btn sm" id="setAccentOff" data-t="Як у темі|As the theme"></button></div>
+    <label for="setMap" data-t="Мапа гри|Game map"></label><select id="setMap"></select>
+    <div class="note" data-t="Мапу Грінвейла редактор бере з файлів гри, поки гра запущена. Налаштування зберігаються в цьому браузері.|The editor takes the map of Greenvale from the game's files while the game runs. The settings are kept in this browser."></div>
   </div>
 </div>
 <div id="toast"></div>
@@ -251,6 +281,7 @@ async function save() {
 async function cmd(q) { try { await api("/api/cmd?" + q, { method: "POST" }); return true; } catch (e) { toast(T("Гра не відповідає", "The game does not answer"), true); return false; } }
 async function poll() {
   try { live = await (await api("/api/state")).json(); online = true; } catch (e) { online = false; live = null; }
+  if (online && SET.map !== "grid") loadTiles();
   if (online && !langPicked && typeof live.lang === "number" && EN !== (live.lang === 1)) { EN = live.lang === 1; applyLang(); renderAll(); setDirty(dirty); }
   const d = $("dot");
   d.className = "dot" + (online ? (live.inGame ? " on" : " half") : "");
@@ -462,10 +493,10 @@ function drawFlow() {
   const width = X0 * 2 + (n + 1) * (W + GAP);
   svg.setAttribute("width", Math.max(width, $("flowwrap").clientWidth)); svg.setAttribute("height", 180);
   const ns = "http://www.w3.org/2000/svg", mk = (t, a) => { const e = document.createElementNS(ns, t); for (const k in a) e.setAttribute(k, a[k]); return e; };
-  svg.innerHTML = '<defs><marker id="ag" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L8,4L0,8z" fill="#6cc24a"/></marker><marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L8,4L0,8z" fill="#d9534f"/></marker></defs>';
+  svg.innerHTML = '<defs><marker id="ag" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L8,4L0,8z" fill="' + css("--ok") + '"/></marker><marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0L8,4L0,8z" fill="' + css("--bad") + '"/></marker></defs>';
   const x = i => X0 + i * (W + GAP);
   const edge = (a, b, red) => {
-    const col = red ? "#d9534f" : "#6cc24a", mid = red ? "ar" : "ag";
+    const col = red ? css("--bad") : css("--ok"), mid = red ? "ar" : "ag";
     let d;
     if (b === a + 1 && !red) d = `M${x(a) + W},${Y0 + H / 2} L${x(b) - 2},${Y0 + H / 2}`;
     else { const up = !red, y = up ? Y0 : Y0 + H, lift = Math.min(52, 22 + Math.abs(b - a) * 9) * (up ? -1 : 1), x1 = x(a) + W / 2 + (red ? 14 : -14), x2 = x(b) + W / 2 + (b <= a ? (red ? -14 : 14) : (red ? -14 : -30));
@@ -477,10 +508,10 @@ function drawFlow() {
   for (let i = 0; i <= n; ++i) {
     const end = i === n, g = mk("g", { style: end ? "" : "cursor:pointer" });
     const run = live && live.running && live.slot === slot && live.step === i + 1;
-    g.appendChild(mk("rect", { x: x(i), y: Y0, width: end ? 90 : W, height: H, rx: 5, fill: end ? "#2f2f33" : "#34343a", stroke: !end && i === sel ? "#e87d0d" : run ? "#6cc24a" : "#111", "stroke-width": !end && (i === sel || run) ? 2 : 1 }));
+    g.appendChild(mk("rect", { x: x(i), y: Y0, width: end ? 90 : W, height: H, rx: 5, fill: end ? css("--node-end") : css("--node"), stroke: !end && i === sel ? css("--accent") : run ? css("--ok") : css("--edge"), "stroke-width": !end && (i === sel || run) ? 2 : 1 }));
     if (!end) g.appendChild(mk("rect", { x: x(i), y: Y0, width: 5, height: H, rx: 2, fill: colors[Q.steps[i].Kind] }));
-    const t1 = mk("text", { x: x(i) + 12, y: Y0 + 17, fill: "#8e8e94", "font-size": 11 }); t1.textContent = end ? "" : (i + 1) + " · " + KIND()[Q.steps[i].Kind];
-    const t2 = mk("text", { x: x(i) + 12, y: Y0 + (end ? 27 : 34), fill: "#dcdcde", "font-size": 12 });
+    const t1 = mk("text", { x: x(i) + 12, y: Y0 + 17, fill: css("--dim"), "font-size": 11 }); t1.textContent = end ? "" : (i + 1) + " · " + KIND()[Q.steps[i].Kind];
+    const t2 = mk("text", { x: x(i) + 12, y: Y0 + (end ? 27 : 34), fill: css("--text"), "font-size": 12 });
     let name = end ? T("Кінець", "The end") : stepName(Q.steps[i], i); if (name.length > 20) name = name.slice(0, 19) + "…"; t2.textContent = name;
     g.appendChild(t1); g.appendChild(t2);
     if (!end) g.onclick = () => select(i);
@@ -491,7 +522,76 @@ function drawFlow() {
 // ---------- map ----------
 const view = { x: 0, z: 0, s: 0.05 };  // world units -> pixels
 const cv = $("map"), cx = cv.getContext("2d");
+// ---------- settings (kept in this browser) ----------
+const SET = { theme: "light", accent: "", map: "tone" };
+try { Object.assign(SET, JSON.parse(localStorage.getItem("ufx.set") || "{}")); } catch (e) {}
+function saveSet() { try { localStorage.setItem("ufx.set", JSON.stringify(SET)); } catch (e) {} }
+function applySet() {
+  const root = document.documentElement;
+  if (SET.theme === "light") delete root.dataset.theme; else root.dataset.theme = SET.theme;
+  if (SET.accent) root.style.setProperty("--accent", SET.accent); else root.style.removeProperty("--accent");
+  retint(); if (typeof drawFlow === "function" && Q) { drawFlow(); drawMap(); }
+}
+function fillSettings() {
+  const th = $("setTheme"), mp = $("setMap");
+  th.innerHTML = ""; [["light", T("Світла", "Light")], ["dark", T("Темна", "Dark")], ["game", T("Кольори гри", "Game colours")]].forEach(([v, t]) => th.add(new Option(t, v)));
+  mp.innerHTML = ""; [["tone", T("У тонах теми", "In the theme's tones")], ["game", T("Як у грі", "As in the game")], ["grid", T("Лише сітка", "Grid only")]].forEach(([v, t]) => mp.add(new Option(t, v)));
+  th.value = SET.theme; mp.value = SET.map; $("setAccent").value = SET.accent || css("--accent") || "#2f6fdb";
+}
+
+// ---------- the game's map: 64 tiles (DDS, DXT1, 1024 px) from the mod's server, drawn at half size into one picture ----------
+const TILES = { cv: null, out: null, ready: 0, state: 0, timer: 0 };
+function ddsImage(b) {
+  const v = new DataView(b.buffer, b.byteOffset, b.byteLength);
+  if (b.length < 128 || v.getUint32(0, true) !== 0x20534444 || v.getUint32(84, true) !== 0x31545844) throw new Error("not a DXT1 picture");
+  const h = v.getUint32(12, true), w = v.getUint32(16, true);
+  if (w < 4 || h < 4 || w > 2048 || h > 2048 || b.length < 128 + (w >> 2) * (h >> 2) * 8) throw new Error("size");
+  const img = new ImageData(w, h), px = img.data, c = new Uint8Array(16);
+  let o = 128;
+  for (let by = 0; by < h; by += 4) for (let bx = 0; bx < w; bx += 4, o += 8) {
+    const c0 = b[o] | b[o + 1] << 8, c1 = b[o + 2] | b[o + 3] << 8;
+    c[0] = (c0 >> 11) * 255 / 31; c[1] = (c0 >> 5 & 63) * 255 / 63; c[2] = (c0 & 31) * 255 / 31;
+    c[4] = (c1 >> 11) * 255 / 31; c[5] = (c1 >> 5 & 63) * 255 / 63; c[6] = (c1 & 31) * 255 / 31;
+    for (let k = 0; k < 3; k++) if (c0 > c1) { c[8 + k] = (2 * c[k] + c[4 + k]) / 3; c[12 + k] = (c[k] + 2 * c[4 + k]) / 3; } else { c[8 + k] = (c[k] + c[4 + k]) / 2; c[12 + k] = 0; }
+    for (let y = 0; y < 4; y++) { let bits = b[o + 4 + y], p = ((by + y) * w + bx) * 4;
+      for (let x = 0; x < 4; x++, bits >>= 2, p += 4) { const i = (bits & 3) * 4; px[p] = c[i]; px[p + 1] = c[i + 1]; px[p + 2] = c[i + 2]; px[p + 3] = 255; } }
+  }
+  return img;
+}
+function retint() {
+  if (!TILES.cv || !TILES.ready) return;
+  clearTimeout(TILES.timer);
+  TILES.timer = setTimeout(() => {
+    if (SET.map !== "tone") { TILES.out = null; drawMap(); return; }
+    const out = TILES.out || document.createElement("canvas"); out.width = out.height = TILES.cv.width;
+    const g = out.getContext("2d");
+    g.filter = SET.theme === "light" ? "grayscale(55%) brightness(122%) contrast(78%)" : SET.theme === "game" ? "grayscale(85%) sepia(40%) brightness(40%)" : "grayscale(70%) brightness(45%)";
+    g.drawImage(TILES.cv, 0, 0); TILES.out = out; drawMap();
+  }, 200);
+}
+async function loadTiles() {
+  if (TILES.state) return; TILES.state = 1;
+  const big = document.createElement("canvas"); big.width = big.height = 4096; const g = big.getContext("2d");
+  const one = document.createElement("canvas"); one.width = one.height = 1024; const og = one.getContext("2d");
+  TILES.cv = big;
+  let next = 0, failed = 0;
+  const work = async () => {
+    while (next < 64 && failed < 3) {
+      const n = next++;
+      try {
+        const r = await fetch("/api/maptile?n=" + n); if (!r.ok) throw new Error(await r.text());
+        const img = ddsImage(new Uint8Array(await r.arrayBuffer()));
+        if (one.width !== img.width) { one.width = img.width; one.height = img.height; }
+        og.putImageData(img, 0, 0); g.drawImage(one, (n & 7) * 512, (n >> 3) * 512, 512, 512);
+        TILES.ready++; retint();
+      } catch (e) { if (++failed === 3 && !TILES.ready) { TILES.state = 0; TILES.cv = null; toast(T("Мапу гри не вдалося прочитати: ", "The game's map could not be read: ") + e.message, true); TILES.state = 2; } }
+    }
+  };
+  await Promise.all([work(), work()]);
+}
+
 function sizeMap() { const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1; cv.width = Math.max(10, r.width * d); cv.height = Math.max(10, r.height * d); drawMap(); }
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
 const toScr = (wx, wz) => [cv.width / 2 + (wx - view.x) * view.s * (devicePixelRatio || 1), cv.height / 2 - (wz - view.z) * view.s * (devicePixelRatio || 1)];
 function points() {
   const p = [];
@@ -512,28 +612,35 @@ function fit() {
 }
 function drawMap() {
   const d = devicePixelRatio || 1, w = cv.width, h = cv.height; if (!w) return;
-  cx.setTransform(1, 0, 0, 1, 0, 0); cx.fillStyle = "#232326"; cx.fillRect(0, 0, w, h);
+  const cGrid = css("--grid"), cGrid0 = css("--grid0"), cText = css("--text"), cOk = css("--ok"), cEdge = css("--mark-edge"), cAccent = css("--accent");
+  cx.setTransform(1, 0, 0, 1, 0, 0); cx.fillStyle = css("--canvas"); cx.fillRect(0, 0, w, h);
+  if (TILES.ready && SET.map !== "grid") {  // the game's own map: 8 x 8 tiles of 10000 units, the middle of the world in the middle
+    const [mx, my] = toScr(-40000, 40000), size = 80000 * view.s * d;
+    cx.imageSmoothingEnabled = true; cx.drawImage(TILES.out || TILES.cv, mx, my, size, size);
+  }
+  const onMap = TILES.ready && SET.map !== "grid";
   // grid
   let step = 10; while (step * view.s * d < 38) step *= step.toString()[0] === "2" ? 2.5 : 2;
-  cx.lineWidth = 1; cx.font = 11 * d + "px Segoe UI, sans-serif"; cx.fillStyle = "#6b6b70";
+  cx.lineWidth = 1; cx.font = 11 * d + "px Segoe UI, sans-serif"; cx.fillStyle = css("--grid-text"); cx.globalAlpha = onMap ? 0.3 : 1;
   const halfW = w / 2 / (view.s * d), halfH = h / 2 / (view.s * d);
-  for (let gx = Math.floor((view.x - halfW) / step) * step; gx < view.x + halfW; gx += step) { const [sx] = toScr(gx, 0); cx.strokeStyle = gx === 0 ? "#4a4a50" : "#2c2c30"; cx.beginPath(); cx.moveTo(sx + .5, 0); cx.lineTo(sx + .5, h); cx.stroke(); if (Math.round(gx / step) % 2 === 0) cx.fillText(Math.round(gx), sx + 3, 12 * d); }
-  for (let gz = Math.floor((view.z - halfH) / step) * step; gz < view.z + halfH; gz += step) { const [, sy] = toScr(0, gz); cx.strokeStyle = gz === 0 ? "#4a4a50" : "#2c2c30"; cx.beginPath(); cx.moveTo(0, sy + .5); cx.lineTo(w, sy + .5); cx.stroke(); if (Math.round(gz / step) % 2 === 0) cx.fillText(Math.round(gz), 3, sy - 3); }
+  for (let gx = Math.floor((view.x - halfW) / step) * step; gx < view.x + halfW; gx += step) { const [sx] = toScr(gx, 0); cx.strokeStyle = gx === 0 ? cGrid0 : cGrid; cx.beginPath(); cx.moveTo(sx + .5, 0); cx.lineTo(sx + .5, h); cx.stroke(); if (Math.round(gx / step) % 2 === 0) cx.fillText(Math.round(gx), sx + 3, 12 * d); }
+  for (let gz = Math.floor((view.z - halfH) / step) * step; gz < view.z + halfH; gz += step) { const [, sy] = toScr(0, gz); cx.strokeStyle = gz === 0 ? cGrid0 : cGrid; cx.beginPath(); cx.moveTo(0, sy + .5); cx.lineTo(w, sy + .5); cx.stroke(); if (Math.round(gz / step) % 2 === 0) cx.fillText(Math.round(gz), 3, sy - 3); }
+  cx.globalAlpha = 1;
   const colors = { 0: "#e8a33d", 1: "#d9c85a", 2: "#5fb0e8", 9: "#9a9aa0" };
   for (const p of points()) {
     const [sx, sy] = toScr(p.x, p.z), on = p.i === sel;
     if (p.k === 2) { cx.beginPath(); cx.arc(sx, sy, Math.max(4 * d, p.r * view.s * d), 0, 7); cx.fillStyle = "rgba(95,176,232,.13)"; cx.fill(); cx.strokeStyle = colors[2]; cx.lineWidth = on ? 2.5 * d : 1.2 * d; cx.stroke(); }
     cx.beginPath();
     if (p.k === 9) { cx.rect(sx - 5 * d, sy - 5 * d, 10 * d, 10 * d); } else cx.arc(sx, sy, 6 * d, 0, 7);
-    cx.fillStyle = colors[p.k]; cx.fill(); cx.lineWidth = on ? 3 * d : 1 * d; cx.strokeStyle = on ? "#e87d0d" : "#111"; cx.stroke();
+    cx.fillStyle = colors[p.k]; cx.fill(); cx.lineWidth = on ? 3 * d : 1 * d; cx.strokeStyle = on ? cAccent : cEdge; cx.stroke();
     if (p.yaw != null) { cx.beginPath(); cx.moveTo(sx, sy); cx.lineTo(sx + Math.sin(p.yaw) * 14 * d, sy - Math.cos(p.yaw) * 14 * d); cx.strokeStyle = colors[p.k]; cx.lineWidth = 2 * d; cx.stroke(); }
-    cx.fillStyle = "#dcdcde"; cx.font = (on ? "600 " : "") + 12 * d + "px Segoe UI, sans-serif"; cx.fillText((p.i + 1) + (p.k === 9 ? " ⇢" : ""), sx + 9 * d, sy - 7 * d);
+    cx.fillStyle = cText; cx.font = (on ? "600 " : "") + 12 * d + "px Segoe UI, sans-serif"; cx.fillText((p.i + 1) + (p.k === 9 ? " ⇢" : ""), sx + 9 * d, sy - 7 * d);
   }
   if (live && live.inGame) {
     const [sx, sy] = toScr(live.x / 1000, live.z / 1000), a = live.yaw / 1000;
     cx.save(); cx.translate(sx, sy); cx.rotate(a); cx.beginPath(); cx.moveTo(0, -11 * d); cx.lineTo(7 * d, 8 * d); cx.lineTo(0, 4 * d); cx.lineTo(-7 * d, 8 * d); cx.closePath();
-    cx.fillStyle = "#6cc24a"; cx.fill(); cx.strokeStyle = "#111"; cx.lineWidth = d; cx.stroke(); cx.restore();
-    cx.fillStyle = "#6cc24a"; cx.font = 12 * d + "px Segoe UI, sans-serif"; cx.fillText(T("Йорк", "York"), sx + 11 * d, sy + 4 * d);
+    cx.fillStyle = cOk; cx.fill(); cx.strokeStyle = cEdge; cx.lineWidth = d; cx.stroke(); cx.restore();
+    cx.fillStyle = cOk; cx.font = "600 " + 12 * d + "px Segoe UI, sans-serif"; cx.fillText(T("Йорк", "York"), sx + 11 * d, sy + 4 * d);
   }
 }
 let drag = null;
@@ -569,6 +676,13 @@ window.addEventListener("keydown", e => { if ((e.ctrlKey || e.metaKey) && e.key.
 window.addEventListener("beforeunload", e => { if (dirty) { e.preventDefault(); e.returnValue = ""; } });
 new ResizeObserver(() => { sizeMap(); drawFlow(); }).observe($("mapwrap"));
 
+$("setbtn").onclick = () => { fillSettings(); $("settings").classList.toggle("open"); };
+document.addEventListener("mousedown", e => { if (!e.target.closest("#settings") && e.target.id !== "setbtn") $("settings").classList.remove("open"); });
+$("setTheme").onchange = e => { SET.theme = e.target.value; saveSet(); applySet(); if (!SET.accent) $("setAccent").value = css("--accent"); };
+$("setAccent").oninput = e => { SET.accent = e.target.value; saveSet(); applySet(); };
+$("setAccentOff").onclick = () => { SET.accent = ""; saveSet(); applySet(); $("setAccent").value = css("--accent"); };
+$("setMap").onchange = e => { SET.map = e.target.value; saveSet(); if (SET.map !== "grid" && online) loadTiles(); retint(); drawMap(); };
+applySet();
 applyLang(); fillSlots(); renderAll();
 loadSlot(1).then(fillSlots);
 poll(); setInterval(poll, 500);
