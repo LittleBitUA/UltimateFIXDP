@@ -169,10 +169,10 @@ port with the Xbox 360 original:
 ### What's new in 0.7.18
 
 **Shorter loading screens and a faster pause map.** For textures the game stores without mipmaps the mod makes them at load (that removes the shimmer far away). Until now a system library made them level by level through the video card, and each step waited for the frame being shown: on a 60 Hz screen about three frames per texture, most of a loading screen (11 of 13 seconds in a player's log). The mod now builds the levels itself in memory and hands the texture over in one call. The pause map gains the most: its 64 tiles are exactly such textures.
-- Found from a player's report ([#3](https://github.com/LittleBitUA/UltimateFIXDP/issues/3)). The packer was checked on the game's own textures outside the game; in the game itself this version is not checked yet.
+- Found from a player's report ([#3](https://github.com/LittleBitUA/UltimateFIXDP/issues/3)). Checked in the game on that player's save: the reload after the window peek made its 244 textures in 1.7 s (11.3 s in his log), and the pause map showed all 64 tiles in its first frame.
 - If far textures look wrong, F10 → Screen and graphics → "Mipmaps for textures without them" switches the feature off (`[Graphics] GenerateMips=0`).
 
-**A crash on leaving the window peek.** Leaving the peek reloads the level; the mod's waypoint code still read York's place from memory the game had already freed (the same report, from its crash dump). The mod now checks that the object is still there. The same check protects four more places that took the object the same way.
+**A crash on leaving the window peek.** Leaving the peek reloads the level; the mod's waypoint code still read York's place from memory the game had already freed (the same report, from its crash dump). The mod now checks that the object is still there. Checked on the player's save: the peek was entered and left twice without a crash. The same check protects four more places that took the object the same way.
 
 ### What's new in 0.7.17
 
@@ -472,10 +472,10 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 ### Що нового в 0.7.18
 
 **Коротші екрани завантаження і швидша мапа паузи.** Текстурам, які гра зберігає без міпмапів, мод робить їх під час завантаження (це прибирає мерехтіння вдалині). Досі їх робила системна бібліотека, рівень за рівнем через відеокарту, і кожен крок чекав на кадр, що показується: на екрані 60 Гц близько трьох кадрів на текстуру, більша частина екрана завантаження (11 секунд із 13 у лозі гравця). Тепер мод сам будує рівні в пам'яті й віддає текстуру одним викликом. Найбільше виграє мапа паузи: її 64 плитки — саме такі текстури.
-- Знайдено за звітом гравця ([#3](https://github.com/LittleBitUA/UltimateFIXDP/issues/3)). Пакувальник перевірено на текстурах самої гри поза грою; у самій грі цю версію ще не перевірено.
+- Знайдено за звітом гравця ([#3](https://github.com/LittleBitUA/UltimateFIXDP/issues/3)). Перевірено в грі на збереженні цього гравця: перезавантаження після підглядання у вікно зробило свої 244 текстури за 1,7 с (у його лозі 11,3 с), а мапа паузи показала всі 64 плитки в першому ж кадрі.
 - Якщо далекі текстури виглядають не так, F10 → Екран і графіка → «Міпмапи для текстур без них» вимикає функцію (`[Graphics] GenerateMips=0`).
 
-**Виліт після підглядання у вікно.** Вихід із підглядання перезавантажує рівень; код мітки на мапі ще читав місце Йорка з пам'яті, яку гра вже звільнила (той самий звіт, з його дампа). Тепер мод перевіряє, що об'єкт іще існує. Та сама перевірка захищає ще чотири місця, які брали об'єкт так само.
+**Виліт після підглядання у вікно.** Вихід із підглядання перезавантажує рівень; код мітки на мапі ще читав місце Йорка з пам'яті, яку гра вже звільнила (той самий звіт, з його дампа). Тепер мод перевіряє, що об'єкт іще існує. Перевірено на збереженні гравця: у підглядання ввійшли й вийшли двічі без вильоту. Та сама перевірка захищає ще чотири місця, які брали об'єкт так само.
 
 ### Що нового в 0.7.17
 
