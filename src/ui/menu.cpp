@@ -609,6 +609,9 @@ Item g_pageFixes[] = {
      {L"Густий бік хмари лежить на самому краї аркуша, тому край видно рівною чорною межею. Це частка ширини аркуша, на якій дим плавно з'являється. 0 = як у грі.", L"The thick side of the cloud lies on the sheet's very rim, so the rim shows as a straight black line. This is the share of the sheet's width over which the smoke fades in. 0 = as in the game."}, NOTR},
     {{L"Колір диму: сірий, %", L"Smoke colour: grey, %"}, &g_cfg.smokeGrey, kInt, 0, 100, 2, false, L"Fixes", L"SmokeGrey", SmokeTuneApply, nullptr,
      {L"0 = чорний, як у грі. Більше = світліший дим.", L"0 = black, as in the game. More = lighter smoke."}, NOTR},
+    {{L"Чорна площина за дверима, %", L"Black shape behind the door, %"}, &g_cfg.smokeVoid, kInt, 0, 100, 5, false, L"Fixes", L"SmokeVoid", SmokeTuneApply, nullptr,
+     {L"За дверима прологу гра малює суцільну чорну фігуру; густий дим її ховає, а з рідшим димом вона стирчить чорним клином. 100 = як у грі, менше = прозоріша, 0 = не видно. Діє на всі чисто чорні текстури 8x8, які гра малює напівпрозоро: якщо десь зникло щось чорне, поверніть 100.",
+      L"Behind the prologue's door the game draws a solid black shape; a dense smoke hides it, with a thinner smoke it sticks out as a black wedge. 100 = as in the game, less = more transparent, 0 = not seen. It works on every plain black 8x8 texture the game draws blended: if something black is gone somewhere, put 100 back."}, NOTR},
     RESET_ITEM
 };
 Item g_pageSave[] = {

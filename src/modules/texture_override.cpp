@@ -432,6 +432,52 @@ bool SmokeSheetLoad(void* dev, const void* data, UINT size, void** out) {
     return true;
 }
 
+// The black shape behind the prologue's door (19 triangles, found with the draw scan of 0.7.17-test24): a mesh with a plain
+// black 8x8 DXT1 texture, drawn blended after the smoke. The dense smoke of the console hides it; with a thinner smoke it stands
+// out as a black wedge. Every plain black 8x8 DXT1 texture is made again here with an alpha the menu sets (100 = as the game's).
+// Only blended draws show the difference.
+constexpr int kVoidTextures = 16;
+void* g_voidTex[kVoidTextures];
+int g_voidCount = 0;
+
+void VoidFill(void* tex) {
+    struct Locked { int pitch; void* bits; } lr = {0, nullptr};
+    typedef HRESULT(WINAPI * LockFn)(void*, UINT, Locked*, const void*, DWORD);
+    typedef HRESULT(WINAPI * UnlockFn)(void*, UINT);
+    void** vt = *(void***)tex;
+    if (((LockFn)vt[19])(tex, 0, &lr, nullptr, 0) < 0 || !lr.bits) return;
+    const u32 a = (u32)((g_cfg.smokeVoid < 0 ? 0 : g_cfg.smokeVoid > 100 ? 100 : g_cfg.smokeVoid) * 255 / 100);
+    for (int y = 0; y < 8; ++y)
+        for (int x = 0; x < 8; ++x) ((u32*)((u8*)lr.bits + y * lr.pitch))[x] = (a << 24) | 0x080608u;  // the game's own near-black
+    ((UnlockFn)vt[20])(tex, 0);
+}
+
+bool VoidTextureLoad(void* dev, const void* data, UINT size, void** out) {
+    const u32* dds = (const u32*)data;
+    if (size < 128 + 32 || size > 128 + 64 || dds[0] != 0x20534444u || dds[3] != 8 || dds[4] != 8 || dds[21] != 0x31545844u /*DXT1*/) return false;
+    const u8* b = (const u8*)data + 128;
+    for (int i = 0; i < 4; ++i, b += 8)  // both colours of each of the four blocks nearly black
+        for (int k = 0; k < 2; ++k) {
+            const u32 c = b[k * 2] | (b[k * 2 + 1] << 8);
+            if ((c >> 11) > 2 || ((c >> 5) & 63) > 4 || (c & 31) > 2) return false;
+        }
+    typedef HRESULT(WINAPI * CreateFn)(void*, UINT, UINT, UINT, DWORD, DWORD, DWORD, void**, void*);
+    typedef ULONG(WINAPI * RefFn)(void*);
+    void* tex = nullptr;
+    if (((CreateFn)(*(void***)dev)[23])(dev, 8, 8, 1, 0, 21, 1, &tex, nullptr) < 0 || !tex) return false;
+    if (g_voidCount == kVoidTextures) {
+        ((RefFn)(*(void***)g_voidTex[0])[2])(g_voidTex[0]);
+        for (int i = 1; i < kVoidTextures; ++i) g_voidTex[i - 1] = g_voidTex[i];
+        --g_voidCount;
+    }
+    ((RefFn)(*(void***)tex)[1])(tex);
+    g_voidTex[g_voidCount++] = tex;
+    VoidFill(tex);
+    Log("textures: a plain black 8x8 texture is made by the mod (%d so far; its opacity follows the smoke settings, now %d%%)", g_voidCount, g_cfg.smokeVoid);
+    *out = tex;
+    return true;
+}
+
 HRESULT FromMemoryInner(void* dev, const void* data, UINT size, UINT w, UINT h, UINT mips, DWORD usage, DWORD fmt, DWORD pool,
                         DWORD filter, DWORD mipFilter, DWORD colorKey, void* info, void* palette, void** out) {
     // One start for every path below: a file that cannot be loaded and the original made after it are one load to the game.
@@ -455,6 +501,10 @@ HRESULT FromMemoryInner(void* dev, const void* data, UINT size, UINT w, UINT h, 
     const bool smoke = g_cfg.smokeTune && data && size >= 128 + kSmokeW * kSmokeH && size <= 128 + kSmokeW * kSmokeH * 2 && out;  // a DXT3 of that size, with mipmaps or without
     const u32 hash = (data && hashed && (g_count || dump || g_cfg.smokeTune)) ? SuperFastHash((const u8*)data, (int)hashed) : 0;
     if (dump && data && hashed) DumpTexture(hash, data, size);
+    if (g_cfg.smokeTune && data && out && size != 0x7FFFFFFFu && VoidTextureLoad(dev, data, size, out)) {
+        NoteLoad(2, started, data, size);
+        return 0;
+    }
     if (g_cfg.smokeTune && hash == kSmokeSheetHash) {
         if (smoke && SmokeSheetLoad(dev, data, size, out)) {
             NoteLoad(2, started, data, size);
@@ -659,6 +709,7 @@ void SmokeTuneApply() {
     // from the menu (the picture's thread); a managed texture may be locked there between frames
     if (InterlockedExchange(&g_smokeDirty, 1) == 0) {
         for (int i = 0; i < g_smokeSheetCount; ++i) SmokeFill(g_smokeSheets[i]);
+        for (int i = 0; i < g_voidCount; ++i) VoidFill(g_voidTex[i]);
         InterlockedExchange(&g_smokeDirty, 0);
     }
 }

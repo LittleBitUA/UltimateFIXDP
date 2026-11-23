@@ -838,6 +838,7 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.smokeCurve = (int)GetPrivateProfileIntW(L"Fixes", L"SmokeCurve", 20, ini);
     g_cfg.smokeEdge = (int)GetPrivateProfileIntW(L"Fixes", L"SmokeEdge", 20, ini);
     g_cfg.smokeGrey = (int)GetPrivateProfileIntW(L"Fixes", L"SmokeGrey", 0, ini);
+    g_cfg.smokeVoid = (int)GetPrivateProfileIntW(L"Fixes", L"SmokeVoid", 100, ini);
     g_cfg.sharpen = (int)GetPrivateProfileIntW(L"Graphics", L"Sharpen", 50, ini);
     if (g_cfg.sharpen < 0) g_cfg.sharpen = 0;
     if (g_cfg.sharpen > 100) g_cfg.sharpen = 100;

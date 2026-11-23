@@ -122,7 +122,7 @@ struct Config {
     int exposureComp;        // exposure compensation in tenths of a stop (-30..30)
     int fullscreenEdgeFix;   // full-screen 2D quads (fades, item notice) cover the last pixel row and column above 720p
     int gameLook;            // a photo filter applied all the time (0 = none), [Graphics] GameLook
-    int smokeTune, smokeDensity, smokeCurve, smokeEdge, smokeGrey;  // the prologue smoke sheet made by the mod from the game's own (texture_override.cpp)
+    int smokeTune, smokeDensity, smokeCurve, smokeEdge, smokeGrey, smokeVoid;  // the prologue smoke sheet made by the mod from the game's own (texture_override.cpp)
     int generateMips;        // build the mipmaps of world textures stored without them (far shimmer), at load
     int shadowBiasFix;       // more depth bias on the two far sun shadow cascades (crawling stripes far away)
     int riverWater;          // the river gets the values of its own "_river" water record and a wave map 16 times larger (as on the Xbox)
