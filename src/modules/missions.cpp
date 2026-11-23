@@ -9,7 +9,8 @@
 //              reach:       X Y Z, Radius (metres), Zone (-1 = any)
 //              wait:        Hour (0..23)
 //              when it begins: Teleport (1 = York is put at TX TY TZ TYaw), SetHour (-1 = leave), Weather (0 leave, 1 clear,
-//                           2 cloudy, 3 rain), Car (0 none, 1..16 of the spawner's list, in front of York)
+//                           2 cloudy, 3 rain), Car (0 none, 1..16 of the spawner's list), CarPlace (0 behind York, 1 well ahead of him,
+//                           2 at CarX CarY CarZ CarYaw)
 //              when it is done: GiveItem, GiveCount, Money (a talk: for the first answer only)
 //              then:        NextYes, NextNo (0 = the following step, -1 = the quest ends, N = step N; "No" only for a talk)
 //
@@ -128,7 +129,10 @@ bool BeginStep(int index) {
     }
     if (s.setHour >= 0 && s.setHour <= 23) CheatSetHour(s.setHour);
     if (s.weather >= 1 && s.weather <= 3) CheatWeather(s.weather);
-    if (s.car >= 1 && s.car <= 16) CheatSpawnCar(CarNumberOf(s.car));
+    if (s.car >= 1 && s.car <= 16) {
+        const float at[4] = {(float)s.carX / 1000.f, (float)s.carY / 1000.f, (float)s.carZ / 1000.f, (float)s.carYaw / 1000.f};
+        CheatSpawnCarAt(CarNumberOf(s.car), s.carPlace == 2 ? 3 : s.carPlace == 1 ? 2 : 1, at);
+    }
     if (s.kind <= 1) {
         bool ok = SetMessage(kMsMsgLine, s.line, "", "{NEXT_SEGMENT}");
         if (s.kind == 0)
@@ -187,8 +191,9 @@ void CompleteStep(bool first) {
         if (s.giveItem >= 1 && s.giveItem <= 0x16D) {
             const int r = GiveItemNow(s.giveItem, s.giveCount < 1 ? 1 : s.giveCount);
             Log("mission: step %d: item %d x %d given (the game answered %d)", g_step + 1, s.giveItem, s.giveCount, r);
-            ShowNotice(r == -3 ? L"Предмет пішов у сховище" : L"Отримано предмет", r == -3 ? L"The item went to the storage" : L"Item obtained", L"Дивіться інвентар.",
-                       L"See the inventory.", 4);
+            if (r == -2) ShowNotice(L"Гра не дала предмет", L"The game gave no item", L"Він уже є або для нього немає місця.", L"York has it already or there is no room.", 4);
+            else ShowNotice(r == -3 ? L"Предмет пішов у сховище" : L"Отримано предмет", r == -3 ? L"The item went to the storage" : L"Item obtained", L"Дивіться інвентар.",
+                            L"See the inventory.", 4);
         }
         if (s.money > 0) CheatMoney(s.money > 9999 ? 9999 : s.money);
     }
@@ -282,7 +287,8 @@ void StepField(MissionStep& s, const wchar_t* key, int keyLen, const wchar_t* va
         {L"NextYes", &MissionStep::nextYes}, {L"NextNo", &MissionStep::nextNo}, {L"GiveItem", &MissionStep::giveItem},
         {L"GiveCount", &MissionStep::giveCount}, {L"Money", &MissionStep::money}, {L"Car", &MissionStep::car}, {L"SetHour", &MissionStep::setHour},
         {L"Weather", &MissionStep::weather}, {L"Teleport", &MissionStep::teleport}, {L"TX", &MissionStep::tx}, {L"TY", &MissionStep::ty},
-        {L"TZ", &MissionStep::tz}, {L"TYaw", &MissionStep::tyaw}};
+        {L"TZ", &MissionStep::tz}, {L"TYaw", &MissionStep::tyaw}, {L"CarPlace", &MissionStep::carPlace}, {L"CarX", &MissionStep::carX},
+        {L"CarY", &MissionStep::carY}, {L"CarZ", &MissionStep::carZ}, {L"CarYaw", &MissionStep::carYaw}};
     for (const Num& n : nums)
         if (SameText(key, keyLen, n.key)) { s.*(n.at) = ToInt(value); return; }
     const Txt txts[] = {{L"Title", s.title, 96}, {L"Line", s.line, 200}, {L"Question", s.question, 200}, {L"Yes", s.yes, 40}, {L"No", s.no, 40},

@@ -197,13 +197,13 @@ const $ = id => document.getElementById(id);
 // ---------- the quest ----------
 const KIND = () => [T("Розмова з вибором", "Talk with a choice"), T("Репліка", "A line"), T("Дійти до місця", "Reach a place"), T("Дочекатися години", "Wait for an hour")];
 const KLET = ["?", "“", "◎", "◷"];
-const STEP_NUM = ["Kind", "Resident", "Placed", "X", "Y", "Z", "Yaw", "MotionSet", "Motion", "Radius", "Zone", "Hour", "NextYes", "NextNo", "GiveItem", "GiveCount", "Money", "Car", "SetHour", "Weather", "Teleport", "TX", "TY", "TZ", "TYaw"];
+const STEP_NUM = ["Kind", "Resident", "Placed", "X", "Y", "Z", "Yaw", "MotionSet", "Motion", "Radius", "Zone", "Hour", "NextYes", "NextNo", "GiveItem", "GiveCount", "Money", "Car", "SetHour", "Weather", "Teleport", "TX", "TY", "TZ", "TYaw", "CarPlace", "CarX", "CarY", "CarZ", "CarYaw"];
 const STEP_TXT = ["Title", "Line", "Question", "Yes", "No", "AfterYes", "AfterNo"];
 const LIMIT = { Title: 95, Line: 199, Question: 199, Yes: 39, No: 39, AfterYes: 199, AfterNo: 199, Name: 63, Author: 63, Banner: 95, EndText: 199 };
 const MAXSTEPS = 16;
 function newStep(kind) {
   const s = { Kind: kind, Resident: 6, Placed: 0, X: 0, Y: 0, Z: 0, Yaw: 0, MotionSet: 1, Motion: 0, Radius: 15, Zone: -1, Hour: 12, NextYes: 0, NextNo: 0,
-    GiveItem: 0, GiveCount: 1, Money: 0, Car: 0, SetHour: -1, Weather: 0, Teleport: 0, TX: 0, TY: 0, TZ: 0, TYaw: 0,
+    GiveItem: 0, GiveCount: 1, Money: 0, Car: 0, SetHour: -1, Weather: 0, Teleport: 0, TX: 0, TY: 0, TZ: 0, TYaw: 0, CarPlace: 0, CarX: 0, CarY: 0, CarZ: 0, CarYaw: 0,
     Title: "", Line: "", Question: "", Yes: "", No: "", AfterYes: "", AfterNo: "" };
   if (kind === 0) { s.Yes = T("Так", "Yes"); s.No = T("Ні", "No"); }
   return s;
@@ -473,7 +473,17 @@ function renderProps() {
   }
   row(r, T("Поставити годину", "Set the hour"), pick(s, "SetHour", [[-1, T("не міняти", "leave")]].concat([...Array(24).keys()].map(h => [h, String(h).padStart(2, "0") + ":00"]))));
   row(r, T("Погода", "Weather"), pick(s, "Weather", [[0, T("не міняти", "leave")], [1, T("ясно", "clear")], [2, T("хмарно", "cloudy")], [3, T("дощ", "rain")]]));
-  row(r, T("Машина перед Йорком", "A car in front of York"), pick(s, "Car", [[0, T("немає", "none")]].concat(lists.cars.map(c => [c.id, c.name]))));
+  row(r, T("Машина", "A car"), pick(s, "Car", [[0, T("немає", "none")]].concat(lists.cars.map(c => [c.id, c.name])), true));
+  if (s.Car) {
+    row(r, T("Де машина", "Where the car goes"), pick(s, "CarPlace", [[0, T("позаду Йорка", "behind York")], [1, T("далеко перед Йорком", "well ahead of York")], [2, T("у заданому місці", "at a set place")]], true));
+    if (s.CarPlace === 2) {
+      row(r, "X  Y  Z", xyz(s, "CarX", "CarY", "CarZ"));
+      const h = document.createElement("div"); h.className = "hrow wide";
+      h.append(button(T("Взяти місце Йорка", "Take York's place"), () => { if (!needGame()) return; s.CarX = live.x; s.CarY = live.y; s.CarZ = live.z; s.CarYaw = live.yaw; changed(); }, "pri"));
+      r.appendChild(h);
+      note(r, T("Станьте там, де має стояти машина, натисніть кнопку, а тоді відійдіть: машина з'явиться на цьому місці.", "Stand where the car should be, press the button, then step away: the car appears at this place."));
+    }
+  }
 
   r = section("reward", s.Kind === 0 ? T("Нагорода (за відповідь 1)", "Reward (for answer 1)") : T("Нагорода", "Reward"));
   row(r, T("Предмет", "Item"), pick(s, "GiveItem", [[0, T("нічого", "nothing")]].concat(lists.items.map(c => [c.id, c.id + " · " + c.name]))));
@@ -599,6 +609,7 @@ function points() {
     if (s.Kind <= 1 && s.Placed) p.push({ i, x: s.X / 1000, z: s.Z / 1000, k: s.Kind, yaw: s.Yaw / 1000 });
     if (s.Kind === 2) p.push({ i, x: s.X / 1000, z: s.Z / 1000, k: 2, r: s.Radius * 4 });
     if (s.Teleport) p.push({ i, x: s.TX / 1000, z: s.TZ / 1000, k: 9 });
+    if (s.Car && s.CarPlace === 2) p.push({ i, x: s.CarX / 1000, z: s.CarZ / 1000, k: 8 });
   });
   return p;
 }
@@ -626,15 +637,15 @@ function drawMap() {
   for (let gx = Math.floor((view.x - halfW) / step) * step; gx < view.x + halfW; gx += step) { const [sx] = toScr(gx, 0); cx.strokeStyle = gx === 0 ? cGrid0 : cGrid; cx.beginPath(); cx.moveTo(sx + .5, 0); cx.lineTo(sx + .5, h); cx.stroke(); if (Math.round(gx / step) % 2 === 0) cx.fillText(Math.round(gx), sx + 3, 12 * d); }
   for (let gz = Math.floor((view.z - halfH) / step) * step; gz < view.z + halfH; gz += step) { const [, sy] = toScr(0, gz); cx.strokeStyle = gz === 0 ? cGrid0 : cGrid; cx.beginPath(); cx.moveTo(0, sy + .5); cx.lineTo(w, sy + .5); cx.stroke(); if (Math.round(gz / step) % 2 === 0) cx.fillText(Math.round(gz), 3, sy - 3); }
   cx.globalAlpha = 1;
-  const colors = { 0: "#e8a33d", 1: "#d9c85a", 2: "#5fb0e8", 9: "#9a9aa0" };
+  const colors = { 0: "#e8a33d", 1: "#d9c85a", 2: "#5fb0e8", 8: "#c98a4a", 9: "#9a9aa0" };
   for (const p of points()) {
     const [sx, sy] = toScr(p.x, p.z), on = p.i === sel;
     if (p.k === 2) { cx.beginPath(); cx.arc(sx, sy, Math.max(4 * d, p.r * view.s * d), 0, 7); cx.fillStyle = "rgba(95,176,232,.13)"; cx.fill(); cx.strokeStyle = colors[2]; cx.lineWidth = on ? 2.5 * d : 1.2 * d; cx.stroke(); }
     cx.beginPath();
-    if (p.k === 9) { cx.rect(sx - 5 * d, sy - 5 * d, 10 * d, 10 * d); } else cx.arc(sx, sy, 6 * d, 0, 7);
+    if (p.k >= 8) { cx.rect(sx - 5 * d, sy - 5 * d, 10 * d, 10 * d); } else cx.arc(sx, sy, 6 * d, 0, 7);
     cx.fillStyle = colors[p.k]; cx.fill(); cx.lineWidth = on ? 3 * d : 1 * d; cx.strokeStyle = on ? cAccent : cEdge; cx.stroke();
     if (p.yaw != null) { cx.beginPath(); cx.moveTo(sx, sy); cx.lineTo(sx + Math.sin(p.yaw) * 14 * d, sy + Math.cos(p.yaw) * 14 * d); cx.strokeStyle = colors[p.k]; cx.lineWidth = 2 * d; cx.stroke(); }
-    cx.fillStyle = cText; cx.font = (on ? "600 " : "") + 12 * d + "px Segoe UI, sans-serif"; cx.fillText((p.i + 1) + (p.k === 9 ? " ⇢" : ""), sx + 9 * d, sy - 7 * d);
+    cx.fillStyle = cText; cx.font = (on ? "600 " : "") + 12 * d + "px Segoe UI, sans-serif"; cx.fillText((p.i + 1) + (p.k === 9 ? " ⇢" : p.k === 8 ? " " + T("авто", "car") : ""), sx + 9 * d, sy - 7 * d);
   }
   if (live && live.inGame) {
     const [sx, sy] = toScr(live.x / 1000, live.z / 1000), a = live.yaw / 1000;

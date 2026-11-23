@@ -62,7 +62,15 @@ void CheatAmmo() { g_ammo = 1; PhotoThaw(20); }
 // (thiscall on the car: position[4], rotation[4]; ret 8) moves it. Items: FUN_005019B0 (thiscall on CGame: id, count, 1, 0, 0;
 // ret 14h), the call behind the script command 84h in its silent form.
 volatile int g_spawnCar = 0, g_giveItem = 0, g_giveCount = 0;
-void CheatSpawnCar(int number) { g_spawnCar = number; PhotoThaw(180); }
+volatile int g_spawnCarWhere = 0;
+float g_spawnCarPlace[4];
+void CheatSpawnCarAt(int number, int where, const float place[4]) {
+    for (int i = 0; i < 4; ++i) g_spawnCarPlace[i] = place ? place[i] : 0.f;
+    g_spawnCarWhere = place || where != 3 ? where : 0;
+    g_spawnCar = number;
+    PhotoThaw(180);
+}
+void CheatSpawnCar(int number) { CheatSpawnCarAt(number, 0, nullptr); }
 void CheatGiveItem(int id, int count) { g_giveCount = count; g_giveItem = id; PhotoThaw(20); }
 constexpr u32 kCarShowFn = 0x5F1840, kCarMoveFn = 0x541760, kGiveItemFn = 0x5019B0, kWorldFactoryVa = 0x143C078;
 typedef void*(__attribute__((thiscall)) * CarShowFn)(void* self, u32 number, int placeNode, int reveal);
@@ -80,9 +88,9 @@ void SpawnerTick(u8* game, u8* player) {
         if (!free || !BytesMatch(kGiveItemFn, kGive, 8) || id < 1 || id > 0x16D || count < 1) {
             Log("spawner: item %d not given (needs free play; the function must be DP.exe 1.01b's)", id);
         } else {
-            const int r = ((GiveItemFn)(uintptr_t)kGiveItemFn)(game, id, count, 1, 0, 0);
-            Log("spawner: item %d x %d given, the game answered %d (-3 = it went to the storage)", id, count, r);
-            if (r == -3) ShowNotice(L"Предмет пішов у сховище", L"The item went to the storage", L"В інвентарі немає місця.", L"There is no room in the inventory.", 3);
+            const int r = GiveItemNow(id, count);
+            if (r == -2) ShowNotice(L"Гра не дала предмет", L"The game gave no item", L"Він уже є або для нього немає місця. Деталі в ufx.log.", L"York has it already or there is no room. See ufx.log.", 4);
+            else if (r == -3) ShowNotice(L"Предмет пішов у сховище", L"The item went to the storage", L"В інвентарі немає місця.", L"There is no room in the inventory.", 3);
             else ShowNotice(L"Предмет видано", L"Item given", L"Дивіться інвентар.", L"See the inventory.", 2);
         }
     }
@@ -103,9 +111,19 @@ void SpawnerTick(u8* game, u8* player) {
             return;
         }
         const float yaw = *(volatile float*)(player + 0x7C);
-        float pos[4] = {*(volatile float*)(player + 0x58) + SinC(yaw) * 16.f, *(volatile float*)(player + 0x5C) + 1.f,
-                        *(volatile float*)(player + 0x60) + CosC(yaw) * 16.f, 1.f};
+        // in front of York (the cheat page), behind him or well ahead of him (a quest step: a character stands 8 units in front), or
+        // at a place of the quest's own
+        const int where = g_spawnCarWhere;
+        const float away = where == 1 ? -28.f : where == 2 ? 40.f : 16.f;
+        float pos[4] = {*(volatile float*)(player + 0x58) + SinC(yaw) * away, *(volatile float*)(player + 0x5C) + 1.f,
+                        *(volatile float*)(player + 0x60) + CosC(yaw) * away, 1.f};
         float rot[4] = {0.f, yaw + 1.5707963f, 0.f, 0.f};  // side on to York
+        if (where == 3) {
+            pos[0] = g_spawnCarPlace[0];
+            pos[1] = g_spawnCarPlace[1] + 1.f;
+            pos[2] = g_spawnCarPlace[2];
+            rot[1] = g_spawnCarPlace[3];
+        }
         ((CarMoveFn)(uintptr_t)kCarMoveFn)(car, pos, rot);
         Log("spawner: car %d (object %08X, subtype %d) put at %d %d %d", number, (u32)(uintptr_t)car, (int)*(volatile signed char*)(car + 0x474),
             (int)pos[0], (int)pos[1], (int)pos[2]);
@@ -282,7 +300,23 @@ int GiveItemNow(int id, int count) {
     static const u8 kGive[8] = {0x83, 0xEC, 0x08, 0x53, 0x55, 0x56, 0x8B, 0xD9};
     u8* game = *(u8* volatile*)(uintptr_t)kGameManagerPtrVa;
     if (!game || !BytesMatch(kGiveItemFn, kGive, 8) || id < 1 || id > 0x16D || count < 1) return -1;
-    return ((GiveItemFn)(uintptr_t)kGiveItemFn)(game, id, count, 1, 0, 0);
+    // what York carries (+98270h) and what lies in the storage (+97698h), by item id: read around the call to see what it did
+    volatile int* carried = (volatile int*)(game + 0x98270 + id * 4);
+    volatile int* stored = (volatile int*)(game + 0x97698 + id * 4);
+    const int c0 = *carried, s0 = *stored;
+    int r = ((GiveItemFn)(uintptr_t)kGiveItemFn)(game, id, count, 1, 0, 0);
+    Log("give: item %d x %d, the game answered %d; carried %d -> %d, stored %d -> %d", id, count, r, c0, *carried, s0, *stored);
+    if (*carried == c0 && *stored == s0 && c0 < 1 && id >= 0x16 && id <= 0x42) {
+        // A weapon without wear (22..66) that the call left out (FUN_005019B0 multiplies the count by a field of the item's record,
+        // which is 0 for some of them): what its own branch at 00502041 does for these ids, one piece.
+        *carried = c0 + 1;
+        *(volatile u8*)(game + 0x98F5C + (id >> 3)) |= (u8)(1u << (id & 7));
+        Log("give: item %d put among York's things directly (the game's call added nothing)", id);
+        r = 0;
+    } else if (*carried == c0 && *stored == s0 && r != -3) {
+        r = -2;  // nothing was added: York has it already, or there is no room for more
+    }
+    return r;
 }
 
 }  // namespace ufx

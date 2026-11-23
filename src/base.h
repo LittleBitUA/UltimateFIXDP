@@ -354,6 +354,7 @@ void CheatMoney(int amount);
 void CheatSetHour(int hour);
 void CheatWeather(int type);
 void CheatAmmo();
+void CheatSpawnCarAt(int number, int where, const float place[4]);  // where: 0 close in front of York, 1 behind him, 2 well ahead of him, 3 at place (x y z yaw)
 void CheatSpawnCar(int number);          // one of the game's numbered cars put in front of York (open Greenvale only)
 void CheatGiveItem(int id, int count);   // the game's own give-item call
 void CheatYorkToCamera();
@@ -483,6 +484,7 @@ struct MissionStep {
     int radius, zone, hour;                                  // reach: metres around x y z, zone -1 = any; wait: the hour
     int nextYes, nextNo;                                     // the step after it: 0 = the following one, -1 = the quest ends
     int giveItem, giveCount, money;                          // the reward when the step is done (a talk: for the first answer)
+    int carPlace, carX, carY, carZ, carYaw;                  // where the car goes: 0 behind York, 1 well ahead of him, 2 at carX.. (thousandths)
     int car, setHour, weather, teleport, tx, ty, tz, tyaw;   // done when the step begins: car 1..16, hour 0..23 or -1, weather 0..3 (0 none)
     wchar_t title[96], line[200], question[200], yes[40], no[40], afterYes[200], afterNo[200];
 };
