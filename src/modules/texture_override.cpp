@@ -436,9 +436,12 @@ bool SmokeSheetLoad(void* dev, const void* data, UINT size, void** out) {
 // black 8x8 DXT1 texture, drawn blended after the smoke. The dense smoke of the console hides it; with a thinner smoke it stands
 // out as a black wedge. Every plain black 8x8 DXT1 texture is made again here with an alpha the menu sets (100 = as the game's).
 // Only blended draws show the difference.
+// Only while the game holds the prologue's smoke sheet (the level that draws that smoke is loaded): everywhere else the black
+// textures stay as the game's. The mod keeps one reference of each sheet it made; a count above that is the game's.
 constexpr int kVoidTextures = 16;
 void* g_voidTex[kVoidTextures];
 int g_voidCount = 0;
+bool g_smokeLevel = false;  // the game holds a smoke sheet now
 
 void VoidFill(void* tex) {
     struct Locked { int pitch; void* bits; } lr = {0, nullptr};
@@ -446,7 +449,7 @@ void VoidFill(void* tex) {
     typedef HRESULT(WINAPI * UnlockFn)(void*, UINT);
     void** vt = *(void***)tex;
     if (((LockFn)vt[19])(tex, 0, &lr, nullptr, 0) < 0 || !lr.bits) return;
-    const u32 a = (u32)((g_cfg.smokeVoid < 0 ? 0 : g_cfg.smokeVoid > 100 ? 100 : g_cfg.smokeVoid) * 255 / 100);
+    const u32 a = g_smokeLevel ? (u32)((g_cfg.smokeVoid < 0 ? 0 : g_cfg.smokeVoid > 100 ? 100 : g_cfg.smokeVoid) * 255 / 100) : 255u;
     for (int y = 0; y < 8; ++y)
         for (int x = 0; x < 8; ++x) ((u32*)((u8*)lr.bits + y * lr.pitch))[x] = (a << 24) | 0x080608u;  // the game's own near-black
     ((UnlockFn)vt[20])(tex, 0);
@@ -572,7 +575,29 @@ bool TextureLoadTotals(u32* loads, u32* micros) {
     return true;
 }
 
+// Twice a second: does the game still hold one of the smoke sheets? The black shape's textures follow.
+void SmokeLevelFrame() {
+    static unsigned frame = 0;
+    if (!g_smokeSheetCount || !g_voidCount || ++frame % 30) return;
+    if (InterlockedExchange(&g_smokeDirty, 1)) return;  // a fill is running
+    typedef ULONG(WINAPI * RefFn)(void*);
+    bool held = false;
+    for (int i = 0; i < g_smokeSheetCount; ++i) {
+        void* t = g_smokeSheets[i];
+        ((RefFn)(*(void***)t)[1])(t);
+        if (((RefFn)(*(void***)t)[2])(t) > 1) held = true;  // the count after our own two calls: ours is 1
+    }
+    if (held != g_smokeLevel) {
+        g_smokeLevel = held;
+        for (int i = 0; i < g_voidCount; ++i) VoidFill(g_voidTex[i]);
+        Log("textures: the game %s the prologue's smoke sheet: plain black 8x8 textures are %s", held ? "holds" : "let go of",
+            held ? "made transparent (the black shape behind the door)" : "as the game's again");
+    }
+    InterlockedExchange(&g_smokeDirty, 0);
+}
+
 void TextureLoadFrame() {
+    SmokeLevelFrame();
     if (!g_statHooked || (!g_statBusy && !g_runOpen)) return;  // nothing to write: no lock taken in the common frame
     FlushLoads(TickNow());
 }
