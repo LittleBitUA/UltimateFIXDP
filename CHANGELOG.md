@@ -2,6 +2,17 @@
 
 The two newest versions are in the [README](README.md).
 
+## What's new in 0.7.16
+
+**A quest editor in the browser** (_experimental, not yet checked in the game_; needs `[Debug] MissionLab=1` in `UltimateFix.ini`). F10 → Mission editor → "Open the quest editor (browser)" opens a page served by the mod itself on this computer only (`http://127.0.0.1:47800/`), next to the running game:
+- **Layout:** the quest and its steps on the left, a top-view map with York's place live and a graph of the quest's flow in the middle, the properties of the selected step on the right. Save, run, run from the first step and stop are in the top bar; a quest can be exported to a file and imported.
+- **Quests of up to 16 steps:** a talk with a choice of two answers, a line without a choice, reaching a place, waiting for an hour. Each answer leads to the next step, to any other step or to the end.
+- **When a step begins** it can move York (inside one zone), set the hour and the weather and put a car; a step can reward with an item and money.
+- **Progress** is kept in `UltimateFix\missions\progress.ini`, not in the game's save. A mission file of 0.7.12–0.7.15 is read as a quest of one step.
+- Not there yet: enemies, several characters at once, a "bring an item" step, a marker on the game's map.
+
+**A guard against a crash at a level change.** A player's crash on entering a building (`DP.exe+55C49`): at a level change the game used an object of its grass pool that was already freed. The mod now checks that object first and skips a dead one, with a line in `ufx.log`. Part of `[Debug] CrashGuards` (on by default). Built from one crash dump; not reproduced in the game.
+
 ## What's new in 0.7.15
 
 **Driving on the triggers.** Behind the wheel the gas is on R2 / RT and the brake (and reverse, when the car stands) on L2 / LT, as on the console. The car's other buttons stay where the game has them. On by default; the row "Gas on R2, brake on L2 in the car" on the Controls page (`[Input] TriggerDrive`) puts the game's layout back (brake L1, gas R1) at once. Checked in the game.

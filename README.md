@@ -28,7 +28,7 @@ _Універсальний фікс для_ **Deadly Premonition: The Director'
 One DLL in the game folder instead of DPfix, a stability fix, a map fix and a crash fix.
 No installer: press **F10** in game and everything is there. The mod also gives the game 4 GB of memory by itself (from the second start).
 
-> **Version 0.7.17.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
+> **Version 0.7.18.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
 > <br>Newest: a posed character next to York in the photo mode, play as other characters, a spawner for cars and items, a partner on the gamepad and a first mission editor — see [What's new](#whats-new-in-0713). Earlier versions: [CHANGELOG.md](CHANGELOG.md).
 
 ### Features
@@ -166,6 +166,14 @@ port with the Xbox 360 original:
   Checked in the game at the river; other water (the lake, puddles,
   interiors) has not been compared yet.
 
+### What's new in 0.7.18
+
+**Shorter loading screens and a faster pause map.** For textures the game stores without mipmaps the mod makes them at load (that removes the shimmer far away). Until now a system library made them level by level through the video card, and each step waited for the frame being shown: on a 60 Hz screen about three frames per texture, most of a loading screen (11 of 13 seconds in a player's log). The mod now builds the levels itself in memory and hands the texture over in one call. The pause map gains the most: its 64 tiles are exactly such textures.
+- Found from a player's report ([#3](https://github.com/LittleBitUA/UltimateFIXDP/issues/3)). The packer was checked on the game's own textures outside the game; in the game itself this version is not checked yet.
+- If far textures look wrong, F10 → Screen and graphics → "Mipmaps for textures without them" switches the feature off (`[Graphics] GenerateMips=0`).
+
+**A crash on leaving the window peek.** Leaving the peek reloads the level; the mod's waypoint code still read York's place from memory the game had already freed (the same report, from its crash dump). The mod now checks that the object is still there. The same check protects four more places that took the object the same way.
+
 ### What's new in 0.7.17
 
 **The smoke of the prologue is smoke again.** On PC it was a solid black blob with a straight rim and a black wedge next to the door. Now it is a dark smoke with grey wisps, as on the console. Checked in the game.
@@ -182,18 +190,6 @@ port with the Xbox 360 original:
 **Quest editor** (_experimental_): the map is the game's own, a light, dark and game-coloured theme, markers are dragged on the map, a "Nodes" view where steps are linked by dragging, a check of the quest, a car can be put beside, behind or at an exact place, a step with a character waits while York drives.
 
 **Small things:** giving an item says honestly when the game refuses it (some weapons can only be owned in their other version).
-
-### What's new in 0.7.16
-
-**A quest editor in the browser** (_experimental, not yet checked in the game_; needs `[Debug] MissionLab=1` in `UltimateFix.ini`). F10 → Mission editor → "Open the quest editor (browser)" opens a page served by the mod itself on this computer only (`http://127.0.0.1:47800/`), next to the running game:
-- **Layout:** the quest and its steps on the left, a top-view map with York's place live and a graph of the quest's flow in the middle, the properties of the selected step on the right. Save, run, run from the first step and stop are in the top bar; a quest can be exported to a file and imported.
-- **Quests of up to 16 steps:** a talk with a choice of two answers, a line without a choice, reaching a place, waiting for an hour. Each answer leads to the next step, to any other step or to the end.
-- **When a step begins** it can move York (inside one zone), set the hour and the weather and put a car; a step can reward with an item and money.
-- **Progress** is kept in `UltimateFix\missions\progress.ini`, not in the game's save. A mission file of 0.7.12–0.7.15 is read as a quest of one step.
-- Not there yet: enemies, several characters at once, a "bring an item" step, a marker on the game's map.
-
-**A guard against a crash at a level change.** A player's crash on entering a building (`DP.exe+55C49`): at a level change the game used an object of its grass pool that was already freed. The mod now checks that object first and skips a dead one, with a line in `ufx.log`. Part of `[Debug] CrashGuards` (on by default). Built from one crash dump; not reproduced in the game.
-
 
 ### Screenshots
 
@@ -336,7 +332,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 Одна DLL у теці гри замість DPfix, фіксу стабільності, фіксу мапи й фіксу вильотів.
 Без інсталятора: натисніть **F10** у грі, і все там. Мод також сам дає грі 4 ГБ пам'яті (з другого запуску).
 
-> **Версія 0.7.17.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
+> **Версія 0.7.18.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
 > <br>Найновіше: персонаж поруч із Йорком у фоторежимі, гра за інших персонажів, спавнер машин і предметів, напарник із ґеймпада і перший редактор місій — див. [Що нового](#що-нового-в-0713). Попередні версії: [CHANGELOG_UA.md](CHANGELOG_UA.md).
 
 ### Можливості
@@ -473,6 +469,14 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
   Перевірено у грі біля річки; іншу воду (озеро, калюжі, приміщення) ще не
   порівнювали.
 
+### Що нового в 0.7.18
+
+**Коротші екрани завантаження і швидша мапа паузи.** Текстурам, які гра зберігає без міпмапів, мод робить їх під час завантаження (це прибирає мерехтіння вдалині). Досі їх робила системна бібліотека, рівень за рівнем через відеокарту, і кожен крок чекав на кадр, що показується: на екрані 60 Гц близько трьох кадрів на текстуру, більша частина екрана завантаження (11 секунд із 13 у лозі гравця). Тепер мод сам будує рівні в пам'яті й віддає текстуру одним викликом. Найбільше виграє мапа паузи: її 64 плитки — саме такі текстури.
+- Знайдено за звітом гравця ([#3](https://github.com/LittleBitUA/UltimateFIXDP/issues/3)). Пакувальник перевірено на текстурах самої гри поза грою; у самій грі цю версію ще не перевірено.
+- Якщо далекі текстури виглядають не так, F10 → Екран і графіка → «Міпмапи для текстур без них» вимикає функцію (`[Graphics] GenerateMips=0`).
+
+**Виліт після підглядання у вікно.** Вихід із підглядання перезавантажує рівень; код мітки на мапі ще читав місце Йорка з пам'яті, яку гра вже звільнила (той самий звіт, з його дампа). Тепер мод перевіряє, що об'єкт іще існує. Та сама перевірка захищає ще чотири місця, які брали об'єкт так само.
+
 ### Що нового в 0.7.17
 
 **Дим у пролозі знову дим.** На комп'ютері це була суцільна чорна пляма з рівним краєм і чорний клин біля дверей. Тепер це темний дим із сірими пасмами, як на консолі. Перевірено в грі.
@@ -489,18 +493,6 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 **Редактор квестів** (_експериментально_): мапа береться з гри, світла, темна тема й тема в кольорах гри, мітки перетягуються по мапі, вигляд «Вузли», де кроки з'єднуються перетягуванням, перевірка квесту, машину можна поставити поруч, позаду чи в точному місці, крок із персонажем чекає, поки Йорк за кермом.
 
 **Дрібне:** видача предмета чесно каже, коли гра відмовляє (деяку зброю можна мати лише в іншій її версії).
-
-### Що нового в 0.7.16
-
-**Редактор квестів у браузері** (_експериментально, у грі ще не перевірено_; потрібен `[Debug] MissionLab=1` в `UltimateFix.ini`). F10 → Редактор місій → «Відкрити редактор квестів (браузер)» відкриває сторінку, яку мод сам роздає лише на цьому комп'ютері (`http://127.0.0.1:47800/`), поруч із запущеною грою:
-- **Розкладка:** ліворуч квест і його кроки, по центру мапа згори з місцем Йорка наживо і граф ходу квесту, праворуч властивості вибраного кроку. Зберегти, запустити, запустити з першого кроку й зупинити — у верхній смузі; квест можна експортувати у файл та імпортувати.
-- **Квести до 16 кроків:** розмова з вибором із двох відповідей, репліка без вибору, дійти до місця, дочекатися години. Кожна відповідь веде до наступного кроку, до будь-якого іншого або до кінця.
-- **На початку кроку** можна перенести Йорка (в межах однієї зони), поставити годину й погоду, поставити машину; крок може нагородити предметом і грошима.
-- **Прогрес** зберігається в `UltimateFix\missions\progress.ini`, не у збереженні гри. Файл місії з 0.7.12–0.7.15 читається як квест з одного кроку.
-- Ще немає: ворогів, кількох персонажів одночасно, кроку «принести предмет», мітки на мапі гри.
-
-**Запобіжник від вильоту при зміні рівня.** Виліт у гравця на вході в будівлю (`DP.exe+55C49`): при зміні рівня гра зверталася до об'єкта свого пулу трави, який уже було звільнено. Тепер мод спершу перевіряє цей об'єкт і пропускає мертвий, із рядком в `ufx.log`. Входить до `[Debug] CrashGuards` (типово ввімкнено). Зроблено за одним дампом; у грі виліт не відтворювали.
-
 
 ### На чиїх плечах стоїмо
 
