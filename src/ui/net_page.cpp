@@ -212,7 +212,11 @@ void NetPage(float left, float top, float right, float bottom) {
             wsprintfW(line, T(L"У грі з %s (%s). Чат: клавіша T.", L"Playing with %s (%s). Chat: the T key."), nick[0] ? nick : L"?", peer);
         } else if (mode == kNetHost) {
             dot = 0xFFE0B040;
-            wsprintfW(line, T(L"Сервер «%s» запущено, порт %d. Чекає на гравця.", L"Server \"%s\" is up, port %d. Waiting for a player."), g_cfg.netServerName, g_cfg.netPort);
+            wchar_t own[100];
+            if (NetOwnAddresses(own, 100))
+                wsprintfW(line, T(L"Сервер запущено. Ваша адреса для іншого гравця: %s", L"The server is up. Your address for the other player: %s"), own);
+            else
+                wsprintfW(line, T(L"Сервер «%s» запущено, порт %d. Чекає на гравця.", L"Server \"%s\" is up, port %d. Waiting for a player."), g_cfg.netServerName, g_cfg.netPort);
         } else {
             dot = 0xFFE0B040;
             lstrcpyW(peer, L"?");

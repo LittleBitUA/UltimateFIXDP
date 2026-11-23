@@ -501,6 +501,7 @@ void NetMirrorStart();
 void NetLeave();
 bool NetPeerText(wchar_t* out);           // the other player's address (24 characters)
 bool NetPeerHeard();
+bool NetOwnAddresses(wchar_t* out, int max);  // this computer's addresses in its networks
 void NetPumpFrame();                      // once per frame from the Present hook
 void NetDiscover();                       // asks the local network and the recent addresses for servers
 int NetServers(NetServer* out, int max);

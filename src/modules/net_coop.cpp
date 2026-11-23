@@ -35,6 +35,8 @@ struct Sock {
     int(WSAAPI* recvfrom)(SOCKET, char*, int, int, sockaddr*, int*);
     int(WSAAPI* close)(SOCKET);
     int(WSAAPI* setsockopt)(SOCKET, int, int, const char*, int);
+    int(WSAAPI* gethostname)(char*, int);
+    hostent*(WSAAPI* gethostbyname)(const char*);
 } g_ws;
 
 #pragma pack(push, 1)
@@ -166,9 +168,9 @@ bool EnsureSocket(bool exact) {
     if (g_wsFailed) return false;
     if (!g_wsUp) {
         HMODULE m = LoadLibraryW(L"ws2_32.dll");
-        static const char* const names[8] = {"WSAStartup", "socket", "bind", "ioctlsocket", "sendto", "recvfrom", "closesocket", "setsockopt"};
+        static const char* const names[10] = {"WSAStartup", "socket", "bind", "ioctlsocket", "sendto", "recvfrom", "closesocket", "setsockopt", "gethostname", "gethostbyname"};
         void** slots = (void**)&g_ws;
-        for (int i = 0; m && i < 8; ++i) {
+        for (int i = 0; m && i < 10; ++i) {
             slots[i] = (void*)GetProcAddress(m, names[i]);
             if (!slots[i]) m = nullptr;
         }
@@ -438,6 +440,23 @@ bool NetPeerText(wchar_t* out) {  // the other player's address, false while the
     const u32 ip = g_peer.sin_addr.s_addr;
     wsprintfW(out, L"%u.%u.%u.%u:%d", ip & 255, (ip >> 8) & 255, (ip >> 16) & 255, ip >> 24, HostOrder(g_peer.sin_port));
     return true;
+}
+// This computer's own IPv4 addresses, for the player to tell the other one ("192.168.1.5, 10.0.0.2"); false = none found.
+bool NetOwnAddresses(wchar_t* out, int max) {
+    Lock lock;
+    out[0] = 0;
+    char name[256];
+    if (!g_wsUp || g_ws.gethostname(name, sizeof name) != 0) return false;
+    const hostent* h = g_ws.gethostbyname(name);
+    if (!h || h->h_addrtype != AF_INET || !h->h_addr_list) return false;
+    int len = 0;
+    for (int i = 0; h->h_addr_list[i] && i < 4; ++i) {
+        const u8* a = (const u8*)h->h_addr_list[i];
+        if (a[0] == 127 || (a[0] == 169 && a[1] == 254)) continue;  // this computer only, or no network
+        if (len + 20 >= max) break;
+        len += wsprintfW(out + len, len ? L", %u.%u.%u.%u" : L"%u.%u.%u.%u", a[0], a[1], a[2], a[3]);
+    }
+    return len > 0;
 }
 bool NetPeerHeard() { return g_mode == kNetMirror || (g_mode >= kNetHost && g_haveLast); }
 
