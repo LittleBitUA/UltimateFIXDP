@@ -865,8 +865,9 @@ void PartnerTick(u8* player, u8* doll) {
         const bool driving = st == 0x87 || st == 0x88;
         const int myCar = gm ? (int)*(volatile u16*)(gm + 0x9906C) : 0;
         float myCarAt[3] = {yp[0], yp[1], yp[2]};
+        u8* myCarObj = nullptr;
         if (driving) {
-            u8* c = DrivenCar(player);
+            u8* c = myCarObj = DrivenCar(player);
             if (c) for (int i = 0; i < 3; ++i) myCarAt[i] = *(volatile float*)(c + 0x58 + 4 * i);
         }
         NetCoopExchange(yp, *(volatile float*)(player + 0x7C), zoneNow, driving ? 3 : mine, driving, myCar, myCarAt);
@@ -879,13 +880,12 @@ void PartnerTick(u8* player, u8* doll) {
             // The friend drives: one of the game's cars is held where the friend's York is, and the figure is put out of sight.
             // A car of the same number as the one this York sits in would be pulled from under him, so another one stands in.
             int n = peer.car == 7 || peer.car == 8 || (peer.car >= 77 && peer.car <= 90) ? peer.car : 7;
-            if (driving && n == myCar) n = n == 7 ? 8 : 7;
             const float ex = peer.carPos[0] - carAt[0], ey = peer.carPos[1] - carAt[1], ez = peer.carPos[2] - carAt[2];
             const float k = !carShown || ex * ex + ez * ez > 60.f * 60.f || dt <= 0.f ? 1.f : (dt * 14.f > 1.f ? 1.f : dt * 14.f);
             carAt[0] += ex * k;
             carAt[1] += ey * k;
             carAt[2] += ez * k;
-            const bool ok = NetCarAt(n, carAt, peer.yaw);
+            const bool ok = NetCarAt(n, carAt, peer.yaw, myCarObj);
             if (ok != carShown) Log("net partner: the friend's car is %s", ok ? "shown" : "not shown (needs free play outdoors in Greenvale)");
             carShown = ok;
             if (ok && g_partnerMotion[3]) {  // the driver: the figure where the friend's York sits, in York's motion at the wheel

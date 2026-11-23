@@ -300,7 +300,7 @@ void CheatsTick(void* player) {
 
 // The friend's car (net_coop.cpp): the game's numbered car `number` shown as the spawner shows one, then held at the place the
 // friend's game reports, every update. Free play outdoors in Greenvale only; false when it could not be done.
-bool NetCarAt(int number, const float pos[3], float yaw) {
+bool NetCarAt(int number, const float pos[3], float yaw, const void* mine) {
     static const u8 kShow[8] = {0x51, 0x56, 0x8B, 0xF1, 0x89, 0x74, 0x24, 0x04}, kMove[8] = {0x8B, 0x44, 0x24, 0x04, 0x56, 0x8B, 0xF1, 0x81};
     static u8* car = nullptr;
     static int shown = 0;
@@ -316,6 +316,12 @@ bool NetCarAt(int number, const float pos[3], float yaw) {
     if (!car || shown != number || now - asked > 3000) {  // asked again now and then: the game may have put the car away
         asked = now;
         u8* got = (u8*)((CarShowFn)(uintptr_t)kCarShowFn)((void*)(uintptr_t)kWorldFactoryVa, (u32)number, -1, 1);
+        if (got && got == mine) {  // the very car this York sits in: it must not be pulled from under him, another one stands in
+            const int other = number == 7 ? 8 : 7;
+            Log("net partner: car %d is the one York sits in, car %d stands in for the friend's", number, other);
+            got = (u8*)((CarShowFn)(uintptr_t)kCarShowFn)((void*)(uintptr_t)kWorldFactoryVa, (u32)other, -1, 1);
+            if (got == mine) got = nullptr;
+        }
         if (!got || (*(volatile u32*)(got + 0xDC) & 0x60)) {
             if (car || shown != number) Log("net partner: the game gave no car %d for the friend", number);
             car = nullptr;
@@ -326,6 +332,7 @@ bool NetCarAt(int number, const float pos[3], float yaw) {
         car = got;
         shown = number;
     }
+    if (car == mine) return false;
     float p[4] = {pos[0], pos[1], pos[2], 1.f};
     float r[4] = {0.f, yaw, 0.f, 0.f};
     ((CarMoveFn)(uintptr_t)kCarMoveFn)(car, p, r);

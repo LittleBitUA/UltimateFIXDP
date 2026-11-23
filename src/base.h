@@ -466,7 +466,7 @@ void SessionFrame(void* device);  // once per frame from the Present hook: the l
 // "Fly: on" and "Fly: off", "Scan" and "Scan finished") takes its place instead of queueing.
 constexpr int kNoticeInfo = 0, kNoticeWarning = 1, kNoticeError = 2;
 struct NetPeerState { float pos[3]; float yaw; u32 zone; int kind; bool inCar; int car; float carPos[3]; };
-bool NetCarAt(int number, const float pos[3], float yaw);  // cheats.cpp: the friend's car shown and held at a place
+bool NetCarAt(int number, const float pos[3], float yaw, const void* mine);  // cheats.cpp: the friend's car shown and held at a place
 bool NetCoopOn();
 void NetCoopExchange(const float pos[3], float yaw, u32 zone, int kind, bool inCar, int car, const float carPos[3]);  // net_coop.cpp, from the partner's update
 bool NetCoopPeer(NetPeerState* out);
