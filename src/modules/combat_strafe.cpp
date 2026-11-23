@@ -551,7 +551,34 @@ u8* DollAlive() {
     return g_doll;
 }
 
+// The weapon in the hand of the friend's figure (net co-op): the game's own item object (type 14h), made by FUN_004DEDA0 as for
+// the residents (FUN_00479C70). It reads its owner by a bare pointer every frame, so it goes before the figure does.
+u8* g_netWeapon = nullptr;
+u32 g_netWeaponHandle = 0;
+int g_netWeaponItem = 0;
+u8* NetWeaponAlive() {
+    if (!g_netWeapon) return nullptr;
+    void* mgr = *(void* volatile*)(uintptr_t)kObjMgrPtrVa;
+    if (!mgr || ((ObjLookupFn)(uintptr_t)kObjLookupFn)(mgr, g_netWeaponHandle) != g_netWeapon) {
+        g_netWeapon = nullptr;
+        g_netWeaponItem = 0;
+    }
+    return g_netWeapon;
+}
+void NetWeaponDrop(const char* why) {
+    if (u8* w = NetWeaponAlive()) {
+        typedef void(__attribute__((thiscall)) * DetachFn)(void*, void*, const char*, const float*, const float*, const char*, int);
+        typedef void(__attribute__((thiscall)) * DeleteSelfFn)(void*);
+        if (*(volatile u32*)(w + 0xDC) & 4) ((DetachFn)(uintptr_t)0x6C2880)(w, nullptr, nullptr, nullptr, nullptr, nullptr, 0);
+        ((DeleteSelfFn)(uintptr_t)(*(u32* volatile*)w)[0x30 / 4])(w);  // the game's own deferred delete (FUN_006BAB20)
+        Log("net partner: the friend's weapon (item %d) is taken away (%s)", g_netWeaponItem, why);
+    }
+    g_netWeapon = nullptr;
+    g_netWeaponItem = 0;
+}
+
 void DollRemove(const char* why) {
+    NetWeaponDrop(why);
     u8* doll = DollAlive();
     if (!doll) return;
     void* mgr = *(void* volatile*)(uintptr_t)kObjMgrPtrVa;
@@ -849,6 +876,153 @@ bool NetSeat(u8* doll, u8* car) {
     ((AttachFn)(uintptr_t)kAttachFn)(doll, car, node, nullptr, nullptr, nullptr, 0);
     return (*(volatile u32*)(doll + 0xDC) & 4) != 0;
 }
+// ---- The friend's weapon, aiming and shots (all from reading the game's code, see docs of 0.7.17-test12) ----
+// Aiming, firing and reloading never reach the main motion: the game plays them on layer 0 of the actor, over the upper body
+// (the subtree of N_BODY1): obj->vtbl[58h](layer, motion, 0, 0, 1) then obj->vtbl[5Ch](layer, "N_BODY1", blend), a negative blend
+// takes it off. The layer's animator is at obj+280h (motion +14h, time +1Ch), bit 0 of the word at obj+288h = it is on. Up and
+// down the game turns the node PM_WAIST by hand: a quaternion in the node's record, [obj+1E4h] + index * A0h, index at obj+5FEh.
+// The flash and the bang of a shot are FUN_0044D710 at the weapon's node PN_MUZZLE; no bullet is made, so nothing is hurt.
+constexpr u32 kWeaponMakeFn = 0x4DEDA0, kShotFxFn = 0x44D710, kNodeMatrixFn = 0x6C3B80, kResByNameFn = 0x6B2C30, kLayerPlayFn = 0x416E80, kLayerBlendFn = 0x40FCF0;
+typedef void*(__attribute__((cdecl)) * WeaponMakeFn)(void* owner, int item, int hand, int flag);
+typedef void(__attribute__((stdcall)) * ShotFxFn)(int fx, float* matrix, int* sound, int mode, void*, void*);
+typedef float*(__attribute__((thiscall)) * NodeMatrixFn)(void* obj, int node, int);
+typedef void*(__attribute__((thiscall)) * ResByNameFn)(void* res, const char* name, int);
+typedef void(__attribute__((thiscall)) * LayerPlayFn)(void* obj, int layer, void* motion, float start, float blend, int keep);
+typedef void(__attribute__((thiscall)) * LayerBlendFn)(void* obj, int layer, const char* node, float blend);
+bool NetArmsOk(u8* doll) {
+    static const u8 kMake[8] = {0x83, 0xEC, 0x0C, 0x8B, 0x54, 0x24, 0x1C, 0x8B}, kFx[8] = {0x83, 0xEC, 0x20, 0x56, 0x8B, 0x74, 0x24, 0x28},
+                    kMatrix[8] = {0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x10, 0x89, 0x4D}, kByName[8] = {0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x89, 0x4D};
+    static int ok = -1;
+    if (ok < 0) {
+        ok = BytesMatch(kWeaponMakeFn, kMake, 8) && BytesMatch(kShotFxFn, kFx, 8) && BytesMatch(kNodeMatrixFn, kMatrix, 8) && BytesMatch(kResByNameFn, kByName, 8);
+        if (!ok) Log("net partner: the game's weapon functions differ from DP.exe 1.01b: the friend has no weapon and no shots");
+    }
+    const u32* vt = *(u32* volatile*)doll;
+    return ok == 1 && g_cfg.netWeapons && NetFnsOk() && vt[0x58 / 4] == kLayerPlayFn && vt[0x5C / 4] == kLayerBlendFn;
+}
+// What this York holds and does with it, for the friend.
+void NetArmsMine(u8* player, u8* gm, void* res, NetPeerState* me) {
+    static void* lastMotion = nullptr;
+    static float lastTime = 0.f, lastClip = 0.f;
+    static int lastItem = -1;
+    static u32 seq = 0, shots = 0;
+    me->layerMotion = -1;
+    void* mgr = *(void* volatile*)(uintptr_t)kObjMgrPtrVa;
+    u8* w = mgr ? (u8*)((ObjLookupFn)(uintptr_t)kObjLookupFn)(mgr, *(volatile u32*)(player + 0x864)) : nullptr;
+    if (w && CarReadable(w)) me->weapon = *(volatile int*)(w + 0x4A8);
+    if (me->weapon < 0 || me->weapon > 0x16D) me->weapon = 0;
+    u8* layer = *(u8* volatile*)(player + 0x280);
+    const bool on = layer && CarReadable(layer) && (*(volatile u16*)(player + 0x288) & 1);
+    void* motion = on ? *(void* volatile*)(layer + 0x14) : nullptr;
+    if (motion && res) {
+        const int id = ((ResIdOfFn)(uintptr_t)kResIdOfFn)(res, motion);
+        const float t = *(volatile float*)(layer + 0x1C);
+        if (id > 0 && id <= 0xFFFF) {
+            me->layerMotion = id;
+            me->layerOn = true;
+            if (motion != lastMotion || t < lastTime - 0.5f) ++seq;  // another one, or the same one from its start (the next shot)
+            lastTime = t;
+        }
+    }
+    lastMotion = motion;
+    me->layerSeq = seq;
+    const int waist = *(volatile short*)(player + 0x5FE);
+    u8* nodes = *(u8* volatile*)(player + 0x1E4);
+    if (me->layerOn && waist >= 0 && waist < 256 && nodes && CarReadable(nodes + waist * 0xA0)) {
+        for (int i = 0; i < 4; ++i) me->waist[i] = *(volatile float*)(nodes + waist * 0xA0 + 4 * i);
+        me->waistOn = true;
+    }
+    // a shot: the clip of the weapon in hand went down (FUN_004FE190 takes one for every shot, the endless pistol too)
+    const int item = *(volatile int*)(gm + 0x98E48);
+    if (item > 0 && item <= 0x16D) {
+        const float clip = *(volatile float*)(gm + 0x98E50 + item * 4);
+        if (item == lastItem && clip < lastClip && lastClip - clip < 50.f) ++shots;
+        lastClip = clip;
+    }
+    lastItem = item;
+    me->shots = shots;
+}
+// The friend's figure: his weapon in its right hand, the motion of his upper body, the turn of his waist, the flash of his shots.
+void NetArmsShow(u8* doll, u8* gm, void* res, const NetPeerState* peer, bool shown) {
+    static u8* lastDoll = nullptr;
+    static bool layerOn = false, shotsKnown = false;
+    static u32 layerSeq = 0, shots = 0;
+    static int layerId = -1;
+    static DWORD askedAt = 0;
+    if (doll != lastDoll) { lastDoll = doll; layerOn = false; layerId = -1; }
+    if (!NetArmsOk(doll)) return;
+    const int item = shown ? peer->weapon : 0;
+    u8* w = NetWeaponAlive();
+    if (w && item != g_netWeaponItem) { NetWeaponDrop(item ? "another one" : "put away or not seen"); w = nullptr; }
+    u8* items = *(u8* volatile*)(gm + 0x835000);
+    if (!w && item > 0 && items && CarReadable(items + item * 0xDC) && GetTickCount() - askedAt > 2000) {
+        askedAt = GetTickCount();
+        // its model and texture by the item's name, as the item object itself asks for them; without them nothing is made
+        char xmd[40], xpc[40];
+        const char* name = (const char*)(items + item * 0xDC);
+        int len = 0;
+        while (len < 24 && name[len] > 32 && name[len] < 127) ++len;
+        if (len > 0 && len < 24 && name[len] == 0) {
+            wsprintfA(xmd, "%s.XMD", name);
+            wsprintfA(xpc, "%s.XPC", name);
+            if (res && ((ResByNameFn)(uintptr_t)kResByNameFn)(res, xpc, 1) && ((ResByNameFn)(uintptr_t)kResByNameFn)(res, xmd, 1)) {
+                u8* made = (u8*)((WeaponMakeFn)(uintptr_t)kWeaponMakeFn)(doll, item, 1, 1);
+                if (made && CarReadable(made)) {
+                    g_netWeapon = w = made;
+                    g_netWeaponHandle = *(volatile u32*)(made + 0x3C);
+                    g_netWeaponItem = item;
+                    if (!NetWeaponAlive()) w = nullptr;
+                }
+                Log("net partner: the friend's weapon, item %d (%s): %s (object %08X)", item, name, w ? "in the figure's hand" : "the game made none", (u32)(uintptr_t)made);
+            } else {
+                Log("net partner: the friend's weapon, item %d (%s): its model is not in memory here, not shown", item, name);
+            }
+        }
+    }
+    // the upper body
+    const bool wantLayer = shown && peer->layerOn && peer->layerMotion > 0;
+    if (wantLayer && res) {
+        if (!layerOn || peer->layerMotion != layerId || peer->layerSeq != layerSeq) {
+            if (void* m = ((ResObjectFn)(uintptr_t)kMotionByIdFn)(res, (u32)peer->layerMotion, 1)) {
+                ((LayerPlayFn)(uintptr_t)kLayerPlayFn)(doll, 0, m, 0.f, 0.f, 1);
+                ((LayerBlendFn)(uintptr_t)kLayerBlendFn)(doll, 0, "N_BODY1", layerOn ? 0.f : 5.f);
+                if (!layerOn) Log("net partner: the figure's upper body plays motion %04X (aiming or a blow)", peer->layerMotion);
+                layerOn = true;
+            }
+            layerId = peer->layerMotion;
+            layerSeq = peer->layerSeq;
+        }
+    } else if (layerOn) {
+        ((LayerBlendFn)(uintptr_t)kLayerBlendFn)(doll, 0, "N_BODY1", -5.f);
+        layerOn = false;
+    }
+    const int waist = *(volatile short*)(doll + 0x5FE);
+    u8* nodes = *(u8* volatile*)(doll + 0x1E4);
+    if (layerOn && peer->waistOn && waist >= 0 && waist < 256 && nodes && CarReadable(nodes + waist * 0xA0))
+        for (int i = 0; i < 4; ++i) *(volatile float*)(nodes + waist * 0xA0 + 4 * i) = peer->waist[i];
+    // a shot: the flash and the sound at the muzzle of the figure's weapon
+    u32 fired = 0;
+    if (shown) {
+        fired = shotsKnown ? peer->shots - shots : 0;
+        shots = peer->shots;
+    }
+    shotsKnown = shown;
+    if (fired && fired < 8 && shown && w && items) {
+        const int fx = *(volatile short*)(items + g_netWeaponItem * 0xDC + 0xCC);
+        void* model = *(void* volatile*)(w + 0x160);
+        const int node = model ? ((NodeIndexFn)(uintptr_t)kNodeIndexFn)(model, "PN_MUZZLE") : -1;
+        static bool told = false;
+        if (fx >= 0 && fx < 256 && node >= 0) {
+            float* m = ((NodeMatrixFn)(uintptr_t)kNodeMatrixFn)(w, node, 0);
+            const int it = g_netWeaponItem, mode = it == 0x18 || it == 0x39 || it == 0x19 || it == 0x3A ? -1 : 0;
+            if (m && CarReadable(m)) ((ShotFxFn)(uintptr_t)kShotFxFn)(fx, m, nullptr, mode, nullptr, nullptr);
+        }
+        if (!told) {
+            told = true;
+            Log("net partner: the friend fired (item %d, flash %d, muzzle node %d)", g_netWeaponItem, fx, node);
+        }
+    }
+}
 // One update of the friend's figure: this York's state goes out, the friend's comes in and is shown. `want` = the learnt motion to
 // fall back on.
 void NetPartnerStep(u8* player, u8* doll, const float yp[3], const float yorkWas[3], float dt, int* want) {
@@ -886,9 +1060,10 @@ void NetPartnerStep(u8* player, u8* doll, const float yp[3], const float yorkWas
         me.suit = row >= 0 && row < 41 ? row : 0;
     }
     if (myCar) {
-        // The car across the ground and its three angles; the height sent is York's in the seat: with the object's own height the
-        // other game's car stood half in the road (0.7.17-test9).
+        // The car's own place and its three angles. (Up to 0.7.17-test11 the height sent was York's in the seat, 3.3 units under
+        // the car's own in the log of test11: the friend's car drove half in the road.)
         me.carPos[0] = *(volatile float*)(myCar + 0x58);
+        me.carPos[1] = *(volatile float*)(myCar + 0x5C);
         me.carPos[2] = *(volatile float*)(myCar + 0x60);
         for (int i = 0; i < 3; ++i) me.carRot[i] = *(volatile float*)(myCar + 0x78 + 4 * i);
         me.car = (int)*(volatile u16*)(myCar + 0x2E);
@@ -901,9 +1076,10 @@ void NetPartnerStep(u8* player, u8* doll, const float yp[3], const float yorkWas
                 (int)(me.carRot[1] * 1000.f), (int)(me.carRot[2] * 1000.f));
         }
     }
+    if (gm && !me.inCar && NetArmsOk(doll)) NetArmsMine(player, gm, res, &me);
     NetCoopExchange(me);
     // ---- the friend
-    NetPeerState peer;
+    NetPeerState peer = {};
     static bool shown = false, carShown = false;
     static float carAt[3], carRot[3];
     const bool see = NetCoopPeer(&peer) && peer.zone[0] == me.zone[0] && peer.zone[1] == me.zone[1] && peer.zone[2] == me.zone[2];
@@ -972,6 +1148,11 @@ void NetPartnerStep(u8* player, u8* doll, const float yp[3], const float yorkWas
             g_dollBase[1] = yp[1] - 400.f;  // far under the ground
             g_dollBase[2] = yp[2];
         }
+    }
+    if (gm) NetArmsShow(doll, gm, res, &peer, onFoot);
+    {
+        const float at[3] = {onFoot ? g_dollBase[0] : carAt[0], onFoot ? g_dollBase[1] : carAt[1], onFoot ? g_dollBase[2] : carAt[2]};
+        NetFigureAt(at, onFoot || (carShown && g_netSeated));
     }
     if (onFoot != shown) Log("net partner: the friend's figure is %s", onFoot ? "shown on foot" : see ? "with the car" : "hidden (another place or nothing heard)");
     shown = onFoot;
@@ -1099,6 +1280,7 @@ void DollTick(void* playerPtr) {
     // (with the mission lab on the doll stays after the photo mode: it is the one York talks to)
     if (g_doll && (scene || (wasPhoto && !photo && !g_cfg.missionLab && !MissionActive() && !g_cfg.coopPartner && !NetCoopOn()))) DollRemove(scene ? "a scene began" : "the photo mode ended");
     wasPhoto = photo;
+    if (g_netWeapon && !DollAlive()) NetWeaponDrop("the figure is gone");  // it reads its owner by a bare pointer
     PlayAsTick(player, free);
     const int req = g_dollRequest;
     if (req) {

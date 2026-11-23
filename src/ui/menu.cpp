@@ -3508,7 +3508,7 @@ bool SwallowRmb() {
 }
 
 SHORT WINAPI H_GetAsyncKeyState(int vk) {
-    if (g_open || FreeCamBlocksInput()) return 0;
+    if (g_open || FreeCamBlocksInput() || NetChatBlocksInput()) return 0;
     if (vk == VK_ESCAPE && g_swallowEsc) {
         SwallowEsc();
         return 0;  // also the first call after the release: its "pressed since the last call" bit belongs to the old press
@@ -3521,7 +3521,7 @@ SHORT WINAPI H_GetAsyncKeyState(int vk) {
 }
 
 BOOL WINAPI H_GetKeyboardState(PBYTE state) {
-    if (!g_open && !FreeCamBlocksInput()) {
+    if (!g_open && !FreeCamBlocksInput() && !NetChatBlocksInput()) {
         BOOL ok = r_GetKeyboardState(state);
         if (ok && SwallowEsc()) state[VK_ESCAPE] = 0;
         if (ok && SwallowRmb()) state[VK_RBUTTON] = 0;

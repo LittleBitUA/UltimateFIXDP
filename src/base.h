@@ -165,7 +165,8 @@ struct Config {
     int photoMoveX, photoMoveY, photoMoveZ, photoTurn;  // photo mode: York moved right / up / forward (tenths of a unit) and turned (degrees) from where he stood
     int photoPlay;           // 1 = the motion runs instead of holding the frame
     int photoFaceOn;         // 1 = the face page drives York's face
-    int netPartner, netPort, netPeerPort, netCarCollision;   // [Coop]: the partner figure shows the York of a friend's game on another computer (net_coop.cpp)
+    int netPartner, netPort, netPeerPort, netCarCollision, netWeapons;   // [Coop]: the partner figure shows the York of a friend's game on another computer (net_coop.cpp)
+    wchar_t netNick[16];       // the name the friend sees over this York and in the chat
     wchar_t netPeer[48];       // the address of the friend's computer, or "mirror"
     int coopPartner;         // 1 = a second character (the doll) walks by the gamepad while York keeps the keyboard and mouse
     int playAsOn;            // 1 = the Cheats row asked for the kind in photoPlayAs (cleared once the game plays it)
@@ -475,10 +476,24 @@ struct NetPeerState {
     bool inCar;
     int car;                // the car's number (car+2Eh), 0 = it has none
     float carPos[3], carRot[3];  // the car: place, and pitch, heading, roll as the game keeps them (car+78h..+80h)
+    int weapon;             // the item York holds in his hand, 0 = none
+    int layerMotion;        // the motion of his upper body (aiming, firing, reloading, a swing), -1 = none
+    bool layerOn, waistOn;
+    u32 layerSeq;           // goes up when that motion starts again
+    u32 shots;              // goes up with every shot
+    float waist[4];         // the turn of his waist while he aims (up and down)
 };
 bool NetCoopOn();
 void NetCoopExchange(const NetPeerState& mine);  // from the partner's update, game thread
 bool NetCoopPeer(NetPeerState* out);
+const wchar_t* NetPeerNick();                    // the friend's name ("" while not known)
+bool NetPeerOnMap(float* x, float* z);           // the friend's place while he is in the same area as this York
+void NetChatSay(const wchar_t* text);            // a chat line to the friend (net_coop.cpp)
+bool NetChatTake(wchar_t* text, int max);        // the next line that came from the friend
+void NetFigureAt(const float* pos, bool shown);  // combat_strafe.cpp tells where the friend's figure stands (for the name over it)
+void NetMapMark(float x, float y, float w, float h);  // waypoint.cpp: where the friend is on the pause map drawn this frame (HUD units)
+bool NetChatBlocksInput();                       // net_chat.cpp: the chat line is being typed, the game must see no keys
+void NetChatFrame(void* device);                 // once per frame from the Present hook
 u8* NetCarAt(int number, const float pos[3], const float rot[3], const void* mine, const float york[3]);  // cheats.cpp
 void NetCarRelease(const char* why);
 bool PartnerPad(float* x, float* y, u32* buttons);  // menu.cpp: the pad's left stick (-1..1, up positive) and buttons for the partner

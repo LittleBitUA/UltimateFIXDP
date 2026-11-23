@@ -729,7 +729,7 @@ extern "C" void __cdecl WaypointBeaconDraw() {
 // After the pause map is drawn (same pass, game font): a + in the middle (where F7 puts the waypoint) and an X on the waypoint.
 extern "C" void __cdecl WaypointMapOverlay() {
     using namespace ufx;
-    if (!g_installed || !g_cfg.waypoint || !g_wpMapObj) return;
+    if (!g_installed || !g_wpMapObj) return;
     const float W = F(kHudWVa, 0), H = F(kHudHVa, 0);
     if (W < 100.f || H < 100.f) return;
     // the map is centred on its own frame, not on the screen: the middle of points 0 and 1 of its layout (object + 19D0h, a table
@@ -744,6 +744,15 @@ extern "C" void __cdecl WaypointMapOverlay() {
             cy = (F(table, 0x08) + F(table, 0x18)) * 0.5f;
         }
     }
+    {  // the friend of the net co-op: his place on the map goes to the chat's drawing (the name is in the mod's own font)
+        float fx, fz;
+        const float zoom = F(g_wpMapObj, 0x8EE0);
+        if (g_mapFixInstalled && (g_mapOrient == 1 || g_mapOrient == 2) && zoom > 0.f && NetPeerOnMap(&fx, &fz)) {
+            const float k = zoom * 1024.f / 10000.f * (g_mapOrient == 2 ? -1.f : 1.f);
+            NetMapMark(cx + (fx - F(g_wpMapObj, 0x8ED0)) * k, cy + (fz - F(g_wpMapObj, 0x8ED8)) * k, W, H);
+        }
+    }
+    if (!g_cfg.waypoint) return;
     Print(cx, cy - 8.f, kWhite, "+", 0);
     // the X is placed north up (orientation 1) or south up (2). Without the map fix the stock map turns with the player, and
     // orientation 0 keeps that; the turn is not reproduced here, so no X rather than one in the wrong place

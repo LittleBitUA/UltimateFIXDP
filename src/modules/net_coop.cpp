@@ -45,11 +45,22 @@ struct Packet {
     float carRot[3];
     int motion;
     int suit;
-    u32 spare[4];
+    int layerMotion, weapon;
+    u32 shots, layerSeq;
+    wchar_t nick[16];
+    float waist[4];
+};
+struct ChatPacket {
+    u32 mark;     // 'UFXC'
+    u16 version;
+    u16 spare;
+    u32 id;       // the same line is sent several times; the id tells them apart
+    wchar_t text[96];
 };
 #pragma pack(pop)
+constexpr u32 kChatMark = 0x43584655u;
 constexpr u32 kMark = 0x50584655u;
-constexpr u16 kNetVersion = 3;
+constexpr u16 kNetVersion = 5;
 
 int g_state = 0;  // 0 not tried, 1 mirror, 2 socket open, -1 failed
 SOCKET g_sock = INVALID_SOCKET;
@@ -62,6 +73,32 @@ bool g_haveLast = false, g_toldHeard = false;
 constexpr int kRing = 64;  // mirror: this York's own states, read back a second and a half later
 struct Past { DWORD at; NetPeerState s; } g_ring[kRing];
 int g_ringAt = 0;
+
+// Chat. Lines to send wait here and go out six times each (UDP loses packets); lines that came wait for the chat window.
+// The window runs with the picture, the exchange with the game: a small lock keeps the two apart.
+volatile LONG g_chatLock = 0;
+struct Lock {
+    Lock() { while (InterlockedExchange(&g_chatLock, 1)) Sleep(0); }
+    ~Lock() { InterlockedExchange(&g_chatLock, 0); }
+};
+struct Out { u32 id; int left; DWORD next; wchar_t text[96]; } g_out[4];
+wchar_t g_in[8][96];
+int g_inHead = 0, g_inCount = 0;
+u32 g_chatId = 0, g_seenIds[16];
+int g_seenAt = 0;
+wchar_t g_peerNick[16];
+u32 g_mineZone0 = 0xFFFFFFFFu;
+
+void CopyClean(wchar_t* to, const wchar_t* from, int max) {  // no control characters, always ended
+    int n = 0;
+    for (; n < max - 1 && from[n]; ++n) to[n] = from[n] < 32 ? L' ' : from[n];
+    to[n] = 0;
+}
+void ChatIn(const wchar_t* text) {  // under the lock
+    wchar_t* slot = g_in[(g_inHead + g_inCount) % 8];
+    if (g_inCount == 8) g_inHead = (g_inHead + 1) % 8; else ++g_inCount;
+    CopyClean(slot, text, 96);
+}
 
 u32 ParseIp(const wchar_t* text, bool* ok) {  // a.b.c.d -> network order
     u32 part[4] = {0, 0, 0, 0};
@@ -142,6 +179,7 @@ bool NetCoopOn() { return g_cfg.netPartner != 0; }
 
 // This York's state goes out (20 times a second at most) and what came in is read. Game thread, never waits.
 void NetCoopExchange(const NetPeerState& mine) {
+    g_mineZone0 = mine.zone[0];
     if (!Open()) return;
     const DWORD now = GetTickCount();
     if (g_state == 1) {
@@ -152,7 +190,11 @@ void NetCoopExchange(const NetPeerState& mine) {
             p.s = mine;
             p.s.pos[0] += 30.f;
             p.s.carPos[0] += 30.f;
+            CopyClean(g_peerNick, g_cfg.netNick, 16);
         }
+        Lock lock;
+        for (Out& o : g_out)  // the mirror says the line back a second and a half later
+            if (o.left && (int)(now - o.next) >= 0) { o.left = 0; ChatIn(o.text); }
         return;
     }
     if (now - g_lastSend >= 50) {
@@ -169,24 +211,59 @@ void NetCoopExchange(const NetPeerState& mine) {
             p.carRot[i] = mine.carRot[i];
         }
         p.yaw = mine.yaw;
-        p.flags = mine.inCar ? 1u : 0u;
+        p.flags = (mine.inCar ? 1u : 0u) | (mine.layerOn ? 2u : 0u) | (mine.waistOn ? 4u : 0u);
+        p.layerMotion = mine.layerMotion;
+        p.weapon = mine.weapon;
+        p.shots = mine.shots;
+        p.layerSeq = mine.layerSeq;
+        for (int i = 0; i < 4; ++i) p.waist[i] = mine.waist[i];
         p.car = (u32)mine.car;
         p.motion = mine.motion;
         p.suit = mine.suit;
+        CopyClean(p.nick, g_cfg.netNick, 16);
         g_ws.sendto(g_sock, (const char*)&p, sizeof p, 0, (const sockaddr*)&g_peer, sizeof g_peer);
     }
+    {
+        Lock lock;
+        for (Out& o : g_out)
+            if (o.left && (int)(now - o.next) >= 0) {
+                --o.left;
+                o.next = now + 150;
+                ChatPacket c = {};
+                c.mark = kChatMark;
+                c.version = kNetVersion;
+                c.id = o.id;
+                CopyClean(c.text, o.text, 96);
+                g_ws.sendto(g_sock, (const char*)&c, sizeof c, 0, (const sockaddr*)&g_peer, sizeof g_peer);
+            }
+    }
     for (int i = 0; i < 32; ++i) {
-        Packet p;
+        union { Packet p; ChatPacket c; } u;
+        Packet& p = u.p;
         sockaddr_in from = {};
         int fromLen = sizeof from;
-        const int got = g_ws.recvfrom(g_sock, (char*)&p, sizeof p, 0, (sockaddr*)&from, &fromLen);
+        const int got = g_ws.recvfrom(g_sock, (char*)&u, sizeof u, 0, (sockaddr*)&from, &fromLen);
         if (got <= 0) break;
+        if (got == (int)sizeof(ChatPacket) && u.c.mark == kChatMark && u.c.version == kNetVersion && from.sin_addr.s_addr == g_peer.sin_addr.s_addr) {
+            bool seen = false;
+            for (u32 id : g_seenIds) seen = seen || id == u.c.id;
+            if (!seen && u.c.id) {
+                g_seenIds[g_seenAt++ % 16] = u.c.id;
+                u.c.text[95] = 0;
+                Lock lock;
+                ChatIn(u.c.text);
+            }
+            continue;
+        }
         if (got != (int)sizeof p || p.mark != kMark || p.version != kNetVersion || from.sin_addr.s_addr != g_peer.sin_addr.s_addr) continue;
         // a newer one than the last; a much older number is the friend's game started again
         if (g_haveLast && (int)(p.seq - g_seqIn) <= 0 && g_seqIn - p.seq < 2000) continue;
         bool sane = p.kind <= 3 && Finite(p.yaw, 100.f) && p.car < 0x10000 && p.motion >= -1 && p.motion < 0x10000 && p.suit >= 0 && p.suit < 41;
         for (int k = 0; k < 3; ++k)
             if (!Finite(p.pos[k], 1.0e6f) || !Finite(p.carPos[k], 1.0e6f) || !Finite(p.carRot[k], 100.f)) sane = false;
+        if (p.weapon < 0 || p.weapon > 0x16D || p.layerMotion < -1 || p.layerMotion > 0xFFFF) sane = false;
+        for (int k = 0; k < 4; ++k)
+            if (!Finite(p.waist[k], 1.01f)) sane = false;
         if (!sane) continue;
         g_seqIn = p.seq;
         for (int k = 0; k < 3; ++k) {
@@ -197,10 +274,19 @@ void NetCoopExchange(const NetPeerState& mine) {
         }
         g_last.kind = p.kind;
         g_last.inCar = (p.flags & 1) != 0;
+        g_last.layerOn = (p.flags & 2) != 0;
+        g_last.waistOn = (p.flags & 4) != 0;
+        g_last.layerMotion = p.layerMotion;
+        g_last.weapon = p.weapon;
+        g_last.shots = p.shots;
+        g_last.layerSeq = p.layerSeq;
+        for (int k = 0; k < 4; ++k) g_last.waist[k] = p.waist[k];
         g_last.yaw = p.yaw;
         g_last.car = (int)p.car;
         g_last.motion = p.motion;
         g_last.suit = p.suit;
+        p.nick[15] = 0;
+        CopyClean(g_peerNick, p.nick, 16);
         g_haveLast = true;
         g_lastHeard = now;
         if (!g_toldHeard) {
@@ -231,6 +317,38 @@ bool NetCoopPeer(NetPeerState* out) {
     }
     if (g_state != 2 || !g_haveLast || now - g_lastHeard > 3000) return false;
     *out = g_last;
+    return true;
+}
+
+const wchar_t* NetPeerNick() { return g_peerNick; }
+
+bool NetPeerOnMap(float* x, float* z) {
+    NetPeerState s;
+    if (!NetCoopOn() || !NetCoopPeer(&s) || s.zone[0] != g_mineZone0) return false;
+    *x = s.inCar ? s.carPos[0] : s.pos[0];
+    *z = s.inCar ? s.carPos[2] : s.pos[2];
+    return true;
+}
+
+void NetChatSay(const wchar_t* text) {
+    if (g_state <= 0 || !text[0]) return;
+    Lock lock;
+    Out* slot = &g_out[0];
+    for (Out& o : g_out)
+        if (!o.left) { slot = &o; break; }
+    slot->id = (GetTickCount() << 8) ^ ++g_chatId;
+    if (!slot->id) slot->id = 1;
+    slot->left = g_state == 1 ? 1 : 6;
+    slot->next = GetTickCount() + (g_state == 1 ? 1500 : 0);
+    CopyClean(slot->text, text, 96);
+}
+
+bool NetChatTake(wchar_t* text, int max) {
+    Lock lock;
+    if (!g_inCount) return false;
+    CopyClean(text, g_in[g_inHead], max < 96 ? max : 96);
+    g_inHead = (g_inHead + 1) % 8;
+    --g_inCount;
     return true;
 }
 

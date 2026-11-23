@@ -20,7 +20,7 @@ LIBS     := -lkernel32 -luser32 -lgdi32 -lgcc
 SRC      += src/ui/xbox_look.cpp
 SRC      += src/modules/quick_turn.cpp
 SRC      += src/modules/npc_map.cpp src/ui/residents.cpp
-SRC      += src/modules/missions.cpp src/modules/world_stream.cpp src/modules/editor_server.cpp src/modules/net_coop.cpp
+SRC      += src/modules/missions.cpp src/modules/world_stream.cpp src/modules/editor_server.cpp src/modules/net_coop.cpp src/modules/net_chat.cpp
 SRC      += src/modules/mods.cpp src/ui/mods_page.cpp src/modules/game_files.cpp src/modules/laa_self.cpp src/modules/updater.cpp
 SRC      += src/modules/stability.cpp
 
