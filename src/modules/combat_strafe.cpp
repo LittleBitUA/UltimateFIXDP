@@ -1281,6 +1281,15 @@ void DollTick(void* playerPtr) {
     // (with the mission lab on the doll stays after the photo mode: it is the one York talks to)
     if (g_doll && (scene || (wasPhoto && !photo && !g_cfg.missionLab && !MissionActive() && !g_cfg.coopPartner && !NetCoopOn()))) DollRemove(scene ? "a scene began" : "the photo mode ended");
     wasPhoto = photo;
+    {
+        static bool wasNet = false;
+        const bool net = NetCoopOn();
+        if (wasNet && !net) {  // the session ended: the other player's figure and car go
+            NetCarRelease("multiplayer off");
+            DollRemove("multiplayer off");
+        }
+        wasNet = net;
+    }
     if (g_netWeapon && !DollAlive()) NetWeaponDrop("the figure is gone");  // it reads its owner by a bare pointer
     PlayAsTick(player, free);
     const int req = g_dollRequest;

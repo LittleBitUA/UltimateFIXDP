@@ -166,6 +166,7 @@ struct Config {
     int photoPlay;           // 1 = the motion runs instead of holding the frame
     int photoFaceOn;         // 1 = the face page drives York's face
     int netPartner, netPort, netPeerPort, netCarCollision, netWeapons;   // [Coop]: the partner figure shows the York of a friend's game on another computer (net_coop.cpp)
+    wchar_t netServerName[24]; // the name of this game's server in the other players' lists
     wchar_t netNick[16];       // the name the friend sees over this York and in the chat
     wchar_t netPeer[48];       // the address of the friend's computer, or "mirror"
     int coopPartner;         // 1 = a second character (the doll) walks by the gamepad while York keeps the keyboard and mouse
@@ -484,6 +485,28 @@ struct NetPeerState {
     float waist[4];         // the turn of his waist while he aims (up and down)
 };
 bool NetCoopOn();
+// Multiplayer sessions (net_coop.cpp), started from the F10 page (ui/net_page.cpp).
+enum { kNetOff, kNetMirror, kNetHost, kNetClient };
+struct NetServer {
+    u32 ip;                 // network order
+    int port;
+    int players;            // 1 or 2 (of 2)
+    wchar_t name[24], nick[16];
+    DWORD at;               // when it answered last
+};
+int NetMode();
+bool NetHostStart();                      // false: the port could not be opened
+bool NetJoin(const wchar_t* address);     // a.b.c.d or a.b.c.d:port; false: not an address
+void NetMirrorStart();
+void NetLeave();
+bool NetPeerText(wchar_t* out);           // the other player's address (24 characters)
+bool NetPeerHeard();
+void NetPumpFrame();                      // once per frame from the Present hook
+void NetDiscover();                       // asks the local network and the recent addresses for servers
+int NetServers(NetServer* out, int max);
+const wchar_t* NetRecent(int i);          // 0..3, "" = none
+// One text field typed into from the keyboard (net_chat.cpp): 0 nothing, 1 Enter, 2 Esc, 3 Tab. `prev` = 256 key states of the caller.
+int NetTypeInto(wchar_t* text, int* length, int max, bool* prev);
 void NetCoopExchange(const NetPeerState& mine);  // from the partner's update, game thread
 bool NetCoopPeer(NetPeerState* out);
 const wchar_t* NetPeerNick();                    // the friend's name ("" while not known)

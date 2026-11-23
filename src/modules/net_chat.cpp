@@ -27,7 +27,6 @@ wchar_t g_input[kInputMax + 1];
 int g_inputLen = 0;
 bool g_open = false, g_block = false;
 bool g_prev[256];
-DWORD g_backAt = 0;
 float g_figure[3];
 DWORD g_figureAt = 0;
 bool g_figureShown = false;
@@ -112,43 +111,18 @@ void Submit() {
 
 // The keys of the line: each key once per press (Backspace repeats while held).
 void Typing() {
-    BYTE state[256];
-    for (int i = 0; i < 256; ++i) state[i] = 0;
-    if (Down(VK_SHIFT)) state[VK_SHIFT] = state[VK_LSHIFT] = 0x80;
-    if (Down(VK_RMENU) && Down(VK_CONTROL)) state[VK_CONTROL] = state[VK_MENU] = 0x80;  // AltGr
-    if (GetKeyState(VK_CAPITAL) & 1) state[VK_CAPITAL] = 1;
-    const HKL layout = GetKeyboardLayout(GetWindowThreadProcessId(GetForegroundWindow(), nullptr));
-    const DWORD now = GetTickCount();
-    for (int vk = 8; vk < 255; ++vk) {
-        const bool down = Down(vk), was = g_prev[vk];
-        g_prev[vk] = down;
-        if (vk == VK_BACK) {
-            if (down && (!was || (int)(now - g_backAt) >= 0)) {
-                g_backAt = now + (was ? 40 : 400);
-                if (g_inputLen) --g_inputLen;
+    const int key = NetTypeInto(g_input, &g_inputLen, kInputMax, g_prev);
+    if (key == 2) { g_open = false; return; }
+    if (key == 1) { Submit(); g_open = false; return; }
+    if (key == 3) {  // the first command that begins this way
+        g_input[g_inputLen] = 0;
+        for (const Command& c : kCommands)
+            if (g_input[0] == L'/' && StartsWith(c.name, g_input)) {
+                lstrcpyW(g_input, c.name);
+                g_inputLen = lstrlenW(g_input);
+                if (g_inputLen < kInputMax && c.name[1] == L'n') g_input[g_inputLen++] = L' ';
+                break;
             }
-            continue;
-        }
-        if (!down || was) continue;
-        if (vk == VK_ESCAPE) { g_open = false; return; }
-        if (vk == VK_RETURN) { Submit(); g_open = false; return; }
-        if (vk == VK_TAB) {  // the first command that begins this way
-            g_input[g_inputLen] = 0;
-            for (const Command& c : kCommands)
-                if (g_input[0] == L'/' && StartsWith(c.name, g_input)) {
-                    lstrcpyW(g_input, c.name);
-                    g_inputLen = lstrlenW(g_input);
-                    if (g_inputLen < kInputMax && c.name[1] == L'n') g_input[g_inputLen++] = L' ';
-                    break;
-                }
-            continue;
-        }
-        if (vk < 0x20 || (vk >= VK_LWIN && vk <= VK_SLEEP) || (vk >= VK_F1 && vk <= VK_F24) || (vk >= VK_SHIFT && vk <= VK_MENU) || (vk >= VK_LSHIFT && vk <= VK_RMENU) ||
-            (vk >= VK_PRIOR && vk <= VK_DELETE && vk != VK_SPACE) || Down(VK_CONTROL) != (state[VK_CONTROL] != 0))
-            continue;
-        wchar_t out[4];
-        const int n = ToUnicodeEx((UINT)vk, MapVirtualKeyExW((UINT)vk, 0, layout), state, out, 4, 0, layout);
-        if (n == 1 && out[0] >= 32 && g_inputLen < kInputMax) g_input[g_inputLen++] = out[0];
     }
 }
 
@@ -161,6 +135,42 @@ void Shadowed(const wchar_t* text, float x, float y, u32 colour, int px, int wei
 }  // namespace
 
 bool NetChatBlocksInput() { return g_block; }
+
+int NetTypeInto(wchar_t* text, int* length, int max, bool* prev) {
+    static DWORD backAt = 0;
+    BYTE state[256];
+    for (int i = 0; i < 256; ++i) state[i] = 0;
+    if (Down(VK_SHIFT)) state[VK_SHIFT] = state[VK_LSHIFT] = 0x80;
+    if (Down(VK_RMENU) && Down(VK_CONTROL)) state[VK_CONTROL] = state[VK_MENU] = 0x80;  // AltGr
+    if (GetKeyState(VK_CAPITAL) & 1) state[VK_CAPITAL] = 1;
+    const HKL layout = GetKeyboardLayout(GetWindowThreadProcessId(GetForegroundWindow(), nullptr));
+    const DWORD now = GetTickCount();
+    int result = 0;
+    for (int vk = 8; vk < 255; ++vk) {
+        const bool down = Down(vk), was = prev[vk];
+        prev[vk] = down;
+        if (result) continue;  // the rest only remembered
+        if (vk == VK_BACK) {
+            if (down && (!was || (int)(now - backAt) >= 0)) {
+                backAt = now + (was ? 40 : 400);
+                if (*length) --*length;
+            }
+            continue;
+        }
+        if (!down || was) continue;
+        if (vk == VK_ESCAPE) { result = 2; continue; }
+        if (vk == VK_RETURN) { result = 1; continue; }
+        if (vk == VK_TAB) { result = 3; continue; }
+        if (vk < 0x20 || (vk >= VK_LWIN && vk <= VK_SLEEP) || (vk >= VK_F1 && vk <= VK_F24) || (vk >= VK_SHIFT && vk <= VK_MENU) || (vk >= VK_LSHIFT && vk <= VK_RMENU) ||
+            (vk >= VK_PRIOR && vk <= VK_DELETE && vk != VK_SPACE) || Down(VK_CONTROL) != (state[VK_CONTROL] != 0))
+            continue;
+        wchar_t out[4];
+        const int n = ToUnicodeEx((UINT)vk, MapVirtualKeyExW((UINT)vk, 0, layout), state, out, 4, 0, layout);
+        if (n == 1 && out[0] >= 32 && *length < max) text[(*length)++] = out[0];
+    }
+    text[*length] = 0;
+    return result;
+}
 
 void NetFigureAt(const float* pos, bool shown) {
     for (int i = 0; i < 3; ++i) g_figure[i] = pos[i];
@@ -177,7 +187,11 @@ void NetMapMark(float x, float y, float w, float h) {
 }
 
 void NetChatFrame(void* device) {
-    if (!NetCoopOn()) return;
+    NetPumpFrame();
+    if (!NetCoopOn()) {
+        g_open = g_block = false;
+        return;
+    }
     const DWORD now = GetTickCount();
     wchar_t got[96];
     while (NetChatTake(got, 96)) AddLine(got, 0xFFFFE9A8);

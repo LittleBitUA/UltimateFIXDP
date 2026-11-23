@@ -1252,6 +1252,7 @@ struct Page {
     void (*custom)() = nullptr;  // what draws a page without settings (null: the About text)
     bool residents = false;  // a page without settings that shows the residents' timetable instead (residents.cpp)
     bool mods = false;       // the mod manager (mods_page.cpp)
+    bool net = false;        // multiplayer (net_page.cpp)
 };
 void DrawStory();
 constexpr int kPhotoPage = 3;  // the photo mode section (the camera keys and the preview of the filters know it)
@@ -1265,6 +1266,7 @@ Page g_pages[] = {
     {{L"Сюжет", L"Story"}, {L"Епізод, побічні завдання, поточна ціль (лише перегляд)", L"Episode, side quests, current destination (read-only)"}, nullptr, 0, true, DrawStory},
     {{L"Жителі", L"Residents"}, {L"Де хто зараз за розкладом гри і куди піде далі", L"Where everyone is now by the game's timetable, and where next"}, nullptr, 0, true, nullptr, true},
     {{L"Моди", L"Mods"}, {L"Переклади, текстури й інші моди з теки UltimateFix\\mods", L"Translations, textures and other mods from UltimateFix\\mods"}, nullptr, 0, true, nullptr, false, true},
+    {{L"Мультиплеєр", L"Multiplayer"}, {L"Свій сервер, список серверів, підключення за адресою", L"Your own server, the server list, joining by address"}, nullptr, 0, true, nullptr, false, false, true},
     {{L"Редактор місій", L"Mission editor"}, {L"Власні квести: кроки, персонажі, нагороди", L"Quests of your own: steps, characters, rewards"}, g_pageMsEntry, 1, false},
     {{L"Про мод", L"About"}, {L"Автор і подяки", L"Author and credits"}, nullptr, 0, true},
     // the editor's own sections (shown instead of the ones above while g_editor is set)
@@ -2350,9 +2352,16 @@ void HandleInput(bool foreground) {
         return;
     }
     const int pageBefore = g_page;
+    if (pg.net && NetPageTyping()) {  // a text field of the multiplayer page has the keyboard
+        float mx = 0, my = 0;
+        const bool click = Pressed(VK_LBUTTON) && MousePosition(&mx, &my);
+        NetPageInput(false, false, false, click, mx, my);
+        g_wheel = 0;
+        return;
+    }
     if (pg.about) {  // nothing to change on this page: keys for the sections, clicks for the sidebar
         if (Pressed(VK_ESCAPE) || (pad & kPadBack)) g_open = false;
-        if (Pressed('R') || (!pg.mods && (pad & kPadAction))) AskRestart();  // X / Square is the mod's folder on the Mods page
+        if (!pg.net && (Pressed('R') || (!pg.mods && (pad & kPadAction)))) AskRestart();  // X / Square is the mod's folder on the Mods page
         if (Pressed(VK_TAB)) SelectPage(g_page + ((GetAsyncKeyState(VK_SHIFT) & 0x8000) ? -1 : 1));
         if (Pressed(VK_NEXT) || (pad & kPadNextSection)) SelectPage(g_page + 1);
         if (Pressed(VK_PRIOR) || (pad & kPadPrevSection)) SelectPage(g_page - 1);
@@ -2373,6 +2382,9 @@ void HandleInput(bool foreground) {
                           Pressed(VK_RIGHT) || (once & kPadRight), click && !SidebarClick(mx, my), mx, my);
             for (int i = 0; (pad & (kPadPageUp | kPadPageDown)) && i < PageRows(); ++i)
                 ModsPageInput((pad & kPadPageUp) != 0, (pad & kPadPageDown) != 0, false, false, false, false, false, 0, 0);
+        } else if (pg.net) {
+            NetPageInput(Pressed(VK_UP) || g_wheel > 0 || (pad & kPadUp), Pressed(VK_DOWN) || g_wheel < 0 || (pad & kPadDown),
+                         Pressed(VK_RETURN) || (pad & kPadAccept), click && !SidebarClick(mx, my), mx, my);
         } else if (click) {
             if (!SidebarClick(mx, my) && !pg.custom && !pg.residents) AboutClick(mx, my);  // only the About text has a button
         }
@@ -3327,6 +3339,7 @@ void Draw() {
         if (pg.custom) pg.custom();
         else if (pg.residents) ResidentsPage(kCx, kListTop, kCr, kPy + kPh - 44);
         else if (pg.mods) ModsPage(kCx, kListTop, kCr, kPy + kPh - 44);
+        else if (pg.net) NetPage(kCx, kListTop, kCr, kPy + kPh - 44);
         else DrawAbout();
         // These pages have no description box: a notice floats over the top of the content, under the page's title (the
         // floating box of the closed menu would land right on it). It is drawn last, over the page.

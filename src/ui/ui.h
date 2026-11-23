@@ -130,6 +130,9 @@ void ResidentsScroll(int rows);                 // its list: positive = down
 // whose text has the buttons as tokens drawn as small key caps in the pad's family: {A} {B} {X} {Y} {LB} {RB} {LT} {RT} {OPEN}.
 bool PadHintsShown();
 void DrawPadLine(const wchar_t* text, float x, float y, u32 argb, int px, float maxW);
+void NetPage(float left, float top, float right, float bottom);   // multiplayer (net_page.cpp)
+void NetPageInput(bool up, bool down, bool accept, bool click, float mx, float my);
+bool NetPageTyping();                            // one of its text fields has the keyboard
 void ModsPage(float left, float top, float right, float bottom);  // the mod manager page (mods_page.cpp)
 void ModsPageInput(bool up, bool down, bool toggle, bool openFolder, bool raise, bool lower, bool click, float mx, float my);
 void ScreenshotFrame(void* device);              // saves a PNG when the screenshot key is pressed
