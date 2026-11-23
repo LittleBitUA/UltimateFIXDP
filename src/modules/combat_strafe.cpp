@@ -868,7 +868,18 @@ void PartnerTick(u8* player, u8* doll) {
         u8* myCarObj = nullptr;
         if (driving) {
             u8* c = myCarObj = DrivenCar(player);
-            if (c) for (int i = 0; i < 3; ++i) myCarAt[i] = *(volatile float*)(c + 0x58 + 4 * i);
+            // The car's own place across the ground; the height stays York's: the game's "move the car" call takes the height York
+            // has in the seat (0.7.17-test9 gave it the object's own height and the friend's car sank into the road).
+            if (c) {
+                myCarAt[0] = *(volatile float*)(c + 0x58);
+                myCarAt[2] = *(volatile float*)(c + 0x60);
+                static bool told = false;
+                if (!told) {
+                    told = true;
+                    Log("net partner: York in the seat is at %d %d %d, his car's object at %d %d %d (thousandths)", (int)(yp[0] * 1000.f), (int)(yp[1] * 1000.f), (int)(yp[2] * 1000.f),
+                        (int)(*(volatile float*)(c + 0x58) * 1000.f), (int)(*(volatile float*)(c + 0x5C) * 1000.f), (int)(*(volatile float*)(c + 0x60) * 1000.f));
+                }
+            }
         }
         NetCoopExchange(yp, *(volatile float*)(player + 0x7C), zoneNow, driving ? 3 : mine, driving, myCar, myCarAt);
         NetPeerState peer;
@@ -885,8 +896,11 @@ void PartnerTick(u8* player, u8* doll) {
             carAt[0] += ex * k;
             carAt[1] += ey * k;
             carAt[2] += ez * k;
-            const bool ok = NetCarAt(n, carAt, peer.yaw, myCarObj);
-            if (ok != carShown) Log("net partner: the friend's car is %s", ok ? "shown" : "not shown (needs free play outdoors in Greenvale)");
+            // never onto this York: a car put on top of him throws him under the ground (seen in 0.7.17-test9)
+            const float nx = carAt[0] - yp[0], nz = carAt[2] - yp[2];
+            const bool clear = nx * nx + nz * nz > 22.f * 22.f;
+            const bool ok = clear && NetCarAt(n, carAt, peer.yaw, myCarObj);
+            if (ok != carShown) Log("net partner: the friend's car is %s", ok ? "shown" : clear ? "not shown (needs free play outdoors in Greenvale)" : "not moved (too close to York)");
             carShown = ok;
             if (ok && g_partnerMotion[3]) {  // the driver: the figure where the friend's York sits, in York's motion at the wheel
                 g_dollBase[0] = carAt[0] + (peer.pos[0] - peer.carPos[0]);

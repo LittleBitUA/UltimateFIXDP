@@ -83,7 +83,7 @@ bool Open() {
     const wchar_t* peer = g_cfg.netPeer;
     if ((peer[0] == L'm' || peer[0] == L'M') && (peer[1] == L'i' || peer[1] == L'I')) {
         g_state = 1;
-        Log("net partner: mirror (no network: the figure repeats York 1.5 s late, 8 units aside)");
+        Log("net partner: mirror (no network: the figure repeats York 1.5 s late, 30 units aside)");
         return true;
     }
     bool ok = false;
@@ -142,11 +142,11 @@ void NetCoopExchange(const float pos[3], float yaw, u32 zone, int kind, bool inC
             p.s.kind = kind;
             p.s.inCar = inCar;
             p.s.car = car;
-            p.s.carPos[0] = carPos[0] + 8.f;
+            p.s.carPos[0] = carPos[0] + 30.f;
             p.s.carPos[1] = carPos[1];
             p.s.carPos[2] = carPos[2];
             p.s.yaw = yaw;
-            p.s.pos[0] = pos[0] + 8.f;
+            p.s.pos[0] = pos[0] + 30.f;
             p.s.pos[1] = pos[1];
             p.s.pos[2] = pos[2];
         }
