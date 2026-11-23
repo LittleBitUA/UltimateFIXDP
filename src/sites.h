@@ -954,7 +954,15 @@ constexpr SiteDef kSiteMissionViewClosed = {"map mission view: speed := st0, sub
 constexpr SiteDef kSiteMapPageExit = {"map page update: common exit", 0x659B1B, 10, {0x8B, 0x8C, 0x24, 0xB4, 0x00, 0x00, 0x00, 0x5F, 0x5E, 0x5D}};
 constexpr uint32_t kSideListSpeedOffset = 0x9524, kMapPanelSpeedOffset = 0x951C;
 
+// The pool of weed objects (CObjectWeed, type A6h; manager at [01393354h], 350h bytes, made by 00455AE0): +338h[3] heads of
+// its lists. "Stop all" (00455BA0) and the destructor (00455BF0, called at a level change from 005D4500) call the head's
+// virtual +30h. A player's crash dump (entering the milk barn): the head pointed at memory that was no longer mapped.
+constexpr SiteDef kSiteWeedStop = {"weed pool stop", 0x455BC5, 9, {0x8B, 0x0E, 0x8B, 0x11, 0x8B, 0x42, 0x30, 0xFF, 0xD0}};
+constexpr SiteDef kSiteWeedDtor = {"weed pool destructor", 0x455C47, 9, {0x8B, 0x0F, 0x8B, 0x11, 0x8B, 0x42, 0x30, 0xFF, 0xD0}};
+constexpr uint32_t kWeedVtable = 0x77E564;
+
 constexpr const SiteDef* kAllSites[] = {
+    &kSiteWeedStop, &kSiteWeedDtor,
     &kSiteNanTrap,
     &kSiteToolboxHold, &kSiteMenuHold, &kSiteToolboxHoldAround, &kSiteMenuHoldAround, &kSiteSideListClose, &kSiteSideListResume,
     &kSiteMissionViewClose, &kSiteMissionViewClosed, &kSiteMapPageExit,
