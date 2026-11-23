@@ -152,7 +152,10 @@ textarea{resize:vertical;min-height:44px;line-height:1.35}
 <script>
 "use strict";
 // ---------- language ----------
-let EN = (localStorage.getItem("ufx.lang") || (navigator.language || "uk").slice(0, 2)) === "en";
+// the button's choice is kept; before that the page follows the language of the mod's menu, and until the game answers
+// it is Ukrainian for a Ukrainian browser and English for any other
+let langPicked = null; try { langPicked = localStorage.getItem("ufx.lang"); } catch (e) {}
+let EN = langPicked ? langPicked === "en" : (navigator.language || "en").slice(0, 2) !== "uk";
 const T = (uk, en) => (EN ? en : uk);
 function applyLang() {
   document.documentElement.lang = EN ? "en" : "uk";
@@ -248,6 +251,7 @@ async function save() {
 async function cmd(q) { try { await api("/api/cmd?" + q, { method: "POST" }); return true; } catch (e) { toast(T("Гра не відповідає", "The game does not answer"), true); return false; } }
 async function poll() {
   try { live = await (await api("/api/state")).json(); online = true; } catch (e) { online = false; live = null; }
+  if (online && !langPicked && typeof live.lang === "number" && EN !== (live.lang === 1)) { EN = live.lang === 1; applyLang(); renderAll(); setDirty(dirty); }
   const d = $("dot");
   d.className = "dot" + (online ? (live.inGame ? " on" : " half") : "");
   $("conn").textContent = !online ? T("гри немає", "no game") : live.inGame ? (live.free ? T("гра на зв'язку", "game connected") : T("у грі сцена або меню", "a scene or a menu in the game")) : T("гра в головному меню", "the game is in its main menu");
@@ -546,7 +550,7 @@ cv.onwheel = e => { e.preventDefault(); const k = e.deltaY < 0 ? 1.2 : 1 / 1.2; 
 
 // ---------- wiring ----------
 function renderAll() { renderSteps(); renderProps(); drawFlow(); drawMap(); }
-$("lang").onclick = () => { EN = !EN; localStorage.setItem("ufx.lang", EN ? "en" : "uk"); applyLang(); renderAll(); setDirty(dirty); };
+$("lang").onclick = () => { EN = !EN; langPicked = EN ? "en" : "uk"; try { localStorage.setItem("ufx.lang", langPicked); } catch (e) {} applyLang(); renderAll(); setDirty(dirty); };
 $("slot").onchange = e => { if (dirty && !confirm(T("Є незбережені зміни. Перейти до іншого слота без збереження?", "There are unsaved changes. Go to another slot without saving?"))) { e.target.value = slot; return; } loadSlot(parseInt(e.target.value)).then(fillSlots); };
 $("save").onclick = save;
 $("reload").onclick = () => { if (!dirty || confirm(T("Відкинути незбережені зміни?", "Discard the unsaved changes?"))) loadSlot(slot).then(fillSlots); };

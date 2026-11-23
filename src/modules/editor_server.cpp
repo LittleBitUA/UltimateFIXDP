@@ -141,10 +141,10 @@ void State(SOCKET s) {
         if (*c == '"' || *c == '\\') *c = '\'';
     const int n = wsprintfA(j,
                             "{\"version\":\"%s\",\"inGame\":%d,\"free\":%d,\"x\":%d,\"y\":%d,\"z\":%d,\"yaw\":%d,\"zone\":%d,\"hour\":%d,\"minute\":%d,"
-                            "\"slot\":%d,\"running\":%d,\"step\":%d,\"steps\":%d,\"state\":\"%s\"}",
+                            "\"slot\":%d,\"running\":%d,\"step\":%d,\"steps\":%d,\"lang\":%d,\"state\":\"%s\"}",
                             kVersion, have ? 1 : 0, free ? 1 : 0, (int)(p[0] * 1000.f), (int)(p[1] * 1000.f), (int)(p[2] * 1000.f), (int)(p[3] * 1000.f), zone,
                             clock ? *(volatile int*)(timer + 0xC) : -1, clock ? *(volatile int*)(timer + 0x10) : -1, g_mission.slot, MissionActive() ? 1 : 0,
-                            MissionStepNow(), g_mission.stepCount, st);
+                            MissionStepNow(), g_mission.stepCount, g_cfg.language == 1 ? 1 : 0, st);
     Reply(s, "200 OK", "application/json; charset=utf-8", j, n);
 }
 
