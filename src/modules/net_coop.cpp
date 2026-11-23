@@ -1,15 +1,19 @@
-// A friend over the network, first step: two running games tell each other where their York stands, and each shows the other one
-// as the partner figure (the doll of combat_strafe.cpp). Nothing else is shared: each game keeps its own story, enemies and time.
+// A friend over the network: two running games tell each other where their York is, what he does and what he drives, and each
+// shows the other one as a second York (the figure of combat_strafe.cpp) and his car. Nothing else is shared: each game keeps its
+// own story, enemies and time.
 //
 //   [Coop] NetPartner=1        on
-//   [Coop] NetPeer=10.0.0.2    the friend's address (IPv4, digits), or "mirror": no network, the figure repeats this York a second
-//                              and a half late, some steps aside (a test for one player)
-//   [Coop] NetPort=47900       UDP port, the same on both sides; both listen on it and send to it
+//   [Coop] NetPeer=10.0.0.2    the address of the friend's computer (IPv4, digits), or "mirror": no network, the figure repeats this
+//                              York a second and a half late, 30 units aside (a test for one player)
+//   [Coop] NetPort=47900       the UDP port this game listens on
+//   [Coop] NetPeerPort=47900   the port the friend's game listens on (the same number by default; two games on one computer need
+//                              two different ones, each naming the other's)
+//   [Coop] NetCarCollision=1   the friend's car can be bumped into (0 = it is only a picture, as in the first tests)
 //
-// One UDP datagram of 52 bytes about 20 times a second, sent and read on the game thread without waiting (a socket that does not
-// block). Only datagrams from the friend's address with our mark and version are taken, and only a newer one than the last. No
-// address is looked up, nothing is sent anywhere but to NetPeer; it is meant for a home network or a virtual one (ZeroTier,
-// Radmin VPN, Hamachi). ws2_32 is loaded at run time, as in editor_server.cpp.
+// One UDP datagram of 96 bytes about 20 times a second, sent and read on the game thread without waiting. Only datagrams from the
+// friend's address with our mark and version are taken, and only a newer one than the last; every number is checked before use.
+// Nothing is sent anywhere but to NetPeer. Meant for a home network or a virtual one (ZeroTier, Radmin VPN, Hamachi). ws2_32 is
+// loaded at run time, as in editor_server.cpp.
 #include "../base.h"
 #include <winsock2.h>
 
@@ -29,19 +33,23 @@ struct Sock {
 #pragma pack(push, 1)
 struct Packet {
     u32 mark;     // 'UFXP'
-    u16 version;  // kNetVersion
-    u16 kind;     // 0 stands, 1 walks, 2 runs, 3 sits at the wheel
+    u16 version;
+    u16 kind;
     u32 seq;
-    u32 zone;     // the location number (CGame+834FE0h): the figure is shown only in the same one
+    u32 zone[3];
     float pos[3];
     float yaw;
-    u32 flags;    // bit 0: in a car
-    u32 car;      // the number of the car York drives (the game's numbered cars), 0 = not known
-    float carPos[3];  // where that car is (York himself sits a little aside of its middle)
+    u32 flags;    // bit 0: at the wheel
+    u32 car;
+    float carPos[3];
+    float carRot[3];
+    int motion;
+    int suit;
+    u32 spare[4];
 };
 #pragma pack(pop)
 constexpr u32 kMark = 0x50584655u;
-constexpr u16 kNetVersion = 2;
+constexpr u16 kNetVersion = 3;
 
 int g_state = 0;  // 0 not tried, 1 mirror, 2 socket open, -1 failed
 SOCKET g_sock = INVALID_SOCKET;
@@ -51,8 +59,7 @@ DWORD g_lastSend = 0, g_lastHeard = 0;
 NetPeerState g_last;
 bool g_haveLast = false, g_toldHeard = false;
 
-// mirror: this York's own states, read back a second and a half later
-constexpr int kRing = 64;
+constexpr int kRing = 64;  // mirror: this York's own states, read back a second and a half later
 struct Past { DWORD at; NetPeerState s; } g_ring[kRing];
 int g_ringAt = 0;
 
@@ -76,6 +83,8 @@ u32 ParseIp(const wchar_t* text, bool* ok) {  // a.b.c.d -> network order
     *ok = n == 3 && digits > 0;
     return part[0] | (part[1] << 8) | (part[2] << 16) | (part[3] << 24);
 }
+inline u_short NetOrder(int port) { return (u_short)(((port & 0xFF) << 8) | ((port >> 8) & 0xFF)); }
+inline bool Finite(float v, float limit) { return v > -limit && v < limit; }  // also false for what is not a number
 
 bool Open() {
     if (g_state) return g_state > 0;
@@ -104,12 +113,13 @@ bool Open() {
         Log("net partner: Winsock did not start; off");
         return false;
     }
-    int port = g_cfg.netPort;
+    int port = g_cfg.netPort, peerPort = g_cfg.netPeerPort;
     if (port < 1024 || port > 65535) port = 47900;
+    if (peerPort < 1024 || peerPort > 65535) peerPort = port;
     g_sock = g_ws.socket(AF_INET, SOCK_DGRAM, IPPROTO_UDP);
     sockaddr_in me = {};
     me.sin_family = AF_INET;
-    me.sin_port = (u_short)(((port & 0xFF) << 8) | (port >> 8));
+    me.sin_port = NetOrder(port);
     u_long noWait = 1;
     if (g_sock == INVALID_SOCKET || g_ws.bind(g_sock, (const sockaddr*)&me, sizeof me) != 0 || g_ws.ioctl(g_sock, (long)FIONBIO, &noWait) != 0) {
         Log("net partner: UDP port %d could not be opened (taken by another program?); off", port);
@@ -118,10 +128,11 @@ bool Open() {
         return false;
     }
     g_peer = me;
+    g_peer.sin_port = NetOrder(peerPort);
     g_peer.sin_addr.s_addr = ip;
     g_state = 2;
-    Log("net partner: UDP port %d open, the friend is %u.%u.%u.%u (52 bytes about 20 times a second, to that address only)", port, ip & 255, (ip >> 8) & 255,
-        (ip >> 16) & 255, ip >> 24);
+    Log("net partner: listening on UDP port %d, the friend is %u.%u.%u.%u port %d (96 bytes about 20 times a second, to that address only)", port, ip & 255,
+        (ip >> 8) & 255, (ip >> 16) & 255, ip >> 24, peerPort);
     return true;
 }
 
@@ -129,8 +140,8 @@ bool Open() {
 
 bool NetCoopOn() { return g_cfg.netPartner != 0; }
 
-// This York's place goes out (20 times a second at most) and what came in is read. Game thread, never waits.
-void NetCoopExchange(const float pos[3], float yaw, u32 zone, int kind, bool inCar, int car, const float carPos[3]) {
+// This York's state goes out (20 times a second at most) and what came in is read. Game thread, never waits.
+void NetCoopExchange(const NetPeerState& mine) {
     if (!Open()) return;
     const DWORD now = GetTickCount();
     if (g_state == 1) {
@@ -138,17 +149,9 @@ void NetCoopExchange(const float pos[3], float yaw, u32 zone, int kind, bool inC
             g_lastSend = now;
             Past& p = g_ring[g_ringAt++ % kRing];
             p.at = now;
-            p.s.zone = zone;
-            p.s.kind = kind;
-            p.s.inCar = inCar;
-            p.s.car = car;
-            p.s.carPos[0] = carPos[0] + 30.f;
-            p.s.carPos[1] = carPos[1];
-            p.s.carPos[2] = carPos[2];
-            p.s.yaw = yaw;
-            p.s.pos[0] = pos[0] + 30.f;
-            p.s.pos[1] = pos[1];
-            p.s.pos[2] = pos[2];
+            p.s = mine;
+            p.s.pos[0] += 30.f;
+            p.s.carPos[0] += 30.f;
         }
         return;
     }
@@ -157,14 +160,19 @@ void NetCoopExchange(const float pos[3], float yaw, u32 zone, int kind, bool inC
         Packet p = {};
         p.mark = kMark;
         p.version = kNetVersion;
-        p.kind = (u16)kind;
+        p.kind = (u16)mine.kind;
         p.seq = ++g_seqOut;
-        p.zone = zone;
-        for (int i = 0; i < 3; ++i) p.pos[i] = pos[i];
-        p.yaw = yaw;
-        p.flags = inCar ? 1u : 0u;
-        p.car = (u32)car;
-        for (int i = 0; i < 3; ++i) p.carPos[i] = carPos[i];
+        for (int i = 0; i < 3; ++i) {
+            p.zone[i] = mine.zone[i];
+            p.pos[i] = mine.pos[i];
+            p.carPos[i] = mine.carPos[i];
+            p.carRot[i] = mine.carRot[i];
+        }
+        p.yaw = mine.yaw;
+        p.flags = mine.inCar ? 1u : 0u;
+        p.car = (u32)mine.car;
+        p.motion = mine.motion;
+        p.suit = mine.suit;
         g_ws.sendto(g_sock, (const char*)&p, sizeof p, 0, (const sockaddr*)&g_peer, sizeof g_peer);
     }
     for (int i = 0; i < 32; ++i) {
@@ -176,22 +184,28 @@ void NetCoopExchange(const float pos[3], float yaw, u32 zone, int kind, bool inC
         if (got != (int)sizeof p || p.mark != kMark || p.version != kNetVersion || from.sin_addr.s_addr != g_peer.sin_addr.s_addr) continue;
         // a newer one than the last; a much older number is the friend's game started again
         if (g_haveLast && (int)(p.seq - g_seqIn) <= 0 && g_seqIn - p.seq < 2000) continue;
-        bool sane = p.kind <= 3;
+        bool sane = p.kind <= 3 && Finite(p.yaw, 100.f) && p.car < 0x10000 && p.motion >= -1 && p.motion < 0x10000 && p.suit >= 0 && p.suit < 41;
         for (int k = 0; k < 3; ++k)
-            if (!(p.pos[k] > -1.0e6f && p.pos[k] < 1.0e6f) || !(p.carPos[k] > -1.0e6f && p.carPos[k] < 1.0e6f)) sane = false;  // also turns down what is not a number
-        if (!(p.yaw > -100.f && p.yaw < 100.f) || !sane) continue;
+            if (!Finite(p.pos[k], 1.0e6f) || !Finite(p.carPos[k], 1.0e6f) || !Finite(p.carRot[k], 100.f)) sane = false;
+        if (!sane) continue;
         g_seqIn = p.seq;
-        g_last.zone = p.zone;
+        for (int k = 0; k < 3; ++k) {
+            g_last.zone[k] = p.zone[k];
+            g_last.pos[k] = p.pos[k];
+            g_last.carPos[k] = p.carPos[k];
+            g_last.carRot[k] = p.carRot[k];
+        }
         g_last.kind = p.kind;
         g_last.inCar = (p.flags & 1) != 0;
-        g_last.car = (int)(p.car & 0xFF);
         g_last.yaw = p.yaw;
-        for (int k = 0; k < 3; ++k) { g_last.pos[k] = p.pos[k]; g_last.carPos[k] = p.carPos[k]; }
+        g_last.car = (int)p.car;
+        g_last.motion = p.motion;
+        g_last.suit = p.suit;
         g_haveLast = true;
         g_lastHeard = now;
         if (!g_toldHeard) {
             g_toldHeard = true;
-            Log("net partner: the friend is heard (zone %u, at %d %d %d)", p.zone, (int)p.pos[0], (int)p.pos[1], (int)p.pos[2]);
+            Log("net partner: the friend is heard (zone %u %u %u, at %d %d %d)", p.zone[0], p.zone[1], p.zone[2], (int)p.pos[0], (int)p.pos[1], (int)p.pos[2]);
             ShowNotice(L"Напарник на зв'язку", L"The partner is connected", L"Друга видно, коли ви в одній локації.", L"The friend is seen while you are in the same location.", 4);
         }
     }

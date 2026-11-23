@@ -990,6 +990,8 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.missionLab = (int)GetPrivateProfileIntW(L"Debug", L"MissionLab", 0, ini);
     g_cfg.netPartner = (int)GetPrivateProfileIntW(L"Coop", L"NetPartner", 0, ini);
     g_cfg.netPort = (int)GetPrivateProfileIntW(L"Coop", L"NetPort", 47900, ini);
+    g_cfg.netPeerPort = (int)GetPrivateProfileIntW(L"Coop", L"NetPeerPort", g_cfg.netPort, ini);
+    g_cfg.netCarCollision = (int)GetPrivateProfileIntW(L"Coop", L"NetCarCollision", 1, ini);
     GetPrivateProfileStringW(L"Coop", L"NetPeer", L"", g_cfg.netPeer, 48, ini);
     g_cfg.waterTest = (int)GetPrivateProfileIntW(L"Debug", L"WaterTest", 0, ini);
     g_cfg.menu = (int)GetPrivateProfileIntW(L"Menu", L"Enabled", 1, ini);

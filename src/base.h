@@ -165,7 +165,7 @@ struct Config {
     int photoMoveX, photoMoveY, photoMoveZ, photoTurn;  // photo mode: York moved right / up / forward (tenths of a unit) and turned (degrees) from where he stood
     int photoPlay;           // 1 = the motion runs instead of holding the frame
     int photoFaceOn;         // 1 = the face page drives York's face
-    int netPartner, netPort;   // [Coop]: the partner figure shows the York of a friend's game on another computer (net_coop.cpp)
+    int netPartner, netPort, netPeerPort, netCarCollision;   // [Coop]: the partner figure shows the York of a friend's game on another computer (net_coop.cpp)
     wchar_t netPeer[48];       // the address of the friend's computer, or "mirror"
     int coopPartner;         // 1 = a second character (the doll) walks by the gamepad while York keeps the keyboard and mouse
     int playAsOn;            // 1 = the Cheats row asked for the kind in photoPlayAs (cleared once the game plays it)
@@ -465,11 +465,22 @@ void SessionFrame(void* device);  // once per frame from the Present hook: the l
 // the same family as a shown or waiting one (the same text before a colon, or one title the first words of the other:
 // "Fly: on" and "Fly: off", "Scan" and "Scan finished") takes its place instead of queueing.
 constexpr int kNoticeInfo = 0, kNoticeWarning = 1, kNoticeError = 2;
-struct NetPeerState { float pos[3]; float yaw; u32 zone; int kind; bool inCar; int car; float carPos[3]; };
-bool NetCarAt(int number, const float pos[3], float yaw, const void* mine);  // cheats.cpp: the friend's car shown and held at a place
+// What one game tells the other about its York (net_coop.cpp), about 20 times a second.
+struct NetPeerState {
+    float pos[3], yaw;      // York
+    u32 zone[3];            // CGame+834FE0h, +834FE4h, +834FE8h: the same three mean the same place
+    int kind;               // 0 stands, 1 walks, 2 runs, 3 at the wheel
+    int motion;             // the resource number of the motion York plays, -1 = not known
+    int suit;               // the row of the game's suit tables York wears
+    bool inCar;
+    int car;                // the car's number (car+2Eh), 0 = it has none
+    float carPos[3], carRot[3];  // the car: place, and pitch, heading, roll as the game keeps them (car+78h..+80h)
+};
 bool NetCoopOn();
-void NetCoopExchange(const float pos[3], float yaw, u32 zone, int kind, bool inCar, int car, const float carPos[3]);  // net_coop.cpp, from the partner's update
+void NetCoopExchange(const NetPeerState& mine);  // from the partner's update, game thread
 bool NetCoopPeer(NetPeerState* out);
+u8* NetCarAt(int number, const float pos[3], const float rot[3], const void* mine, const float york[3]);  // cheats.cpp
+void NetCarRelease(const char* why);
 bool PartnerPad(float* x, float* y, u32* buttons);  // menu.cpp: the pad's left stick (-1..1, up positive) and buttons for the partner
 void DollTick(void* player);   // combat_strafe.cpp, from the player update
 void RequestDoll(int what);    // photo mode: 1 = put the chosen resident next to York as a doll, 2 = remove it (at the next player update)

@@ -538,6 +538,8 @@ bool DollModel(int id, int* xmd, int* xpc, int* xnv) {
     return *xmd > 0 && *xmd < 0x8000 && *xpc > 0 && *xpc < 0x8000;
 }
 
+int g_netSuitRow = 0;  // net partner: the suit the figure wears (a row of the game's suit tables at 008C3380h)
+int g_netSuitFailed = -1;  // a row whose model did not load here: the plain suit stands in for it
 u8* DollAlive() {
     if (!g_doll || !g_dollHandle) return nullptr;
     void* mgr = *(void* volatile*)(uintptr_t)kObjMgrPtrVa;
@@ -572,9 +574,23 @@ void DollSpawn(u8* player) {
             BytesMatch(kResEntryFn, kEntry, 8));
         return;
     }
-    const int id = g_cfg.photoDollId;
+    int id = g_cfg.photoDollId;
     int xmd = 0, xpc = 0, xnv = -1;
-    if (id < 1 || id > 49 || !DollModel(id, &xmd, &xpc, &xnv)) {
+    u32 group = 0xB;
+    if (NetCoopOn()) {
+        // The friend's figure is York himself: the model, textures and nodes of a row of the game's suit tables (008C3380h,
+        // 008C3428h, 008C34D0h, 41 rows), loaded in the game's own costume group (0Ah: it survives a door).
+        const int row = g_netSuitRow >= 0 && g_netSuitRow < 41 ? g_netSuitRow : 0;
+        xmd = ((const int*)(uintptr_t)0x8C3380)[row];
+        xpc = ((const int*)(uintptr_t)0x8C3428)[row];
+        xnv = ((const int*)(uintptr_t)0x8C34D0)[row];
+        group = 0xA;
+        id = 100 + row;
+        if (xmd < 0xA00 || xmd > 0xFFFF || xpc < 0xA00 || xpc > 0xFFFF) {
+            Log("doll: suit row %d has no model in the game's tables", row);
+            return;
+        }
+    } else if (id < 1 || id > 49 || !DollModel(id, &xmd, &xpc, &xnv)) {
         Log("doll: resident %d has no model in the game's list", id);
         ShowNotice(L"Персонаж: немає моделі", L"Character: no model", L"Для цього номера у грі немає моделі. Виберіть інший.", L"The game has no model for this number. Pick another.", 4);
         return;
@@ -584,12 +600,20 @@ void DollSpawn(u8* player) {
     void* res = ((ResMgrFn)(uintptr_t)kResourceMgrFn)();
     if (!game || !res) return;
     Log("doll: resident %d, model %04X, textures %04X, nodes %04X: loading", id, xmd, xpc, xnv & 0xFFFF);
-    ((ResLoadFn)(uintptr_t)kResLoadFn)(game, (u32)xmd, 0xB, 1);
-    ((ResLoadFn)(uintptr_t)kResLoadFn)(game, (u32)xpc, 0xB, 1);
-    if (xnv > 0) ((ResLoadFn)(uintptr_t)kResLoadFn)(game, (u32)xnv, 0xB, 1);
+    ((ResLoadFn)(uintptr_t)kResLoadFn)(game, (u32)xmd, group, 1);
+    ((ResLoadFn)(uintptr_t)kResLoadFn)(game, (u32)xpc, group, 1);
+    if (xnv > 0) ((ResLoadFn)(uintptr_t)kResLoadFn)(game, (u32)xnv, group, 1);
     void* model = ((ResObjectFn)(uintptr_t)kResObjectFn)(res, (u32)xmd, 0);
     void* tex = ((ResObjectFn)(uintptr_t)kResObjectFn)(res, (u32)xpc, 0);
     void* nodes = xnv > 0 ? ((ResObjectFn)(uintptr_t)kMotionByIdFn)(res, (u32)xnv, 1) : nullptr;
+    if ((!model || !tex) && NetCoopOn()) {
+        Log("doll: suit row %d did not load here (model %08X, textures %08X)%s", g_netSuitRow, (u32)(uintptr_t)model, (u32)(uintptr_t)tex, g_netSuitRow ? ": the plain suit stands in" : "");
+        if (g_netSuitRow) {
+            g_netSuitFailed = g_netSuitRow;
+            g_netSuitRow = 0;
+        }
+        return;
+    }
     if (!model || !tex) {
         Log("doll: the model did not load (model %08X, textures %08X)", (u32)(uintptr_t)model, (u32)(uintptr_t)tex);
         ShowNotice(L"Персонаж: модель не завантажилась", L"Character: the model did not load", L"Деталі в ufx.log.", L"See ufx.log.", 4);
@@ -771,45 +795,187 @@ void DollTalkTick(u8* player, u8* doll, bool free) {
 // ground for it). Its standing, walking and running motions are learnt from York: whatever motion York has at rest, at a
 // walk and at a run is remembered and played on the partner in the same three cases.
 void* g_partnerMotion[4];  // York's motion at rest, walking, running, at the wheel
-// The car York sits in: the player object holds a pointer to it somewhere; the place is found once by looking through the object
-// for a pointer to a CObjectCar (vtable 00773F74h) that is near York, each candidate checked with VirtualQuery before it is read.
-int g_carPtrOffset = -1;
-bool CarReadable(const void* p) {
-    MEMORY_BASIC_INFORMATION mbi;
-    if ((uintptr_t)p < 0x10000 || ((uintptr_t)p & 3) || !VirtualQuery(p, &mbi, sizeof(mbi))) return false;
-    return mbi.State == MEM_COMMIT && (mbi.Protect & (PAGE_READWRITE | PAGE_READONLY | PAGE_EXECUTE_READWRITE | PAGE_WRITECOPY)) && !(mbi.Protect & PAGE_GUARD) &&
-           (uintptr_t)mbi.BaseAddress + mbi.RegionSize >= (uintptr_t)p + 0x80;
-}
-u8* DrivenCar(u8* player) {
-    auto isNear = [player](u8* c) {
-        const float dx = *(volatile float*)(c + 0x58) - *(volatile float*)(player + 0x58), dz = *(volatile float*)(c + 0x60) - *(volatile float*)(player + 0x60);
-        return dx * dx + dz * dz < 12.f * 12.f;
-    };
-    if (g_carPtrOffset >= 0) {
-        u8* c = *(u8* volatile*)(player + g_carPtrOffset);
-        if (CarReadable(c) && *(volatile u32*)c == 0x773F74u && isNear(c)) return c;
-        return nullptr;
-    }
-    static DWORD tried = 0;
-    if (GetTickCount() - tried < 2000) return nullptr;
-    tried = GetTickCount();
-    for (int off = 0x100; off < 0x1800; off += 4) {
-        u8* c = *(u8* volatile*)(player + off);
-        if (!CarReadable(c) || *(volatile u32*)c != 0x773F74u || !isNear(c)) continue;
-        g_carPtrOffset = off;
-        Log("net partner: York's car is the object at player+%Xh (%08X; its place %d %d %d, its angles %d %d %d thousandths, York's heading %d)", off, (u32)(uintptr_t)c,
-            (int)*(volatile float*)(c + 0x58), (int)*(volatile float*)(c + 0x5C), (int)*(volatile float*)(c + 0x60), (int)(*(volatile float*)(c + 0x68) * 1000.f),
-            (int)(*(volatile float*)(c + 0x6C) * 1000.f), (int)(*(volatile float*)(c + 0x70) * 1000.f), (int)(*(volatile float*)(player + 0x7C) * 1000.f));
-        return c;
-    }
-    Log("net partner: no pointer to York's car found in the player object (the car is taken to be where York sits)");
-    return nullptr;
-}
 int g_partnerState = -1;
 float g_yorkLast[3];
 LARGE_INTEGER g_partnerClock;
 inline float Atan2f(float y, float x) { float r; __asm__("fpatan" : "=t"(r) : "0"(x), "u"(y) : "st(1)"); return r; }
 inline float Sqrtf(float x) { float r; __asm__("fsqrt" : "=t"(r) : "0"(x)); return r; }
+// ---- A friend over the network (net_coop.cpp): the figure is a second York, shown where the friend's York is ----
+// The car York drives: at the wheel he is attached to it (FUN_004DDDB0: player+DCh bit 4, the parent's handle at player+21Ch).
+constexpr u32 kCarVtable = 0x773F74, kNodeIndexFn = 0x417C40, kAttachFn = 0x6C2880, kAttachUpdateFn = 0x6C2B70, kResIdOfFn = 0x6B2D50;
+typedef int(__attribute__((thiscall)) * NodeIndexFn)(void* model, const char* name);
+typedef void(__attribute__((thiscall)) * AttachFn)(void* child, void* parent, const char* parentNode, const float* pos, const float* rot, const char* childNode, int flags);
+typedef void(__attribute__((thiscall)) * AttachUpdateFn)(void* obj, int);
+typedef int(__attribute__((thiscall)) * ResIdOfFn)(void* res, void* ptr);
+bool g_netSeated = false;   // the figure is attached to the driver's seat of the friend's car
+void* g_netMotion = nullptr;  // the friend's motion, found here by its number; nullptr = by the three learnt ones
+bool CarReadable(const void* p) {
+    MEMORY_BASIC_INFORMATION mbi;
+    if ((uintptr_t)p < 0x10000 || ((uintptr_t)p & 3) || !VirtualQuery(p, &mbi, sizeof(mbi))) return false;
+    return mbi.State == MEM_COMMIT && (mbi.Protect & (PAGE_READWRITE | PAGE_READONLY | PAGE_EXECUTE_READWRITE | PAGE_WRITECOPY)) && !(mbi.Protect & PAGE_GUARD) &&
+           (uintptr_t)mbi.BaseAddress + mbi.RegionSize >= (uintptr_t)p + 0x500;
+}
+bool NetFnsOk() {
+    static const u8 kNode[8] = {0x53, 0x8B, 0x59, 0x04, 0x8B, 0x43, 0x68, 0x55}, kAttach[8] = {0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x0C, 0x89, 0x4D},
+                    kUpdate[8] = {0x55, 0x8B, 0xEC, 0x81, 0xEC, 0x30, 0x02, 0x00}, kIdOf[8] = {0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x08, 0x89, 0x4D};
+    static int ok = -1;
+    if (ok < 0) {
+        ok = BytesMatch(kNodeIndexFn, kNode, 8) && BytesMatch(kAttachFn, kAttach, 8) && BytesMatch(kAttachUpdateFn, kUpdate, 8) && BytesMatch(kResIdOfFn, kIdOf, 8);
+        if (!ok) Log("net partner: the game's attach and motion functions differ from DP.exe 1.01b: no driver in the car, motions by the three learnt ones");
+    }
+    return ok == 1;
+}
+u8* DrivenCar(u8* player) {
+    if (!(*(volatile u32*)(player + 0xDC) & 4)) return nullptr;
+    void* mgr = *(void* volatile*)(uintptr_t)kObjMgrPtrVa;
+    u8* car = mgr ? (u8*)((ObjLookupFn)(uintptr_t)kObjLookupFn)(mgr, *(volatile u32*)(player + 0x21C)) : nullptr;
+    return car && CarReadable(car) && *(volatile u32*)car == kCarVtable ? car : nullptr;
+}
+void NetUnseat(u8* doll) {
+    if (g_netSeated && doll && NetFnsOk() && (*(volatile u32*)(doll + 0xDC) & 4)) ((AttachFn)(uintptr_t)kAttachFn)(doll, nullptr, nullptr, nullptr, nullptr, nullptr, 0);
+    g_netSeated = false;
+}
+// The figure put on the driver's seat: the game's own attach to the seat node of the car's model (PM_SEAT_ML, or FL), as it seats
+// York and the residents. The figure then rides with the car by itself. False when the model has no such node.
+bool NetSeat(u8* doll, u8* car) {
+    if (!NetFnsOk()) return false;
+    void* model = *(void* volatile*)(car + 0x160);
+    const char* node = nullptr;
+    static const char* const names[2] = {"PM_SEAT_ML", "PM_SEAT_FL"};
+    for (int i = 0; model && i < 2 && !node; ++i)
+        if (((NodeIndexFn)(uintptr_t)kNodeIndexFn)(model, names[i]) >= 0) node = names[i];
+    if (!node) return false;
+    *(volatile u32*)(doll + 0x24) |= 0x8000u;  // not deleted with the car (006C2FDBh)
+    ((AttachFn)(uintptr_t)kAttachFn)(doll, car, node, nullptr, nullptr, nullptr, 0);
+    return (*(volatile u32*)(doll + 0xDC) & 4) != 0;
+}
+// One update of the friend's figure: this York's state goes out, the friend's comes in and is shown. `want` = the learnt motion to
+// fall back on.
+void NetPartnerStep(u8* player, u8* doll, const float yp[3], const float yorkWas[3], float dt, int* want) {
+    static u8* lastDoll = nullptr;
+    if (doll != lastDoll) { lastDoll = doll; g_netSeated = false; }
+    if (g_netSeated && !(*(volatile u32*)(doll + 0xDC) & 4)) g_netSeated = false;
+    u8* gm = *(u8* volatile*)(uintptr_t)kGameManagerPtrVa;
+    void* res = ((ResMgrFn)(uintptr_t)kResourceMgrFn)();
+    const u32 st = *(volatile u32*)(player + 0x654);
+    // ---- mine
+    static int mineKind = 0;
+    if (dt > 0.f) {
+        const float vx = (yp[0] - yorkWas[0]) / dt, vz = (yp[2] - yorkWas[2]) / dt, v = Sqrtf(vx * vx + vz * vz);
+        if (v < 60.f) mineKind = v < 0.5f ? 0 : v < 9.f ? 1 : 2;
+    }
+    NetPeerState me = {};
+    for (int i = 0; i < 3; ++i) {
+        me.pos[i] = me.carPos[i] = yp[i];
+        me.zone[i] = gm ? *(volatile u32*)(gm + 0x834FE0 + 4 * i) : 0;
+    }
+    me.yaw = *(volatile float*)(player + 0x7C);
+    me.carRot[1] = me.yaw;
+    u8* myCar = st == 0x87 || st == 0x88 ? DrivenCar(player) : nullptr;
+    me.inCar = st == 0x87 || st == 0x88;
+    me.kind = me.inCar ? 3 : mineKind;
+    me.motion = -1;
+    void* playing = *(void* volatile*)(player + 0x18C);
+    if (res && playing && NetFnsOk()) me.motion = ((ResIdOfFn)(uintptr_t)kResIdOfFn)(res, playing);
+    if (me.motion < -1 || me.motion > 0xFFFF) me.motion = -1;
+    // the suit: the row the game itself takes for York's costume (FUN_005FB4D0)
+    if (gm) {
+        int row = *(volatile int*)(gm + 0xCED48);
+        if (*(volatile u8*)(gm + 0x8CA12) == 4) row += 10;
+        if (*(volatile int*)(gm + 0x8C5E4) != 1) row += 20;
+        me.suit = row >= 0 && row < 41 ? row : 0;
+    }
+    if (myCar) {
+        // The car across the ground and its three angles; the height sent is York's in the seat: with the object's own height the
+        // other game's car stood half in the road (0.7.17-test9).
+        me.carPos[0] = *(volatile float*)(myCar + 0x58);
+        me.carPos[2] = *(volatile float*)(myCar + 0x60);
+        for (int i = 0; i < 3; ++i) me.carRot[i] = *(volatile float*)(myCar + 0x78 + 4 * i);
+        me.car = (int)*(volatile u16*)(myCar + 0x2E);
+        static u8* told = nullptr;
+        if (told != myCar) {
+            told = myCar;
+            Log("net partner: York's car is %08X: number %d, subtype %d, its place %d %d %d and York's in the seat %d %d %d (thousandths), angles %d %d %d", (u32)(uintptr_t)myCar, me.car,
+                (int)*(volatile signed char*)(myCar + 0x474), (int)(*(volatile float*)(myCar + 0x58) * 1000.f), (int)(*(volatile float*)(myCar + 0x5C) * 1000.f),
+                (int)(*(volatile float*)(myCar + 0x60) * 1000.f), (int)(yp[0] * 1000.f), (int)(yp[1] * 1000.f), (int)(yp[2] * 1000.f), (int)(me.carRot[0] * 1000.f),
+                (int)(me.carRot[1] * 1000.f), (int)(me.carRot[2] * 1000.f));
+        }
+    }
+    NetCoopExchange(me);
+    // ---- the friend
+    NetPeerState peer;
+    static bool shown = false, carShown = false;
+    static float carAt[3], carRot[3];
+    const bool see = NetCoopPeer(&peer) && peer.zone[0] == me.zone[0] && peer.zone[1] == me.zone[1] && peer.zone[2] == me.zone[2];
+    const int suitWanted = see ? (peer.suit == g_netSuitFailed ? 0 : peer.suit) : g_netSuitRow;
+    if (suitWanted != g_netSuitRow) {  // another suit: the figure is made again in it (DollTick asks for a new one)
+        Log("net partner: the friend wears suit row %d, the figure is made again", suitWanted);
+        g_netSuitRow = suitWanted;
+        NetUnseat(doll);
+        NetCarRelease("the figure is made again");
+        DollRemove("the friend's suit");
+        shown = carShown = false;
+        return;
+    }
+    g_netMotion = nullptr;
+    if (see && peer.motion > 0 && res) g_netMotion = ((ResObjectFn)(uintptr_t)kMotionByIdFn)(res, (u32)peer.motion, 1);
+    bool onFoot = false;
+    if (see && peer.inCar) {
+        int n = peer.car == 7 || peer.car == 8 || (peer.car >= 77 && peer.car <= 90) ? peer.car : 7;
+        if (myCar && n == me.car) n = n == 7 ? 8 : 7;  // the number of the car this York sits in is not asked for: the game would put it back at its place
+        const float ex = peer.carPos[0] - carAt[0], ey = peer.carPos[1] - carAt[1], ez = peer.carPos[2] - carAt[2];
+        const bool jump = !carShown || ex * ex + ez * ez > 60.f * 60.f || dt <= 0.f;
+        const float k = jump ? 1.f : (dt * 14.f > 1.f ? 1.f : dt * 14.f);
+        carAt[0] += ex * k;
+        carAt[1] += ey * k;
+        carAt[2] += ez * k;
+        for (int i = 0; i < 3; ++i) {  // the angles eased the short way round
+            float d = peer.carRot[i] - carRot[i];
+            while (d > 3.14159265f) d -= 6.2831853f;
+            while (d < -3.14159265f) d += 6.2831853f;
+            carRot[i] += d * k;
+        }
+        // never onto this York: a car put on top of him throws him under the ground (seen in 0.7.17-test9)
+        const float nx = carAt[0] - yp[0], nz = carAt[2] - yp[2];
+        const bool clear = nx * nx + nz * nz > 22.f * 22.f;
+        u8* car = clear ? NetCarAt(n, carAt, carRot, myCar, yp) : nullptr;
+        if ((car != nullptr) != carShown) Log("net partner: the friend's car is %s", car ? "shown" : clear ? "not shown (needs free play outdoors in Greenvale)" : "not moved (too close to York)");
+        carShown = car != nullptr;
+        if (car && !g_netSeated) {
+            g_netSeated = NetSeat(doll, car);
+            Log("net partner: the figure is %s", g_netSeated ? "on the driver's seat of the friend's car" : "not seated (the car's model has no seat node): hidden");
+        }
+        if (car && g_netSeated) {
+            ((AttachUpdateFn)(uintptr_t)kAttachUpdateFn)(doll, 0);  // with the car, this very update
+            *want = 3;
+        } else {
+            NetUnseat(doll);
+            g_dollBase[0] = yp[0];
+            g_dollBase[1] = yp[1] - 400.f;
+            g_dollBase[2] = yp[2];
+        }
+    } else {
+        if (g_netSeated) NetUnseat(doll);
+        if (carShown) NetCarRelease(see ? "the friend got out" : "the friend is not seen");
+        carShown = false;
+        if (see) {
+            const float ex = peer.pos[0] - g_dollBase[0], ey = peer.pos[1] - g_dollBase[1], ez = peer.pos[2] - g_dollBase[2];
+            const float k = !shown || ex * ex + ez * ez > 40.f * 40.f || dt <= 0.f ? 1.f : (dt * 12.f > 1.f ? 1.f : dt * 12.f);  // eased; a jump at once
+            g_dollBase[0] += ex * k;
+            g_dollBase[1] += ey * k;
+            g_dollBase[2] += ez * k;
+            g_dollYaw = peer.yaw;
+            *want = peer.kind > 2 ? 0 : peer.kind;
+            onFoot = true;
+        } else {
+            g_dollBase[0] = yp[0];
+            g_dollBase[1] = yp[1] - 400.f;  // far under the ground
+            g_dollBase[2] = yp[2];
+        }
+    }
+    if (onFoot != shown) Log("net partner: the friend's figure is %s", onFoot ? "shown on foot" : see ? "with the car" : "hidden (another place or nothing heard)");
+    shown = onFoot;
+}
 void PartnerTick(u8* player, u8* doll) {
     LARGE_INTEGER now, freq;
     QueryPerformanceCounter(&now);
@@ -850,87 +1016,9 @@ void PartnerTick(u8* player, u8* doll) {
     const float yorkWas[3] = {g_yorkLast[0], g_yorkLast[1], g_yorkLast[2]};
     int want = 0;
     if (NetCoopOn()) {
-        // A friend over the network: this York's place goes out, the figure stands where the friend's York is (at the friend's own
-        // height: the friend's game found the ground). In another location, or with nothing heard, the figure is kept out of sight.
-        static int mine = 0;
-        if (dt > 0.f) {
-            const float vx = (yp[0] - yorkWas[0]) / dt, vz = (yp[2] - yorkWas[2]) / dt, v = Sqrtf(vx * vx + vz * vz);
-            if (v < 60.f) mine = v < 0.5f ? 0 : v < 9.f ? 1 : 2;
-        }
         for (int i = 0; i < 3; ++i) g_yorkLast[i] = yp[i];
-        const u8* gm = *(const u8* volatile*)(uintptr_t)kGameManagerPtrVa;
-        const u32 zoneNow = gm ? *(volatile u32*)(gm + 0x834FE0) : 0;
-        const u32 st = *(volatile u32*)(player + 0x654);
-        // which of the game's cars York has: CGame+9906Ch, the number the game itself takes for "York's car" (FUN_005F1840)
-        const bool driving = st == 0x87 || st == 0x88;
-        const int myCar = gm ? (int)*(volatile u16*)(gm + 0x9906C) : 0;
-        float myCarAt[3] = {yp[0], yp[1], yp[2]};
-        u8* myCarObj = nullptr;
-        if (driving) {
-            u8* c = myCarObj = DrivenCar(player);
-            // The car's own place across the ground; the height stays York's: the game's "move the car" call takes the height York
-            // has in the seat (0.7.17-test9 gave it the object's own height and the friend's car sank into the road).
-            if (c) {
-                myCarAt[0] = *(volatile float*)(c + 0x58);
-                myCarAt[2] = *(volatile float*)(c + 0x60);
-                static bool told = false;
-                if (!told) {
-                    told = true;
-                    Log("net partner: York in the seat is at %d %d %d, his car's object at %d %d %d (thousandths)", (int)(yp[0] * 1000.f), (int)(yp[1] * 1000.f), (int)(yp[2] * 1000.f),
-                        (int)(*(volatile float*)(c + 0x58) * 1000.f), (int)(*(volatile float*)(c + 0x5C) * 1000.f), (int)(*(volatile float*)(c + 0x60) * 1000.f));
-                }
-            }
-        }
-        NetCoopExchange(yp, *(volatile float*)(player + 0x7C), zoneNow, driving ? 3 : mine, driving, myCar, myCarAt);
-        NetPeerState peer;
-        static bool shown = false;
-        const bool see = NetCoopPeer(&peer) && peer.zone == zoneNow;
-        static float carAt[3];
-        static bool carShown = false;
-        if (see && peer.inCar) {
-            // The friend drives: one of the game's cars is held where the friend's York is, and the figure is put out of sight.
-            // A car of the same number as the one this York sits in would be pulled from under him, so another one stands in.
-            int n = peer.car == 7 || peer.car == 8 || (peer.car >= 77 && peer.car <= 90) ? peer.car : 7;
-            const float ex = peer.carPos[0] - carAt[0], ey = peer.carPos[1] - carAt[1], ez = peer.carPos[2] - carAt[2];
-            const float k = !carShown || ex * ex + ez * ez > 60.f * 60.f || dt <= 0.f ? 1.f : (dt * 14.f > 1.f ? 1.f : dt * 14.f);
-            carAt[0] += ex * k;
-            carAt[1] += ey * k;
-            carAt[2] += ez * k;
-            // never onto this York: a car put on top of him throws him under the ground (seen in 0.7.17-test9)
-            const float nx = carAt[0] - yp[0], nz = carAt[2] - yp[2];
-            const bool clear = nx * nx + nz * nz > 22.f * 22.f;
-            const bool ok = clear && NetCarAt(n, carAt, peer.yaw, myCarObj);
-            if (ok != carShown) Log("net partner: the friend's car is %s", ok ? "shown" : clear ? "not shown (needs free play outdoors in Greenvale)" : "not moved (too close to York)");
-            carShown = ok;
-            if (ok && g_partnerMotion[3]) {  // the driver: the figure where the friend's York sits, in York's motion at the wheel
-                g_dollBase[0] = carAt[0] + (peer.pos[0] - peer.carPos[0]);
-                g_dollBase[1] = carAt[1] + (peer.pos[1] - peer.carPos[1]);
-                g_dollBase[2] = carAt[2] + (peer.pos[2] - peer.carPos[2]);
-                g_dollYaw = peer.yaw;
-                want = 3;
-            } else {
-                g_dollBase[0] = yp[0];
-                g_dollBase[1] = yp[1] - 400.f;
-                g_dollBase[2] = yp[2];
-            }
-            shown = false;
-        } else if (see) {
-            carShown = false;
-            const float ex = peer.pos[0] - g_dollBase[0], ey = peer.pos[1] - g_dollBase[1], ez = peer.pos[2] - g_dollBase[2];
-            const float k = !shown || ex * ex + ez * ez > 40.f * 40.f || dt <= 0.f ? 1.f : (dt * 12.f > 1.f ? 1.f : dt * 12.f);  // eased; a jump is taken at once
-            g_dollBase[0] += ex * k;
-            g_dollBase[1] += ey * k;
-            g_dollBase[2] += ez * k;
-            g_dollYaw = peer.yaw;
-            want = peer.kind;
-        } else {
-            g_dollBase[0] = yp[0];
-            g_dollBase[1] = yp[1] - 400.f;  // far under the ground
-            g_dollBase[2] = yp[2];
-        }
-        const bool onFoot = see && !peer.inCar;
-        if (onFoot != shown) Log("net partner: the friend's figure is %s", onFoot ? "shown" : see ? "hidden (the friend drives)" : "hidden (another location or nothing heard)");
-        shown = onFoot;
+        NetPartnerStep(player, doll, yp, yorkWas, dt, &want);
+        if (!DollAlive()) return;  // made again in another suit
     } else {
     for (int i = 0; i < 3; ++i) g_yorkLast[i] = yp[i];
     // the pad
@@ -983,11 +1071,14 @@ void PartnerTick(u8* player, u8* doll) {
     }
     want = mag <= 0.f ? 0 : run ? 2 : 1;
     }
-    for (int i = 0; i < 3; ++i) *(volatile float*)(doll + 0x58 + 4 * i) = g_dollBase[i];
-    *(volatile float*)(doll + 0x7C) = *(volatile float*)(doll + 0x6C) = g_dollYaw;
+    if (!(NetCoopOn() && g_netSeated)) {  // on the seat the car carries the figure
+        for (int i = 0; i < 3; ++i) *(volatile float*)(doll + 0x58 + 4 * i) = g_dollBase[i];
+        *(volatile float*)(doll + 0x7C) = *(volatile float*)(doll + 0x6C) = g_dollYaw;
+    }
     // the motion of the case
     void* m = g_partnerMotion[want] ? g_partnerMotion[want] : g_partnerMotion[want == 2 ? 1 : 0];
     if (want == 3) m = g_partnerMotion[3];
+    if (NetCoopOn() && g_netMotion) m = g_netMotion;  // the very motion the friend's York plays
     if (m && (want != g_partnerState || *(void* volatile*)(doll + 0x18C) != m)) {
         const u8* cur = *(u8* volatile*)(doll + 0x18C);
         if (!cur || (uintptr_t)cur < 0x10000 || *(const u16*)(cur + 8) == *(const u16*)((const u8*)m + 8)) {

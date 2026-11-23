@@ -298,45 +298,109 @@ void CheatsTick(void* player) {
     }
 }
 
-// The friend's car (net_coop.cpp): the game's numbered car `number` shown as the spawner shows one, then held at the place the
-// friend's game reports, every update. Free play outdoors in Greenvale only; false when it could not be done.
-bool NetCarAt(int number, const float pos[3], float yaw, const void* mine) {
+// The friend's car (net_coop.cpp). One of the game's numbered cars is taken as the spawner takes one (FUN_005F1840) and put where
+// the friend's game says, every update.
+//   FUN_00541760 only writes the place and the three angles (pitch, heading, roll) and rebuilds the picture: it touches no physics
+//   and raises car+434h bit 20000000h, which the car's own update answers by tearing its actors down. So that bit is cleared again.
+//   What can be bumped into, for a parked car, is a set of fixed boxes the game builds once (FUN_0054F000) when York comes within
+//   100 units, and never moves: the picture drove away from them. With NetCarCollision the boxes are built as moving ones instead
+//   (the creation flags 44h -> 42h for that one call, the byte at 0054F2A8), and FUN_00719990 ties them to the car's bones: the
+//   engine then carries them along every frame (FUN_007178C0), tilt included. car+12F0h = 1 keeps the game's own box code off.
+constexpr u32 kCarBoxesFn = 0x54F000, kCarBoxFlagsVa = 0x54F2A8, kBonesFollowFn = 0x719990, kActorsFreeFn = 0x718F00, kNetObjLookupFn = 0x6C5FD0,
+              kNetObjMgrVa = 0xBD7670, kNetCarVtable = 0x773F74;
+typedef void(__attribute__((thiscall)) * CarBoxesFn)(void* car);
+typedef void(__attribute__((thiscall)) * BonesFollowFn)(void* car, int bone, int on);
+typedef void*(__attribute__((thiscall)) * NetObjLookupFn)(void* mgr, u32 handle);
+u8* g_netCar = nullptr;
+u32 g_netCarHandle = 0;
+int g_netCarNumber = 0;
+bool g_netCarBoxes = false;
+
+static bool NetCarAlive() {
+    if (!g_netCar) return false;
+    void* mgr = *(void* volatile*)(uintptr_t)kNetObjMgrVa;
+    if (mgr && ((NetObjLookupFn)(uintptr_t)kNetObjLookupFn)(mgr, g_netCarHandle) == g_netCar && *(volatile u32*)g_netCar == kNetCarVtable) return true;
+    g_netCar = nullptr;
+    g_netCarBoxes = false;
+    return false;
+}
+static bool NetCarBoxFnsOk() {
+    static const u8 kBoxes[8] = {0xB8, 0x34, 0x1C, 0x00, 0x00, 0xE8, 0xE6, 0x1F}, kFollow[8] = {0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x10, 0x89, 0x4D},
+                    kFree[8] = {0x55, 0x8B, 0xEC, 0x83, 0xEC, 0x44, 0x89, 0x4D}, kFlags[7] = {0xC7, 0x45, 0x10, 0x44, 0x00, 0x00, 0x00};
+    return BytesMatch(kCarBoxesFn, kBoxes, 8) && BytesMatch(kBonesFollowFn, kFollow, 8) && BytesMatch(kActorsFreeFn, kFree, 8) && BytesMatch(kCarBoxFlagsVa - 3, kFlags, 7);
+}
+static void NetCarBoxesOff(u8* car) {
+    if (g_netCarBoxes && *(void* volatile*)(car + 0x264)) ((CarBoxesFn)(uintptr_t)kActorsFreeFn)(car);
+    g_netCarBoxes = false;
+}
+// The friend left the car (or the place): the car stays where it is, as a parked one of the game's own again.
+void NetCarRelease(const char* why) {
+    if (!NetCarAlive()) return;
+    NetCarBoxesOff(g_netCar);
+    *(volatile u8*)(g_netCar + 0x12F0) = 0;
+    Log("net partner: the friend's car is let go (%s)", why);
+    g_netCar = nullptr;
+}
+// Returns the car object, nullptr when it could not be shown. rot = pitch, heading, roll; york = this York's place.
+u8* NetCarAt(int number, const float pos[3], const float rot[3], const void* mine, const float york[3]) {
     static const u8 kShow[8] = {0x51, 0x56, 0x8B, 0xF1, 0x89, 0x74, 0x24, 0x04}, kMove[8] = {0x8B, 0x44, 0x24, 0x04, 0x56, 0x8B, 0xF1, 0x81};
-    static u8* car = nullptr;
-    static int shown = 0;
-    static DWORD asked = 0;
     u8* game = *(u8* volatile*)(uintptr_t)kGameManagerPtrVa;
     const bool free = *(volatile u32*)(uintptr_t)kGameplayModeVa == 3 && !(*(volatile u32*)(uintptr_t)kEventModeVa & 0x80000000u);
     if (!game || !free || !BytesMatch(kCarShowFn, kShow, 8) || !BytesMatch(kCarMoveFn, kMove, 8) || !(*(volatile u32*)(game + 0x8C5EC) & 2) ||
         *(volatile u32*)(game + 0x834FE0) != 0) {
-        car = nullptr;
-        return false;
+        if (g_netCar) NetCarRelease("not free play outdoors in Greenvale");
+        return nullptr;
     }
-    const DWORD now = GetTickCount();
-    if (!car || shown != number || now - asked > 3000) {  // asked again now and then: the game may have put the car away
-        asked = now;
+    static DWORD asked = 0;
+    if (!NetCarAlive() || g_netCarNumber != number) {
+        if (GetTickCount() - asked < 1000 && g_netCarNumber == number) return nullptr;  // the game gave none a moment ago
+        asked = GetTickCount();
+        if (g_netCar) NetCarRelease("another car");
+        g_netCarNumber = number;
         u8* got = (u8*)((CarShowFn)(uintptr_t)kCarShowFn)((void*)(uintptr_t)kWorldFactoryVa, (u32)number, -1, 1);
-        if (got && got == mine) {  // the very car this York sits in: it must not be pulled from under him, another one stands in
+        if (got && got == mine) {  // the very car this York sits in: another one stands in
             const int other = number == 7 ? 8 : 7;
             Log("net partner: car %d is the one York sits in, car %d stands in for the friend's", number, other);
             got = (u8*)((CarShowFn)(uintptr_t)kCarShowFn)((void*)(uintptr_t)kWorldFactoryVa, (u32)other, -1, 1);
             if (got == mine) got = nullptr;
         }
-        if (!got || (*(volatile u32*)(got + 0xDC) & 0x60)) {
-            if (car || shown != number) Log("net partner: the game gave no car %d for the friend", number);
-            car = nullptr;
-            shown = number;
-            return false;
+        if (!got || *(volatile u32*)got != kNetCarVtable || (*(volatile u32*)(got + 0xDC) & 0x60)) {
+            Log("net partner: the game gave no car %d for the friend (%08X)", number, (u32)(uintptr_t)got);
+            return nullptr;
         }
-        if (got != car || shown != number) Log("net partner: the friend's car is car %d (object %08X)", number, (u32)(uintptr_t)got);
-        car = got;
-        shown = number;
+        g_netCar = got;
+        g_netCarHandle = *(volatile u32*)(got + 0x3C);
+        g_netCarBoxes = false;
+        Log("net partner: the friend's car is car %d (object %08X, subtype %d)", number, (u32)(uintptr_t)got, (int)*(volatile signed char*)(got + 0x474));
     }
-    if (car == mine) return false;
+    u8* car = g_netCar;
+    if (car == mine) return nullptr;
     float p[4] = {pos[0], pos[1], pos[2], 1.f};
-    float r[4] = {0.f, yaw, 0.f, 0.f};
+    float r[4] = {rot[0], rot[1], rot[2], 0.f};
     ((CarMoveFn)(uintptr_t)kCarMoveFn)(car, p, r);
-    return true;
+    *(volatile u32*)(car + 0x434) &= ~0x20000000u;  // no teardown: nothing of the game's placed it
+    if (g_cfg.netCarCollision && NetCarBoxFnsOk()) {
+        *(volatile u8*)(car + 0x12F0) = 1;
+        const float dx = pos[0] - york[0], dz = pos[2] - york[2], d2 = dx * dx + dz * dz;
+        if (g_netCarBoxes && (d2 > 110.f * 110.f || !*(void* volatile*)(car + 0x264))) NetCarBoxesOff(car);
+        if (!g_netCarBoxes && d2 < 90.f * 90.f) {
+            if (*(void* volatile*)(car + 0x264)) ((CarBoxesFn)(uintptr_t)kActorsFreeFn)(car);  // the game's fixed ones, left where the car stood
+            const u8 moving = 0x42, fixed = 0x44;
+            if (WriteCode(kCarBoxFlagsVa, &moving, 1)) {
+                ((CarBoxesFn)(uintptr_t)kCarBoxesFn)(car);
+                WriteCode(kCarBoxFlagsVa, &fixed, 1);
+                if (*(void* volatile*)(car + 0x264)) {
+                    ((BonesFollowFn)(uintptr_t)kBonesFollowFn)(car, -1, 1);
+                    g_netCarBoxes = true;
+                    Log("net partner: the friend's car can be bumped into (moving boxes tied to its bones)");
+                } else {
+                    Log("net partner: the game built no boxes for the friend's car (it stays a picture)");
+                    asked = GetTickCount();
+                }
+            }
+        }
+    }
+    return car;
 }
 
 int GiveItemNow(int id, int count) {
