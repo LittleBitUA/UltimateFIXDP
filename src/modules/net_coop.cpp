@@ -36,7 +36,7 @@ struct Packet {
     float pos[3];
     float yaw;
     u32 flags;    // bit 0: in a car
-    u32 spare;
+    u32 car;      // the number of the car York drives (the game's numbered cars), 0 = not known
 };
 #pragma pack(pop)
 constexpr u32 kMark = 0x50584655u;
@@ -129,7 +129,7 @@ bool Open() {
 bool NetCoopOn() { return g_cfg.netPartner != 0; }
 
 // This York's place goes out (20 times a second at most) and what came in is read. Game thread, never waits.
-void NetCoopExchange(const float pos[3], float yaw, u32 zone, int kind, bool inCar) {
+void NetCoopExchange(const float pos[3], float yaw, u32 zone, int kind, bool inCar, int car) {
     if (!Open()) return;
     const DWORD now = GetTickCount();
     if (g_state == 1) {
@@ -140,6 +140,7 @@ void NetCoopExchange(const float pos[3], float yaw, u32 zone, int kind, bool inC
             p.s.zone = zone;
             p.s.kind = kind;
             p.s.inCar = inCar;
+            p.s.car = car;
             p.s.yaw = yaw;
             p.s.pos[0] = pos[0] + 8.f;
             p.s.pos[1] = pos[1];
@@ -158,6 +159,7 @@ void NetCoopExchange(const float pos[3], float yaw, u32 zone, int kind, bool inC
         for (int i = 0; i < 3; ++i) p.pos[i] = pos[i];
         p.yaw = yaw;
         p.flags = inCar ? 1u : 0u;
+        p.car = (u32)car;
         g_ws.sendto(g_sock, (const char*)&p, sizeof p, 0, (const sockaddr*)&g_peer, sizeof g_peer);
     }
     for (int i = 0; i < 32; ++i) {
@@ -177,6 +179,7 @@ void NetCoopExchange(const float pos[3], float yaw, u32 zone, int kind, bool inC
         g_last.zone = p.zone;
         g_last.kind = p.kind;
         g_last.inCar = (p.flags & 1) != 0;
+        g_last.car = (int)(p.car & 0xFF);
         g_last.yaw = p.yaw;
         for (int k = 0; k < 3; ++k) g_last.pos[k] = p.pos[k];
         g_haveLast = true;

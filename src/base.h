@@ -465,9 +465,10 @@ void SessionFrame(void* device);  // once per frame from the Present hook: the l
 // the same family as a shown or waiting one (the same text before a colon, or one title the first words of the other:
 // "Fly: on" and "Fly: off", "Scan" and "Scan finished") takes its place instead of queueing.
 constexpr int kNoticeInfo = 0, kNoticeWarning = 1, kNoticeError = 2;
-struct NetPeerState { float pos[3]; float yaw; u32 zone; int kind; bool inCar; };
+struct NetPeerState { float pos[3]; float yaw; u32 zone; int kind; bool inCar; int car; };
+bool NetCarAt(int number, const float pos[3], float yaw);  // cheats.cpp: the friend's car shown and held at a place
 bool NetCoopOn();
-void NetCoopExchange(const float pos[3], float yaw, u32 zone, int kind, bool inCar);  // net_coop.cpp, from the partner's update
+void NetCoopExchange(const float pos[3], float yaw, u32 zone, int kind, bool inCar, int car);  // net_coop.cpp, from the partner's update
 bool NetCoopPeer(NetPeerState* out);
 bool PartnerPad(float* x, float* y, u32* buttons);  // menu.cpp: the pad's left stick (-1..1, up positive) and buttons for the partner
 void DollTick(void* player);   // combat_strafe.cpp, from the player update

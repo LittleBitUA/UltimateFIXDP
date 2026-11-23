@@ -821,11 +821,34 @@ void PartnerTick(u8* player, u8* doll) {
         const u8* gm = *(const u8* volatile*)(uintptr_t)kGameManagerPtrVa;
         const u32 zoneNow = gm ? *(volatile u32*)(gm + 0x834FE0) : 0;
         const u32 st = *(volatile u32*)(player + 0x654);
-        NetCoopExchange(yp, *(volatile float*)(player + 0x7C), zoneNow, mine, st == 0x87 || st == 0x88);
+        // which of the game's cars York has: CGame+9906Ch, the number the game itself takes for "York's car" (FUN_005F1840)
+        const bool driving = st == 0x87 || st == 0x88;
+        const int myCar = gm ? (int)*(volatile u16*)(gm + 0x9906C) : 0;
+        NetCoopExchange(yp, *(volatile float*)(player + 0x7C), zoneNow, mine, driving, myCar);
         NetPeerState peer;
         static bool shown = false;
         const bool see = NetCoopPeer(&peer) && peer.zone == zoneNow;
-        if (see) {
+        static float carAt[3];
+        static bool carShown = false;
+        if (see && peer.inCar) {
+            // The friend drives: one of the game's cars is held where the friend's York is, and the figure is put out of sight.
+            // A car of the same number as the one this York sits in would be pulled from under him, so another one stands in.
+            int n = peer.car == 7 || peer.car == 8 || (peer.car >= 77 && peer.car <= 90) ? peer.car : 7;
+            if (driving && n == myCar) n = n == 7 ? 8 : 7;
+            const float ex = peer.pos[0] - carAt[0], ey = peer.pos[1] - carAt[1], ez = peer.pos[2] - carAt[2];
+            const float k = !carShown || ex * ex + ez * ez > 60.f * 60.f || dt <= 0.f ? 1.f : (dt * 14.f > 1.f ? 1.f : dt * 14.f);
+            carAt[0] += ex * k;
+            carAt[1] += ey * k;
+            carAt[2] += ez * k;
+            const bool ok = NetCarAt(n, carAt, peer.yaw);
+            if (ok != carShown) Log("net partner: the friend's car is %s", ok ? "shown" : "not shown (needs free play outdoors in Greenvale)");
+            carShown = ok;
+            g_dollBase[0] = yp[0];
+            g_dollBase[1] = yp[1] - 400.f;
+            g_dollBase[2] = yp[2];
+            shown = false;
+        } else if (see) {
+            carShown = false;
             const float ex = peer.pos[0] - g_dollBase[0], ey = peer.pos[1] - g_dollBase[1], ez = peer.pos[2] - g_dollBase[2];
             const float k = !shown || ex * ex + ez * ez > 40.f * 40.f || dt <= 0.f ? 1.f : (dt * 12.f > 1.f ? 1.f : dt * 12.f);  // eased; a jump is taken at once
             g_dollBase[0] += ex * k;
@@ -838,8 +861,9 @@ void PartnerTick(u8* player, u8* doll) {
             g_dollBase[1] = yp[1] - 400.f;  // far under the ground
             g_dollBase[2] = yp[2];
         }
-        if (see != shown) Log("net partner: the friend's figure is %s", see ? "shown" : "hidden (another location or nothing heard)");
-        shown = see;
+        const bool onFoot = see && !peer.inCar;
+        if (onFoot != shown) Log("net partner: the friend's figure is %s", onFoot ? "shown" : see ? "hidden (the friend drives)" : "hidden (another location or nothing heard)");
+        shown = onFoot;
     } else {
     for (int i = 0; i < 3; ++i) g_yorkLast[i] = yp[i];
     // the pad

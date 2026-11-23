@@ -298,6 +298,40 @@ void CheatsTick(void* player) {
     }
 }
 
+// The friend's car (net_coop.cpp): the game's numbered car `number` shown as the spawner shows one, then held at the place the
+// friend's game reports, every update. Free play outdoors in Greenvale only; false when it could not be done.
+bool NetCarAt(int number, const float pos[3], float yaw) {
+    static const u8 kShow[8] = {0x51, 0x56, 0x8B, 0xF1, 0x89, 0x74, 0x24, 0x04}, kMove[8] = {0x8B, 0x44, 0x24, 0x04, 0x56, 0x8B, 0xF1, 0x81};
+    static u8* car = nullptr;
+    static int shown = 0;
+    static DWORD asked = 0;
+    u8* game = *(u8* volatile*)(uintptr_t)kGameManagerPtrVa;
+    const bool free = *(volatile u32*)(uintptr_t)kGameplayModeVa == 3 && !(*(volatile u32*)(uintptr_t)kEventModeVa & 0x80000000u);
+    if (!game || !free || !BytesMatch(kCarShowFn, kShow, 8) || !BytesMatch(kCarMoveFn, kMove, 8) || !(*(volatile u32*)(game + 0x8C5EC) & 2) ||
+        *(volatile u32*)(game + 0x834FE0) != 0) {
+        car = nullptr;
+        return false;
+    }
+    const DWORD now = GetTickCount();
+    if (!car || shown != number || now - asked > 3000) {  // asked again now and then: the game may have put the car away
+        asked = now;
+        u8* got = (u8*)((CarShowFn)(uintptr_t)kCarShowFn)((void*)(uintptr_t)kWorldFactoryVa, (u32)number, -1, 1);
+        if (!got || (*(volatile u32*)(got + 0xDC) & 0x60)) {
+            if (car || shown != number) Log("net partner: the game gave no car %d for the friend", number);
+            car = nullptr;
+            shown = number;
+            return false;
+        }
+        if (got != car || shown != number) Log("net partner: the friend's car is car %d (object %08X)", number, (u32)(uintptr_t)got);
+        car = got;
+        shown = number;
+    }
+    float p[4] = {pos[0], pos[1], pos[2], 1.f};
+    float r[4] = {0.f, yaw, 0.f, 0.f};
+    ((CarMoveFn)(uintptr_t)kCarMoveFn)(car, p, r);
+    return true;
+}
+
 int GiveItemNow(int id, int count) {
     static const u8 kGive[8] = {0x83, 0xEC, 0x08, 0x53, 0x55, 0x56, 0x8B, 0xD9};
     u8* game = *(u8* volatile*)(uintptr_t)kGameManagerPtrVa;
