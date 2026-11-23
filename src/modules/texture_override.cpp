@@ -444,12 +444,17 @@ HRESULT FromMemoryInner(void* dev, const void* data, UINT size, UINT w, UINT h, 
     UINT hashed = size == 0x7FFFFFFFu ? (w * h / 2) : size;
     const bool dump = g_cfg.dumpTextures != 0;
     // one pass over the data, and only when something needs the hash (a pack or the dump)
-    const bool smoke = g_cfg.smokeTune && data && size == 128 + kSmokeW * kSmokeH && out;  // a DXT3 of that size without mipmaps
-    const u32 hash = (data && hashed && (g_count || dump || smoke)) ? SuperFastHash((const u8*)data, (int)hashed) : 0;
+    const bool smoke = g_cfg.smokeTune && data && size >= 128 + kSmokeW * kSmokeH && size <= 128 + kSmokeW * kSmokeH * 2 && out;  // a DXT3 of that size, with mipmaps or without
+    const u32 hash = (data && hashed && (g_count || dump || g_cfg.smokeTune)) ? SuperFastHash((const u8*)data, (int)hashed) : 0;
     if (dump && data && hashed) DumpTexture(hash, data, size);
-    if (smoke && hash == kSmokeSheetHash && SmokeSheetLoad(dev, data, size, out)) {
-        NoteLoad(2, started, data, size);
-        return 0;
+    if (g_cfg.smokeTune && hash == kSmokeSheetHash) {
+        if (smoke && SmokeSheetLoad(dev, data, size, out)) {
+            NoteLoad(2, started, data, size);
+            return 0;
+        }
+        const u32* dds = (const u32*)data;
+        Log("textures: the smoke sheet d7a18744 is not what the mod expects (%u bytes, %ux%u, format %08X, %u levels): left as the game's", size,
+            size >= 128 ? dds[4] : 0, size >= 128 ? dds[3] : 0, size >= 128 ? dds[21] : 0, size >= 128 ? dds[7] : 0);
     }
     if (g_count && data && hashed) {
         const Entry* e = Find(hash);
