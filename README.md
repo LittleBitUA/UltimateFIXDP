@@ -28,7 +28,7 @@ _Універсальний фікс для_ **Deadly Premonition: The Director'
 One DLL in the game folder instead of DPfix, a stability fix, a map fix and a crash fix.
 No installer: press **F10** in game and everything is there. The mod also gives the game 4 GB of memory by itself (from the second start).
 
-> **Version 0.7.15.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
+> **Version 0.7.16.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
 > <br>Newest: a posed character next to York in the photo mode, play as other characters, a spawner for cars and items, a partner on the gamepad and a first mission editor — see [What's new](#whats-new-in-0713). Earlier versions: [CHANGELOG.md](CHANGELOG.md).
 
 ### Features
@@ -77,7 +77,7 @@ No installer: press **F10** in game and everything is there. The mod also gives 
 
 #### Mission editor
 
-- 📝 **Mission editor** (_experimental, a first version_) — a mission of your own from the F10 menu: a character, its lines, a choice of two answers, an item, a start banner. The texts live in a plain file you can share; the talk runs in the game's own dialogue mode with your text in the game's own font. Needs `[Debug] MissionLab=1` for now
+- 📝 **Quest editor** (_experimental_) — quests of your own, built in a browser page beside the running game: up to 16 steps (talks with a choice, lines, places to reach, hours to wait), rewards, branches, a map and a flow graph. The texts live in a plain file you can share; the talk runs in the game's own dialogue mode with your text in the game's own font. Needs `[Debug] MissionLab=1` for now
 
 #### Mods, updates and tools
 
@@ -165,6 +165,17 @@ port with the Xbox 360 original:
   Checked in the game at the river; other water (the lake, puddles,
   interiors) has not been compared yet.
 
+### What's new in 0.7.16
+
+**A quest editor in the browser** (_experimental, not yet checked in the game_; needs `[Debug] MissionLab=1` in `UltimateFix.ini`). F10 → Mission editor → "Open the quest editor (browser)" opens a page served by the mod itself on this computer only (`http://127.0.0.1:47800/`), next to the running game:
+- **Layout:** the quest and its steps on the left, a top-view map with York's place live and a graph of the quest's flow in the middle, the properties of the selected step on the right. Save, run, run from the first step and stop are in the top bar; a quest can be exported to a file and imported.
+- **Quests of up to 16 steps:** a talk with a choice of two answers, a line without a choice, reaching a place, waiting for an hour. Each answer leads to the next step, to any other step or to the end.
+- **When a step begins** it can move York (inside one zone), set the hour and the weather and put a car; a step can reward with an item and money.
+- **Progress** is kept in `UltimateFix\missions\progress.ini`, not in the game's save. A mission file of 0.7.12–0.7.15 is read as a quest of one step.
+- Not there yet: enemies, several characters at once, a "bring an item" step, a marker on the game's map.
+
+**A guard against a crash at a level change.** A player's crash on entering a building (`DP.exe+55C49`): at a level change the game used an object of its grass pool that was already freed. The mod now checks that object first and skips a dead one, with a line in `ufx.log`. Part of `[Debug] CrashGuards` (on by default). Built from one crash dump; not reproduced in the game.
+
 ### What's new in 0.7.15
 
 **Driving on the triggers.** Behind the wheel the gas is on R2 / RT and the brake (and reverse, when the car stands) on L2 / LT, as on the console. The car's other buttons stay where the game has them. On by default; the row "Gas on R2, brake on L2 in the car" on the Controls page (`[Input] TriggerDrive`) puts the game's layout back (brake L1, gas R1) at once. Checked in the game.
@@ -175,18 +186,6 @@ port with the Xbox 360 original:
 - **Where it begins** along the trigger's travel, 0 (at once) to 8 (near the end).
 
 The effect stays while the F10 menu is open, so you can tune it on the road: change a row, press the trigger. By default both triggers push back (gas 30 %, brake 60 %). It needs "DualSense adaptive triggers" on and Steam Input off for the game. Checked in the game.
-
-### What's new in 0.7.14
-
-**An important fix: missing buildings and a freeze while driving.** If Greenvale had no buildings at all, or the game froze while you drove through it, this was the mod's own fault, in every version from 0.7.1 to 0.7.13.
-- **What went wrong.** The fix "Game threads in turn (world)" (`[Fixes] SerialSetThread`, on by default) woke the game's thread that builds the objects of the open world and at once took away its sign to work. Buildings were built only when that thread happened to run first, which depends on the processor and the load: fine on most computers, never on some. The requests piled up, and when all 4096 places of the game's queue were taken, the game froze for good.
-- **What changed.** The thread now keeps its sign until it has finished its turn (one millisecond, as in the game itself). Checked in the game on the save a player sent: the buildings are back, the queue stays empty, the frame rate is the same.
-- **If you switched the fix off** to get your buildings back, you can switch it on again (F10 → Fixes → "Game threads in turn (world)").
-- A line `world build: …` goes to `ufx.log` if that queue ever grows again.
-
-**The photo mode in a window of its own** (_not yet checked in the game_). The photo key (F6) or "Open the photo mode" on the cheats page opens a window with five sections in place of the menu's own: camera and picture, picture look, suits, motions, spawner. Every section has "Back to the menu".
-
-**For finding faults:** `[Debug] Bisect` in `UltimateFix.ini` leaves groups of the mod's hooks out for one run (the numbers are in the source, `main.cpp`). This is how the fault above was narrowed down.
 
 Earlier versions: [CHANGELOG.md](CHANGELOG.md).
 
@@ -330,7 +329,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 Одна DLL у теці гри замість DPfix, фіксу стабільності, фіксу мапи й фіксу вильотів.
 Без інсталятора: натисніть **F10** у грі, і все там. Мод також сам дає грі 4 ГБ пам'яті (з другого запуску).
 
-> **Версія 0.7.15.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
+> **Версія 0.7.16.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
 > <br>Найновіше: персонаж поруч із Йорком у фоторежимі, гра за інших персонажів, спавнер машин і предметів, напарник із ґеймпада і перший редактор місій — див. [Що нового](#що-нового-в-0713). Попередні версії: [CHANGELOG_UA.md](CHANGELOG_UA.md).
 
 ### Можливості
@@ -379,7 +378,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 
 #### Редактор місій
 
-- 📝 **Редактор місій** (_експериментально, перша версія_) — власна місія з меню F10: персонаж, його репліки, вибір із двох відповідей, предмет, банер початку. Тексти лежать у звичайному файлі, яким можна ділитися; розмова йде у власному режимі діалогу гри, вашим текстом і шрифтом гри. Поки що потрібен `[Debug] MissionLab=1`
+- 📝 **Редактор квестів** (_експериментально_) — власні квести, які складаються на сторінці в браузері поруч із запущеною грою: до 16 кроків (розмови з вибором, репліки, місця, куди треба дійти, години, яких треба дочекатися), нагороди, розгалуження, мапа і граф ходу. Тексти лежать у звичайному файлі, яким можна ділитися; розмова йде у власному режимі діалогу гри, вашим текстом і шрифтом гри. Поки що потрібен `[Debug] MissionLab=1`
 
 #### Моди, оновлення й інструменти
 
@@ -466,6 +465,17 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
   Перевірено у грі біля річки; іншу воду (озеро, калюжі, приміщення) ще не
   порівнювали.
 
+### Що нового в 0.7.16
+
+**Редактор квестів у браузері** (_експериментально, у грі ще не перевірено_; потрібен `[Debug] MissionLab=1` в `UltimateFix.ini`). F10 → Редактор місій → «Відкрити редактор квестів (браузер)» відкриває сторінку, яку мод сам роздає лише на цьому комп'ютері (`http://127.0.0.1:47800/`), поруч із запущеною грою:
+- **Розкладка:** ліворуч квест і його кроки, по центру мапа згори з місцем Йорка наживо і граф ходу квесту, праворуч властивості вибраного кроку. Зберегти, запустити, запустити з першого кроку й зупинити — у верхній смузі; квест можна експортувати у файл та імпортувати.
+- **Квести до 16 кроків:** розмова з вибором із двох відповідей, репліка без вибору, дійти до місця, дочекатися години. Кожна відповідь веде до наступного кроку, до будь-якого іншого або до кінця.
+- **На початку кроку** можна перенести Йорка (в межах однієї зони), поставити годину й погоду, поставити машину; крок може нагородити предметом і грошима.
+- **Прогрес** зберігається в `UltimateFix\missions\progress.ini`, не у збереженні гри. Файл місії з 0.7.12–0.7.15 читається як квест з одного кроку.
+- Ще немає: ворогів, кількох персонажів одночасно, кроку «принести предмет», мітки на мапі гри.
+
+**Запобіжник від вильоту при зміні рівня.** Виліт у гравця на вході в будівлю (`DP.exe+55C49`): при зміні рівня гра зверталася до об'єкта свого пулу трави, який уже було звільнено. Тепер мод спершу перевіряє цей об'єкт і пропускає мертвий, із рядком в `ufx.log`. Входить до `[Debug] CrashGuards` (типово ввімкнено). Зроблено за одним дампом; у грі виліт не відтворювали.
+
 ### Що нового в 0.7.15
 
 **Їзда на триґерах.** За кермом газ на R2 / RT, гальмо (і задній хід, коли машина стоїть) на L2 / LT, як на консолі. Решта кнопок машини лишається там, де їх має гра. Типово ввімкнено; рядок «Газ на R2, гальмо на L2 в машині» на сторінці «Керування» (`[Input] TriggerDrive`) одразу повертає розкладку гри (гальмо L1, газ R1). Перевірено у грі.
@@ -476,18 +486,6 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 - **Початок ходу**: з якого місця ходу триґера починається ефект, від 0 (одразу) до 8 (майже в кінці).
 
 Ефект не зникає, коли відкрите меню F10, тож налаштовувати можна просто в дорозі: змінили рядок — натиснули триґер. Типово обидва триґери мають опір (газ 30 %, гальмо 60 %). Потрібні ввімкнені «Адаптивні триґери DualSense» і вимкнений Steam Input для гри. Перевірено у грі.
-
-### Що нового в 0.7.14
-
-**Важливе виправлення: зниклі будівлі й зависання під час їзди.** Якщо у Грінвейлі не було жодної будівлі або гра зависала, коли ви їхали містом, це була помилка самого мода, у всіх версіях від 0.7.1 до 0.7.13.
-- **Що було не так.** Фікс «Потоки гри по черзі (світ)» (`[Fixes] SerialSetThread`, типово ввімкнений) будив потік гри, який будує об'єкти відкритого світу, і тут же забирав у нього знак «працюй». Будівлі з'являлися лише тоді, коли цей потік устигав першим, а це залежить від процесора й навантаження: на більшості комп'ютерів усе було гаразд, на деяких — ніколи. Запити накопичувалися, і коли всі 4096 місць черги гри були зайняті, гра зависала назавжди.
-- **Що змінено.** Потік тепер тримає свій знак, доки не відпрацює хід (одну мілісекунду, як у самій грі). Перевірено у грі на збереженні, яке надіслав гравець: будівлі на місці, черга порожня, частота кадрів та сама.
-- **Якщо ви вимикали цей фікс**, щоб повернути будівлі, його можна ввімкнути знову (F10 → Виправлення → «Потоки гри по черзі (світ)»).
-- Якщо ця черга колись знову почне рости, у `ufx.log` з'явиться рядок `world build: …`.
-
-**Фоторежим у власному вікні** (_у грі ще не перевірено_). Клавіша фоторежиму (F6) або «Відкрити фоторежим» на сторінці читкодів відкриває вікно з п'ятьма розділами замість розділів меню: камера і знімок, картинка, костюми, анімації, спавнер. У кожному розділі є «Назад до меню».
-
-**Для пошуку несправностей:** `[Debug] Bisect` в `UltimateFix.ini` на один запуск вимикає групи хуків мода (числа — у коді, `main.cpp`). Саме так знайшли помилку вище.
 
 Попередні версії: [CHANGELOG_UA.md](CHANGELOG_UA.md).
 

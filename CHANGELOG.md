@@ -2,6 +2,18 @@
 
 The two newest versions are in the [README](README.md).
 
+## What's new in 0.7.14
+
+**An important fix: missing buildings and a freeze while driving.** If Greenvale had no buildings at all, or the game froze while you drove through it, this was the mod's own fault, in every version from 0.7.1 to 0.7.13.
+- **What went wrong.** The fix "Game threads in turn (world)" (`[Fixes] SerialSetThread`, on by default) woke the game's thread that builds the objects of the open world and at once took away its sign to work. Buildings were built only when that thread happened to run first, which depends on the processor and the load: fine on most computers, never on some. The requests piled up, and when all 4096 places of the game's queue were taken, the game froze for good.
+- **What changed.** The thread now keeps its sign until it has finished its turn (one millisecond, as in the game itself). Checked in the game on the save a player sent: the buildings are back, the queue stays empty, the frame rate is the same.
+- **If you switched the fix off** to get your buildings back, you can switch it on again (F10 → Fixes → "Game threads in turn (world)").
+- A line `world build: …` goes to `ufx.log` if that queue ever grows again.
+
+**The photo mode in a window of its own** (_not yet checked in the game_). The photo key (F6) or "Open the photo mode" on the cheats page opens a window with five sections in place of the menu's own: camera and picture, picture look, suits, motions, spawner. Every section has "Back to the menu".
+
+**For finding faults:** `[Debug] Bisect` in `UltimateFix.ini` leaves groups of the mod's hooks out for one run (the numbers are in the source, `main.cpp`). This is how the fault above was narrowed down.
+
 ## What's new in 0.7.13
 
 A small update after 0.7.12.
