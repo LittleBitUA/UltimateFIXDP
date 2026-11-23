@@ -360,11 +360,14 @@ HRESULT WINAPI H_FromMemoryEx(void* dev, const void* data, UINT size, UINT w, UI
 constexpr u32 kSmokeSheetHash = 0xD7A18744u;
 constexpr int kSmokeW = 256, kSmokeH = 128;
 u8 g_smokeAlpha[kSmokeW * kSmokeH];
-void* g_smokeSheet = nullptr;  // the newest one made (one reference is ours)
+// Every sheet made (the game loads the texture more than once and draws with each copy): all of them follow the settings. One
+// reference of each is ours, so a copy the game let go of stays valid; the oldest goes when the list is full.
+constexpr int kSmokeSheets = 16;
+void* g_smokeSheets[kSmokeSheets];
+int g_smokeSheetCount = 0;
 volatile LONG g_smokeDirty = 0;
 
-void SmokeFill() {
-    void* tex = g_smokeSheet;
+void SmokeFill(void* tex) {
     if (!tex) return;
     struct Locked { int pitch; void* bits; } lr = {0, nullptr};
     typedef HRESULT(WINAPI * LockFn)(void*, UINT, Locked*, const void*, DWORD);
@@ -410,10 +413,15 @@ bool SmokeSheetLoad(void* dev, const void* data, UINT size, void** out) {
     typedef ULONG(WINAPI * RefFn)(void*);
     void* tex = nullptr;
     if (((CreateFn)(*(void***)dev)[23])(dev, kSmokeW, kSmokeH, 1, 0, 21 /*A8R8G8B8*/, 1 /*managed*/, &tex, nullptr) < 0 || !tex) return false;
-    if (g_smokeSheet) ((RefFn)(*(void***)g_smokeSheet)[2])(g_smokeSheet);
+    if (g_smokeSheetCount == kSmokeSheets) {
+        ((RefFn)(*(void***)g_smokeSheets[0])[2])(g_smokeSheets[0]);
+        for (int i = 1; i < kSmokeSheets; ++i) g_smokeSheets[i - 1] = g_smokeSheets[i];
+        --g_smokeSheetCount;
+    }
     ((RefFn)(*(void***)tex)[1])(tex);
-    g_smokeSheet = tex;
-    SmokeFill();
+    g_smokeSheets[g_smokeSheetCount++] = tex;
+    SmokeFill(tex);
+    Log("textures: smoke sheet %d made (%08X)", g_smokeSheetCount, (u32)(uintptr_t)tex);
     static bool told = false;
     if (!told) {
         told = true;
@@ -650,7 +658,7 @@ bool InstallTextureOverride() {
 void SmokeTuneApply() {
     // from the menu (the picture's thread); a managed texture may be locked there between frames
     if (InterlockedExchange(&g_smokeDirty, 1) == 0) {
-        SmokeFill();
+        for (int i = 0; i < g_smokeSheetCount; ++i) SmokeFill(g_smokeSheets[i]);
         InterlockedExchange(&g_smokeDirty, 0);
     }
 }
