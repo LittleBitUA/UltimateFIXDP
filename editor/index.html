@@ -592,7 +592,7 @@ async function loadTiles() {
 
 function sizeMap() { const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1; cv.width = Math.max(10, r.width * d); cv.height = Math.max(10, r.height * d); drawMap(); }
 const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
-const toScr = (wx, wz) => [cv.width / 2 + (wx - view.x) * view.s * (devicePixelRatio || 1), cv.height / 2 - (wz - view.z) * view.s * (devicePixelRatio || 1)];
+const toScr = (wx, wz) => [cv.width / 2 + (wx - view.x) * view.s * (devicePixelRatio || 1), cv.height / 2 + (wz - view.z) * view.s * (devicePixelRatio || 1)];
 function points() {
   const p = [];
   Q.steps.forEach((s, i) => {
@@ -614,8 +614,8 @@ function drawMap() {
   const d = devicePixelRatio || 1, w = cv.width, h = cv.height; if (!w) return;
   const cGrid = css("--grid"), cGrid0 = css("--grid0"), cText = css("--text"), cOk = css("--ok"), cEdge = css("--mark-edge"), cAccent = css("--accent");
   cx.setTransform(1, 0, 0, 1, 0, 0); cx.fillStyle = css("--canvas"); cx.fillRect(0, 0, w, h);
-  if (TILES.ready && SET.map !== "grid") {  // the game's own map: 8 x 8 tiles of 10000 units, the middle of the world in the middle
-    const [mx, my] = toScr(-40000, 40000), size = 80000 * view.s * d;
+  if (TILES.ready && SET.map !== "grid") {  // the game's own map: 8 x 8 tiles of 10000 units; column = (x + 40000) / 10000, row = (z + 40000) / 10000 (FUN_005E16F0), so z grows down the screen
+    const [mx, my] = toScr(-40000, -40000), size = 80000 * view.s * d;
     cx.imageSmoothingEnabled = true; cx.drawImage(TILES.out || TILES.cv, mx, my, size, size);
   }
   const onMap = TILES.ready && SET.map !== "grid";
@@ -633,19 +633,19 @@ function drawMap() {
     cx.beginPath();
     if (p.k === 9) { cx.rect(sx - 5 * d, sy - 5 * d, 10 * d, 10 * d); } else cx.arc(sx, sy, 6 * d, 0, 7);
     cx.fillStyle = colors[p.k]; cx.fill(); cx.lineWidth = on ? 3 * d : 1 * d; cx.strokeStyle = on ? cAccent : cEdge; cx.stroke();
-    if (p.yaw != null) { cx.beginPath(); cx.moveTo(sx, sy); cx.lineTo(sx + Math.sin(p.yaw) * 14 * d, sy - Math.cos(p.yaw) * 14 * d); cx.strokeStyle = colors[p.k]; cx.lineWidth = 2 * d; cx.stroke(); }
+    if (p.yaw != null) { cx.beginPath(); cx.moveTo(sx, sy); cx.lineTo(sx + Math.sin(p.yaw) * 14 * d, sy + Math.cos(p.yaw) * 14 * d); cx.strokeStyle = colors[p.k]; cx.lineWidth = 2 * d; cx.stroke(); }
     cx.fillStyle = cText; cx.font = (on ? "600 " : "") + 12 * d + "px Segoe UI, sans-serif"; cx.fillText((p.i + 1) + (p.k === 9 ? " ⇢" : ""), sx + 9 * d, sy - 7 * d);
   }
   if (live && live.inGame) {
     const [sx, sy] = toScr(live.x / 1000, live.z / 1000), a = live.yaw / 1000;
-    cx.save(); cx.translate(sx, sy); cx.rotate(a); cx.beginPath(); cx.moveTo(0, -11 * d); cx.lineTo(7 * d, 8 * d); cx.lineTo(0, 4 * d); cx.lineTo(-7 * d, 8 * d); cx.closePath();
+    cx.save(); cx.translate(sx, sy); cx.rotate(Math.PI - a); cx.beginPath(); cx.moveTo(0, -11 * d); cx.lineTo(7 * d, 8 * d); cx.lineTo(0, 4 * d); cx.lineTo(-7 * d, 8 * d); cx.closePath();
     cx.fillStyle = cOk; cx.fill(); cx.strokeStyle = cEdge; cx.lineWidth = d; cx.stroke(); cx.restore();
     cx.fillStyle = cOk; cx.font = "600 " + 12 * d + "px Segoe UI, sans-serif"; cx.fillText(T("Йорк", "York"), sx + 11 * d, sy + 4 * d);
   }
 }
 let drag = null;
 cv.onmousedown = e => { drag = { x: e.clientX, y: e.clientY, vx: view.x, vz: view.z, moved: false }; cv.classList.add("drag"); };
-window.onmousemove = e => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true; view.x = drag.vx - dx / view.s; view.z = drag.vz + dy / view.s; drawMap(); };
+window.onmousemove = e => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true; view.x = drag.vx - dx / view.s; view.z = drag.vz - dy / view.s; drawMap(); };
 window.onmouseup = e => {
   if (!drag) return; cv.classList.remove("drag");
   if (!drag.moved) { const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1, mx = (e.clientX - r.left) * d, my = (e.clientY - r.top) * d; let best = null, bd = 16 * d;
