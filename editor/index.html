@@ -33,6 +33,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 #top .brand{font-weight:600;letter-spacing:.2px;margin-right:6px}
 #top .brand b{color:var(--accent)}
 #top .sp{flex:1}
+#top select,#top .tabs,#top .btn{flex:none}
 .btn{background:var(--head);border:1px solid var(--btn-edge);border-radius:var(--r);padding:3px 10px;cursor:pointer;min-height:24px}
 .btn:hover{background:var(--btn-hover)}
 .btn:active{background:var(--btn-active)}
@@ -99,6 +100,32 @@ textarea{resize:vertical;min-height:44px;line-height:1.35}
 .tools{display:flex;gap:4px;flex-wrap:wrap;padding:6px 8px;border-top:1px solid var(--line);flex:none}
 .legend{display:flex;gap:12px;color:var(--dim);font-size:12px;font-weight:400}
 .legend i{display:inline-block;width:14px;height:3px;vertical-align:middle;margin-right:4px}
+.tabs{display:flex;gap:2px;background:var(--field);border:1px solid var(--btn-edge);border-radius:6px;padding:2px;margin-right:6px}
+.tabs button{border:0;background:transparent;border-radius:4px;padding:3px 12px;cursor:pointer}
+.tabs button.on{background:var(--accent2);color:#fff}
+body.nodes #center{grid-template-rows:minmax(0,1fr)}
+body.nodes #center>:nth-child(1),body.nodes #center>:nth-child(2){display:none}
+#steps li.grp{cursor:default;color:var(--dim);font-size:11px;letter-spacing:.06em;text-transform:uppercase;padding-top:12px}
+#steps li.grp:hover{background:none}
+#steps li.ent{padding-left:28px}
+#steps li.ent .who{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#steps li.ent .at{color:var(--dim);font-size:12px}
+#steps i.pt{width:9px;height:9px;border-radius:50%;flex:none}
+.chk{grid-column:1/3;display:flex;gap:8px;align-items:flex-start;padding:3px 4px;border-radius:var(--r);cursor:pointer;line-height:1.35;user-select:text}
+.chk:hover{background:var(--panel2)}
+.chk i{width:9px;height:9px;border-radius:50%;flex:none;margin-top:4px;background:var(--ok)}
+.chk.bad i{background:var(--bad)} .chk.warn i{background:var(--warn);border-radius:2px;transform:rotate(45deg)}
+#flow .port{cursor:crosshair}
+#addmenu{position:fixed;width:270px;background:var(--panel);border:1px solid var(--edge);border-radius:6px;box-shadow:0 8px 24px rgba(0,0,0,.25);z-index:20;display:none;padding:4px}
+#addmenu.open{display:block}
+#addmenu .it{display:flex;gap:9px;align-items:center;padding:7px 8px;border-radius:var(--r);cursor:pointer}
+#addmenu .it:hover{background:var(--panel2)}
+#addmenu .it b{display:block;font-weight:600}
+#addmenu .it small{color:var(--dim);font-size:12px}
+#steps .acts{display:flex;gap:2px;flex:none}
+#steps .acts button{width:22px;height:22px;border:0;border-radius:4px;background:rgba(255,255,255,.18);color:#fff;cursor:pointer;padding:0;font-size:13px;line-height:1}
+#steps .acts button:hover{background:rgba(255,255,255,.34)}
+#steps .acts button[disabled]{opacity:.35;cursor:default}
 @media (max-width:1100px){#app{grid-template-columns:210px minmax(0,1fr) 300px}}
 </style>
 </head>
@@ -106,6 +133,7 @@ textarea{resize:vertical;min-height:44px;line-height:1.35}
 <div id="app">
   <div id="top">
     <span class="brand">Ultimate<b>FIX</b>DP · <span data-t="Редактор квестів|Quest editor"></span></span>
+    <span class="tabs"><button id="wsScene" data-t="Сцена|Scene"></button><button id="wsNodes" data-t="Вузли|Nodes"></button></span>
     <label data-t="Слот|Slot"></label>
     <select id="slot" style="width:150px"></select>
     <button class="btn pri" id="save" data-t="Зберегти|Save" title="Ctrl+S"></button>
@@ -123,19 +151,9 @@ textarea{resize:vertical;min-height:44px;line-height:1.35}
   </div>
 
   <div class="pane">
-    <div class="phead"><span data-t="Квест і кроки|Quest and steps"></span><span class="sp"></span><span id="dirty" style="color:var(--warn)"></span></div>
+    <div class="phead"><span data-t="Квест і кроки|Quest and steps"></span><span id="dirty" style="color:var(--warn);font-weight:400"></span><span class="sp"></span><button class="btn sm pri" id="addbtn" data-t="+ Крок|+ Step"></button></div>
     <div class="pbody"><ul id="steps"></ul></div>
-    <div class="tools">
-      <button class="btn sm" id="add0" data-t="+ Розмова|+ Talk"></button>
-      <button class="btn sm" id="add1" data-t="+ Репліка|+ Line"></button>
-      <button class="btn sm" id="add2" data-t="+ Місце|+ Place"></button>
-      <button class="btn sm" id="add3" data-t="+ Час|+ Time"></button>
-    </div>
-    <div class="tools">
-      <button class="btn sm" id="up">↑</button><button class="btn sm" id="down">↓</button>
-      <button class="btn sm" id="dup" data-t="Дублювати|Duplicate"></button>
-      <button class="btn sm" id="del" data-t="Видалити|Delete"></button>
-    </div>
+    <div id="addmenu"></div>
   </div>
 
   <div id="center">
@@ -143,7 +161,7 @@ textarea{resize:vertical;min-height:44px;line-height:1.35}
       <div class="phead"><span data-t="Мапа (вид згори)|Map (top view)"></span><span class="sp"></span>
         <button class="btn sm" id="fit" data-t="Показати все|Fit all"></button>
         <button class="btn sm" id="follow" data-t="До Йорка|To York"></button></div>
-      <div id="mapwrap"><canvas id="map"></canvas><div id="maphint" data-t="Колесо — масштаб, тягнути — рухати, клік по мітці — вибрати крок|Wheel zooms, drag pans, click a marker to select its step"></div></div>
+      <div id="mapwrap"><canvas id="map"></canvas><div id="maphint" data-t="Колесо — масштаб · тягнути мапу — рухати · тягнути мітку — пересунути її · подвійний клік — поставити вибраний крок|Wheel zooms · drag the map to pan · drag a marker to move it · double click puts the chosen step"></div></div>
     </div>
     <div></div>
     <div class="pane">
@@ -164,6 +182,7 @@ textarea{resize:vertical;min-height:44px;line-height:1.35}
     <span><span data-t="зона|zone"></span> <b id="zone">—</b></span>
     <span><span data-t="час|time"></span> <b id="clock">—</b></span>
     <span><span data-t="квест|quest"></span> <b id="qstate">—</b></span>
+    <span><span data-t="перевірка|check"></span> <b id="chk">—</b></span>
     <span class="sp"></span>
     <span id="ver"></span>
   </div>
@@ -325,8 +344,32 @@ function renderSteps() {
     li.children[1].className = "ico k" + s.Kind; li.children[1].textContent = KLET[s.Kind];
     li.children[2].textContent = stepName(s, i);
     li.onclick = () => select(i);
+    if (sel === i) {  // what can be done with the chosen step, in its own row
+      const acts = document.createElement("span"); acts.className = "acts";
+      const act = (sign, tip, fn, off) => { const b = document.createElement("button"); b.textContent = sign; b.title = tip; b.disabled = !!off; b.onclick = e => { e.stopPropagation(); fn(); }; acts.appendChild(b); };
+      act("↑", T("Вище", "Move up"), () => moveStep(-1), i === 0);
+      act("↓", T("Нижче", "Move down"), () => moveStep(1), i === Q.steps.length - 1);
+      act("⧉", T("Дублювати", "Duplicate"), dupStep, Q.steps.length >= MAXSTEPS);
+      act("✕", T("Видалити крок", "Delete the step"), removeStep);
+      li.appendChild(acts);
+    }
     ul.appendChild(li);
   });
+  const ents = [];
+  Q.steps.forEach((s, i) => {
+    if (s.Kind <= 1) { let e = ents.find(e => e.kind === "who" && e.id === s.Resident); if (!e) ents.push(e = { kind: "who", id: s.Resident, name: resName(s.Resident), col: "#5b8fd6", steps: [] }); e.steps.push(i); }
+    if (s.Car) { const c = lists.cars.find(c => c.id === s.Car); ents.push({ kind: "car", name: c ? c.name : T("машина", "car") + " " + s.Car, col: "#c98a4a", steps: [i] }); }
+    if (s.Kind === 2) ents.push({ kind: "place", name: s.Title || T("місце", "place"), col: "#5fb0e8", steps: [i] });
+  });
+  if (ents.length) {
+    const h = document.createElement("li"); h.className = "grp"; h.textContent = T("У сцені", "In the scene"); ul.appendChild(h);
+    for (const e of ents) {
+      const li = document.createElement("li"); li.className = "ent"; li.innerHTML = '<i class="pt"></i><span class="who"></span><span class="at"></span>';
+      li.children[0].style.background = e.col; li.children[1].textContent = e.name;
+      li.children[2].textContent = (e.steps.length > 1 ? T("кроки ", "steps ") : T("крок ", "step ")) + e.steps.map(i => i + 1).join(", ");
+      li.onclick = () => select(e.steps[0]); ul.appendChild(li);
+    }
+  }
   if (!Q.steps.length) { const e = document.createElement("div"); e.className = "empty"; e.textContent = T("Кроків ще немає. Додайте перший кнопками нижче.", "No steps yet. Add the first one with the buttons below."); ul.appendChild(e); }
 }
 function select(i) { sel = i; renderAll(); }
@@ -417,6 +460,9 @@ function renderProps() {
     const h4 = document.createElement("div"); h4.className = "hrow"; h4.append(pick(it, "v", itemOptions(it.v)), button(T("Дати", "Give"), () => needGame() && cmd("do=item&v=" + it.v + "&n=1")));
     row(g, T("Предмет", "Item"), h4);
     note(g, T("Ці кнопки нічого не міняють у квесті: вони для того, щоб швидко підготувати сцену під час перевірки.", "These buttons change nothing in the quest: they prepare the scene quickly while you test."));
+    const c = section("check", T("Перевірка квесту", "Quest check")), found = checkQuest();
+    for (const f of found) { const d = document.createElement("div"); d.className = "chk " + (f.bad ? "bad" : "warn"); d.innerHTML = "<i></i><span></span>"; d.children[1].textContent = (f.step >= 0 ? T("Крок ", "Step ") + (f.step + 1) + ": " : "") + f.text; if (f.step >= 0) d.onclick = () => select(f.step); c.appendChild(d); }
+    if (!found.length) { const d = document.createElement("div"); d.className = "chk"; d.innerHTML = "<i></i><span></span>"; d.children[1].textContent = T("Зауважень немає: усі кроки досяжні, тексти на місці, кожна гілка доходить до кінця.", "Nothing to note: every step can be reached, the texts are there, every branch comes to the end."); c.appendChild(d); }
     P.scrollTop = keep; return;
   }
   const s = Q.steps[sel], i = sel;
@@ -503,7 +549,98 @@ function renderProps() {
 
 // ---------- flow graph ----------
 function target(i, key) { const s = Q.steps[i], v = s[key]; if (v < 0) return Q.steps.length; if (v === 0) return i + 1; return v - 1; }
+const outs = s => (s.Kind === 0 ? ["NextYes", "NextNo"] : ["NextYes"]);
+function reach() {  // how many links from the first step to each one, -1 = no link leads there
+  const n = Q.steps.length, dep = Array(n).fill(-1); if (!n) return dep;
+  const q = [0]; dep[0] = 0;
+  while (q.length) { const i = q.shift(); for (const k of outs(Q.steps[i])) { const t = target(i, k); if (t < n && dep[t] < 0) { dep[t] = dep[i] + 1; q.push(t); } } }
+  return dep;
+}
+function checkQuest() {
+  const out = [], n = Q.steps.length, add = (bad, step, uk, en) => out.push({ bad, step, text: T(uk, en) });
+  if (!n) add(true, -1, "У квесті немає жодного кроку.", "The quest has no steps.");
+  const dep = reach(), ends = Array(n).fill(false);
+  for (let again = true; again;) { again = false; for (let i = 0; i < n; ++i) if (!ends[i] && outs(Q.steps[i]).some(k => { const t = target(i, k); return t >= n || ends[t]; })) { ends[i] = true; again = true; } }
+  Q.steps.forEach((s, i) => {
+    if (dep[i] < 0) add(false, i, "недосяжний, до нього не веде жоден перехід.", "cannot be reached, no link leads to it.");
+    else if (!ends[i]) add(true, i, "звідси квест не може дійти до кінця (переходи ходять по колу).", "the quest cannot come to its end from here (the links go round).");
+    if (s.Kind <= 1 && !String(s.Line || "").trim()) add(true, i, "немає тексту репліки.", "the line has no text.");
+    if (s.Kind === 0 && !String(s.Question || "").trim()) add(false, i, "немає питання, вибір з'явиться без нього.", "there is no question, the choice comes without one.");
+    if (s.Kind === 2 && !s.X && !s.Z) add(true, i, "місце не задано (X і Z нульові).", "the place is not set (X and Z are zero).");
+    for (const k of outs(s)) if (s[k] > n) add(true, i, "перехід веде на крок " + s[k] + ", якого немає.", "a link leads to step " + s[k] + ", which is not there.");
+    const it = lists.items.find(c => c.id === s.GiveItem); if (it && it.max === 0) add(true, i, "нагороду «" + it.name + "» гра не дає.", "the game gives no \"" + it.name + "\" as a reward.");
+    if (s.Car && s.CarPlace === 2 && !s.CarX && !s.CarZ) add(true, i, "місце машини не задано.", "the car's place is not set.");
+    if (s.Teleport && !s.TX && !s.TZ) add(true, i, "місце, куди перенести Йорка, не задано.", "the place to move York to is not set.");
+  });
+  return out;
+}
+// The Nodes workspace: steps in columns by how far they are from the first one; an answer's circle is dragged onto a step to link it.
+let link = null;
+function drawNodes() {
+  if (link) return;
+  const svg = $("flow"), n = Q.steps.length, W = 214, GX = 76, SLOT = 104, X0 = 150, Y0 = 26;
+  const ns = "http://www.w3.org/2000/svg", mk = (t, a, txt) => { const e = document.createElementNS(ns, t); for (const k in a) e.setAttribute(k, a[k]); if (txt != null) e.textContent = txt; return e; };
+  const cOk = css("--ok"), cBad = css("--bad"), cEdge = css("--edge"), cText = css("--text"), cDim = css("--dim"), cNode = css("--node"), cEnd = css("--node-end"), cAcc = css("--accent");
+  const dep = reach(), maxD = Math.max(0, ...dep), cols = [], pos = [], lost = [];
+  dep.forEach((d, i) => { if (d < 0) lost.push(i); else (cols[d] = cols[d] || []).push(i); });
+  const rows = Math.max(1, ...cols.map(c => (c || []).length));
+  cols.forEach((c, d) => (c || []).forEach((i, r) => { pos[i] = { x: X0 + d * (W + GX), y: Y0 + r * SLOT }; }));
+  const lostY = Y0 + rows * SLOT + 34;
+  lost.forEach((i, r) => { pos[i] = { x: X0 + r * (W + 24), y: lostY }; });
+  const endX = X0 + (n ? maxD + 1 : 0) * (W + GX), end = { x: endX, y: Y0 + 20 };
+  const width = Math.max(endX + 170, X0 + lost.length * (W + 24)), height = (lost.length ? lostY + SLOT : Y0 + rows * SLOT) + 20;
+  svg.style.width = width + "px"; svg.style.height = height + "px"; svg.style.minWidth = "100%"; svg.style.minHeight = "100%";
+  svg.innerHTML = "";
+  const wires = mk("g", {}), nodes = mk("g", {}); svg.append(wires, nodes);
+  const curve = (x1, y1, x2, y2) => { const b = Math.max(40, Math.abs(x2 - x1) / 2); return `M${x1},${y1} C${x1 + b},${y1} ${x2 - b},${y2} ${x2},${y2}`; };
+  const inPort = t => (t >= n ? [end.x, end.y + 17] : [pos[t].x, pos[t].y + 34]);
+  // start and end
+  const st = mk("g", {}); st.append(mk("rect", { x: 20, y: Y0 + 17, width: 96, height: 34, rx: 6, fill: "#3f6d2f", stroke: cEdge }), mk("text", { x: 34, y: Y0 + 39, fill: "#fff", "font-size": 13 }, T("Початок", "Start"))); nodes.appendChild(st);
+  if (n) wires.appendChild(mk("path", { d: curve(116, Y0 + 34, pos[0].x, pos[0].y + 34), fill: "none", stroke: cOk, "stroke-width": 2 }));
+  const eg = mk("g", { "data-node": "end" }); eg.append(mk("rect", { x: end.x, y: end.y, width: 110, height: 34, rx: 6, fill: cEnd, stroke: cEdge }), mk("text", { x: end.x + 14, y: end.y + 22, fill: cText, "font-size": 13 }, T("Кінець", "The end"))); nodes.appendChild(eg);
+  if (lost.length) nodes.appendChild(mk("text", { x: X0, y: lostY - 12, fill: cDim, "font-size": 12 }, T("Недосяжні кроки: до них не веде жоден перехід", "Steps no link leads to")));
+  const colors = ["#e8a33d", "#d9c85a", "#5fb0e8", "#b58ae6"], cut = (t, m) => (t.length > m ? t.slice(0, m - 1) + "…" : t);
+  Q.steps.forEach((s, i) => {
+    const p = pos[i], two = s.Kind === 0, H = two ? 92 : 70, run = live && live.running && live.slot === slot && live.step === i + 1;
+    const g = mk("g", { "data-node": i, style: "cursor:pointer" });
+    g.append(mk("rect", { x: p.x, y: p.y, width: W, height: H, rx: 6, fill: cNode, stroke: i === sel ? cAcc : run ? cOk : cEdge, "stroke-width": i === sel || run ? 2.5 : 1, "stroke-dasharray": dep[i] < 0 ? "5 4" : "none" }),
+      mk("path", { d: `M${p.x + 1},${p.y + 22} v-15 a6,6 0 0 1 6,-6 h${W - 14} a6,6 0 0 1 6,6 v15 z`, fill: colors[s.Kind] }),
+      mk("text", { x: p.x + 10, y: p.y + 16, fill: "#111", "font-size": 12, "font-weight": 600 }, (i + 1) + " · " + KIND()[s.Kind]),
+      mk("text", { x: p.x + 10, y: p.y + 40, fill: cText, "font-size": 13 }, cut(stepName(s, i), 28)));
+    if (s.Kind <= 1) g.appendChild(mk("text", { x: p.x + W - 10, y: p.y + 16, fill: "#111", "font-size": 12, "text-anchor": "end" }, cut(resName(s.Resident), 12)));
+    g.appendChild(mk("circle", { cx: p.x, cy: p.y + 34, r: 5, fill: cDim, stroke: cEdge }));
+    outs(s).forEach((k, o) => {
+      const y = p.y + 60 + o * 22, t = Math.min(target(i, k), n), col = o ? cBad : cOk;
+      const label = (two ? cut((o ? s.No : s.Yes) || (o ? T("Ні", "No") : T("Так", "Yes")), 16) + "  " : "") + "→ " + (t >= n ? T("кінець", "end") : t + 1);
+      g.appendChild(mk("text", { x: p.x + W - 12, y: y + 4, fill: col, "font-size": 12, "text-anchor": "end" }, label));
+      const [tx, ty] = inPort(t);
+      wires.appendChild(mk("path", { d: curve(p.x + W, y, tx, ty), fill: "none", stroke: col, "stroke-width": 2, "stroke-dasharray": o ? "7 5" : "none", opacity: .9 }));
+      const port = mk("circle", { cx: p.x + W, cy: y, r: 6, fill: col, stroke: cEdge, class: "port" });
+      port.onmousedown = e => { e.stopPropagation(); e.preventDefault(); link = { i, k, x: p.x + W, y, col, path: mk("path", { fill: "none", stroke: col, "stroke-width": 2.5, "pointer-events": "none" }) }; svg.appendChild(link.path); };
+      g.appendChild(port);
+    });
+    g.onclick = () => select(i);
+    nodes.appendChild(g);
+  });
+  svg.onmousemove = e => { if (!link) return; const r = svg.getBoundingClientRect(); link.path.setAttribute("d", curve(link.x, link.y, e.clientX - r.left, e.clientY - r.top)); };
+}
+window.addEventListener("mouseup", e => {
+  if (!link) return;
+  const l = link, hit = e.target && e.target.closest ? e.target.closest("[data-node]") : null; link = null;
+  if (hit) { const v = hit.dataset.node, s = Q.steps[l.i]; if (v === "end") s[l.k] = -1; else if (+v !== l.i) s[l.k] = +v === l.i + 1 ? 0 : +v + 1; changed(); } else drawFlow();
+});
+let WS = "scene"; try { WS = localStorage.getItem("ufx.ws") || "scene"; } catch (e) {}
+if (/[?&]ws=nodes/.test(location.search)) WS = "nodes";
+{ const m = /[?&]pick=(\d+)/.exec(location.search); if (m) setTimeout(() => select(+m[1] - 1), 1500); }
+function setWs(w) {
+  WS = w; try { localStorage.setItem("ufx.ws", w); } catch (e) {}
+  document.body.classList.toggle("nodes", w === "nodes"); $("wsScene").classList.toggle("on", w === "scene"); $("wsNodes").classList.toggle("on", w === "nodes");
+  drawFlow(); if (w === "scene") sizeMap();
+}
 function drawFlow() {
+  const found = checkQuest(), bad = found.filter(f => f.bad).length; $("chk").textContent = !found.length ? T("без зауважень", "nothing to note") : found.length + (bad ? T(" (помилок: ", " (errors: ") + bad + ")" : ""); $("chk").style.color = bad ? "var(--bad)" : "";
+  if (WS === "nodes") return drawNodes();
+  $("flow").style.width = ""; $("flow").style.height = ""; $("flow").style.minWidth = ""; $("flow").style.minHeight = ""; $("flow").onmousemove = null;
   const svg = $("flow"), n = Q.steps.length, W = 150, H = 44, GAP = 34, X0 = 20, Y0 = 62;
   const width = X0 * 2 + (n + 1) * (W + GAP);
   svg.setAttribute("width", Math.max(width, $("flowwrap").clientWidth)); svg.setAttribute("height", 180);
@@ -611,10 +748,10 @@ const toScr = (wx, wz) => [cv.width / 2 + (wx - view.x) * view.s * (devicePixelR
 function points() {
   const p = [];
   Q.steps.forEach((s, i) => {
-    if (s.Kind <= 1 && s.Placed) p.push({ i, x: s.X / 1000, z: s.Z / 1000, k: s.Kind, yaw: s.Yaw / 1000 });
-    if (s.Kind === 2) p.push({ i, x: s.X / 1000, z: s.Z / 1000, k: 2, r: s.Radius * 4 });
-    if (s.Teleport) p.push({ i, x: s.TX / 1000, z: s.TZ / 1000, k: 9 });
-    if (s.Car && s.CarPlace === 2) p.push({ i, x: s.CarX / 1000, z: s.CarZ / 1000, k: 8 });
+    if (s.Kind <= 1 && s.Placed) p.push({ i, x: s.X / 1000, z: s.Z / 1000, k: s.Kind, yaw: s.Yaw / 1000, kx: "X", kz: "Z" });
+    if (s.Kind === 2) p.push({ i, x: s.X / 1000, z: s.Z / 1000, k: 2, r: s.Radius * 4, kx: "X", kz: "Z" });
+    if (s.Teleport) p.push({ i, x: s.TX / 1000, z: s.TZ / 1000, k: 9, kx: "TX", kz: "TZ" });
+    if (s.Car && s.CarPlace === 2) p.push({ i, x: s.CarX / 1000, z: s.CarZ / 1000, k: 8, kx: "CarX", kz: "CarZ" });
   });
   return p;
 }
@@ -659,15 +796,35 @@ function drawMap() {
     cx.fillStyle = cOk; cx.font = "600 " + 12 * d + "px Segoe UI, sans-serif"; cx.fillText(T("Йорк", "York"), sx + 11 * d, sy + 4 * d);
   }
 }
+// The mouse on the map: a marker is dragged to a new place (its X and Z; the height stays as it was), the empty map is panned,
+// a click picks a step, a double click puts the chosen step's own thing there.
 let drag = null;
-cv.onmousedown = e => { drag = { x: e.clientX, y: e.clientY, vx: view.x, vz: view.z, moved: false }; cv.classList.add("drag"); };
-window.onmousemove = e => { if (!drag) return; const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true; view.x = drag.vx - dx / view.s; view.z = drag.vz - dy / view.s; drawMap(); };
+function mapAt(e) { const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1, mx = (e.clientX - r.left) * d, my = (e.clientY - r.top) * d; return { mx, my, x: view.x + (mx - cv.width / 2) / (view.s * d), z: view.z + (my - cv.height / 2) / (view.s * d) }; }
+function markerAt(e) {
+  const d = devicePixelRatio || 1, m = mapAt(e); let best = null, bd = 14 * d;
+  for (const p of points()) { const [sx, sy] = toScr(p.x, p.z), dist = Math.hypot(sx - m.mx, sy - m.my); if (dist < bd || (dist === bd && p.i === sel)) { bd = dist; best = p; } }
+  return best;
+}
+cv.onmousedown = e => { drag = { x: e.clientX, y: e.clientY, vx: view.x, vz: view.z, moved: false, pt: markerAt(e) }; cv.classList.add("drag"); };
+window.onmousemove = e => {
+  if (!drag) { if (e.target === cv) cv.style.cursor = markerAt(e) ? "move" : ""; return; }
+  const dx = e.clientX - drag.x, dy = e.clientY - drag.y; if (Math.abs(dx) + Math.abs(dy) > 3) drag.moved = true;
+  if (drag.pt) { if (drag.moved) { const m = mapAt(e), s = Q.steps[drag.pt.i]; s[drag.pt.kx] = Math.round(m.x * 1000); s[drag.pt.kz] = Math.round(m.z * 1000); } }
+  else { view.x = drag.vx - dx / view.s; view.z = drag.vz - dy / view.s; }
+  drawMap();
+};
 window.onmouseup = e => {
   if (!drag) return; cv.classList.remove("drag");
-  if (!drag.moved) { const r = cv.getBoundingClientRect(), d = devicePixelRatio || 1, mx = (e.clientX - r.left) * d, my = (e.clientY - r.top) * d; let best = null, bd = 16 * d;
-    for (const p of points()) { const [sx, sy] = toScr(p.x, p.z), dist = Math.hypot(sx - mx, sy - my); if (dist < bd) { bd = dist; best = p; } }
-    if (best) select(best.i); }
-  drag = null;
+  const g = drag; drag = null;
+  if (g.pt && g.moved) { sel = g.pt.i; changed(); }
+  else if (!g.moved) { const best = g.pt || markerAt(e); if (best) select(best.i); }
+};
+cv.ondblclick = e => {
+  if (sel < 0 || markerAt(e)) return;
+  const s = Q.steps[sel], m = mapAt(e);
+  if (s.Kind <= 1) { if (!s.Placed && live && live.inGame) s.Y = live.y; s.Placed = 1; }
+  else if (s.Kind !== 2) { toast(T("У цього кроку немає свого місця на мапі", "This step has no place of its own on the map")); return; }
+  s.X = Math.round(m.x * 1000); s.Z = Math.round(m.z * 1000); changed();
 };
 cv.onwheel = e => { e.preventDefault(); const k = e.deltaY < 0 ? 1.2 : 1 / 1.2; view.s = Math.min(8, Math.max(0.0005, view.s * k)); drawMap(); };
 
@@ -680,9 +837,20 @@ $("reload").onclick = () => { if (!dirty || confirm(T("Відкинути нез
 $("run").onclick = async () => { if (needGame() && (!dirty || await save())) cmd("do=run&slot=" + slot); };
 $("restart").onclick = async () => { if (needGame() && (!dirty || await save())) cmd("do=restart&slot=" + slot); };
 $("stop").onclick = () => cmd("do=stop&slot=" + slot);
-for (let k = 0; k < 4; ++k) $("add" + k).onclick = () => addStep(k);
-$("del").onclick = removeStep; $("up").onclick = () => moveStep(-1); $("down").onclick = () => moveStep(1);
-$("dup").onclick = () => { if (sel < 0 || Q.steps.length >= MAXSTEPS) return; shiftLinks(sel + 1, 1); Q.steps.splice(sel + 1, 0, JSON.parse(JSON.stringify(Q.steps[sel]))); sel++; setDirty(true); renderAll(); };
+function dupStep() { if (sel < 0 || Q.steps.length >= MAXSTEPS) return; shiftLinks(sel + 1, 1); Q.steps.splice(sel + 1, 0, JSON.parse(JSON.stringify(Q.steps[sel]))); sel++; setDirty(true); renderAll(); }
+$("addbtn").onclick = e => {
+  const m = $("addmenu"), r = e.currentTarget.getBoundingClientRect();
+  const what = [T("Розмова з вибором|Персонаж говорить і питає, гравець обирає одну з двох відповідей", "Talk with a choice|A character speaks and asks, the player picks one of two answers"),
+    T("Репліка|Персонаж каже одну фразу, без вибору", "A line|A character says one line, no choice"),
+    T("Дійти до місця|Крок виконано, коли Йорк опиниться в колі на мапі", "Reach a place|Done when York is inside a circle on the map"),
+    T("Дочекатися години|Крок виконано, коли в грі настане задана година", "Wait for an hour|Done when the game's clock comes to the set hour")];
+  m.innerHTML = "";
+  what.forEach((w, k) => { const [name, hint] = w.split("|"), d = document.createElement("div"); d.className = "it"; d.innerHTML = '<span class="ico k' + k + '"></span><span><b></b><small></small></span>';
+    d.children[0].textContent = KLET[k]; d.querySelector("b").textContent = name; d.querySelector("small").textContent = hint; d.onclick = () => { m.classList.remove("open"); addStep(k); }; m.appendChild(d); });
+  m.style.left = Math.max(4, r.right - 270) + "px"; m.style.top = r.bottom + 4 + "px"; m.classList.toggle("open");
+};
+document.addEventListener("mousedown", e => { if (!e.target.closest("#addmenu") && e.target.id !== "addbtn") $("addmenu").classList.remove("open"); });
+document.addEventListener("keydown", e => { if (e.key === "Delete" && sel >= 0 && !/INPUT|TEXTAREA|SELECT/.test(document.activeElement.tagName)) removeStep(); });
 $("fit").onclick = fit;
 $("follow").onclick = () => { if (!needGame()) return; view.x = live.x / 1000; view.z = live.z / 1000; drawMap(); };
 $("export").onclick = () => { const a = document.createElement("a"); a.href = URL.createObjectURL(new Blob([toIni(Q)], { type: "text/plain" })); a.download = "mission" + slot + ".ini"; a.click(); setTimeout(() => URL.revokeObjectURL(a.href), 2000); };
@@ -698,8 +866,9 @@ $("setTheme").onchange = e => { SET.theme = e.target.value; saveSet(); applySet(
 $("setAccent").oninput = e => { SET.accent = e.target.value; saveSet(); applySet(); };
 $("setAccentOff").onclick = () => { SET.accent = ""; saveSet(); applySet(); $("setAccent").value = css("--accent"); };
 $("setMap").onchange = e => { SET.map = e.target.value; saveSet(); if (SET.map !== "grid" && online) loadTiles(); retint(); drawMap(); };
+$("wsScene").onclick = () => setWs("scene"); $("wsNodes").onclick = () => setWs("nodes");
 applySet();
-applyLang(); fillSlots(); renderAll();
+applyLang(); fillSlots(); renderAll(); setWs(WS);
 loadSlot(1).then(fillSlots);
 poll(); setInterval(poll, 500);
 </script>

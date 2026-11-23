@@ -411,7 +411,6 @@ const wchar_t* MissionState() { return g_state[g_cfg.language == 1 ? 1 : 0]; }
 void MissionTalkOver(bool firstAnswer) { g_talkDone = firstAnswer ? 2 : 1; }
 
 void MissionTick(void* player) {
-    (void)player;
     const int req = g_request;
     if (req) {
         g_request = 0;
@@ -432,6 +431,18 @@ void MissionTick(void* player) {
     if (g_phase == 0) {
         // a step with a character begins in free play only (the doll goes with a scene)
         if (*(volatile u32*)(uintptr_t)kGameplayModeVa != 3 || (*(volatile u32*)(uintptr_t)kEventModeVa & 0x80000000u)) return;
+        // behind the wheel (player state 87h, 88h while getting out) a character would be put under the car: the step waits
+        const u32 state = player ? *(volatile u32*)((u8*)player + 0x654) : 0;
+        if (m.steps[g_step].kind <= 1 && (state == 0x87 || state == 0x88)) {
+            static int told = -1;
+            if (told != g_step) {
+                told = g_step;
+                Log("mission: step %d waits: York is in a car", g_step + 1);
+                ShowNotice(L"Квест чекає", L"The quest waits", L"Вийдіть з машини: персонаж з'явиться, коли Йорк стоятиме на землі.",
+                           L"Get out of the car: the character appears once York stands on the ground.", 5);
+            }
+            return;
+        }
         BeginStep(g_step);
         return;
     }
