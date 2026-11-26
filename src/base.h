@@ -314,6 +314,7 @@ bool DsOutputReady();
 void DsSetRumble(unsigned char strong, unsigned char weak);
 void AdaptiveTriggerFrame();
 bool PlayerStateNow(u32* state);
+void CarShoulderButtons(DWORD* buttons);  // combat_strafe.cpp: L1/R1 also brake and gas while TriggerDrive holds the car layout
 u32 PlayerObjectNow();     // combat_strafe.cpp: the player object of the last player update, 0 outside the world
 void FlyHold(void* player);  // freecam.cpp: the fly cheat holds York at the start of the player update
 bool DualSenseToJoy(void* joyInfoEx);

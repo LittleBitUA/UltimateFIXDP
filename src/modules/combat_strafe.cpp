@@ -402,6 +402,7 @@ void SuitTick(void* player) {
     Log("suit: %s now wears suit %d variant %d", kind == 4 ? "Zach" : "York", digit, v);
 }
 
+volatile bool g_carLayout = false;  // behind the wheel with gas and brake on the triggers: the shoulder buttons press them too
 volatile bool g_triggerLayout = false;  // aim and fire are on the trigger buttons: the trigger axis must not reach the game as well
 
 // The pad layout with aim and fire on the triggers: the four binding globals are rewritten. Behind the wheel the car reads the
@@ -428,7 +429,8 @@ void LayoutTick(void* player) {
     for (int i = 0; i < 4; ++i) *(volatile u32*)(uintptr_t)va[i] = want == 1 || (want == 2 && i < 2) ? triggers[i] : orig[i];
     applied = want;
     g_triggerLayout = want != 0;
-    Log("input: pad layout %s", want == 1 ? "aim L2, fire R2, run L1, hold breath R1" : want == 2 ? "car: brake L2, gas R2, the rest the game's" : "the game's");
+    g_carLayout = want == 2;
+    Log("input: pad layout %s", want == 1 ? "aim L2, fire R2, run L1, hold breath R1" : want == 2 ? "car: brake L2 or L1, gas R2 or R1, the rest the game's" : "the game's");
 }
 
 volatile DWORD g_playerTickMs = 0;  // when the player object was last updated: the main menu and the title screen have none
@@ -451,6 +453,14 @@ void __cdecl StrafeWorker(void* player) {
 }  // namespace
 
 bool TriggerLayoutActive() { return g_triggerLayout; }
+// Behind the wheel with TriggerDrive the game asks buttons 10 and 11 (L2, R2) for the brake and the gas, and the shoulder buttons,
+// which were the brake and the gas of the game's own layout, were left with nothing: a player took them for broken. The pad hook
+// presses 10 and 11 along with 4 and 5 (L1, R1) there, so both pairs drive the car.
+void CarShoulderButtons(DWORD* buttons) {
+    if (!g_carLayout) return;
+    if (*buttons & (1u << 4)) *buttons |= 1u << 10;
+    if (*buttons & (1u << 5)) *buttons |= 1u << 11;
+}
 
 // True while a game world is being played (the player is updated): the main menu and the title screen draw through the same final
 // composite, but their depth buffer holds no scene.
