@@ -296,7 +296,7 @@ static const char kDefaultIni[] =
     "; at 500. Higher values draw more objects: slightly more load on the processor. Applied at once.\r\n"
     "FarClass3=5000\r\n"
     "FarClass4=1000\r\n"
-    "FarClass5=2000\r\n"
+    "FarClass5=3000\r\n"
     "; Radius in which objects are updated (AI, animation) as a multiple of the game's 1000 units: 1..3.\r\n"
     "ActivationScale=1\r\n"
     "; Detailed models stay visible farther away, as a multiple of the game's distance: 1..4.\r\n"
@@ -736,7 +736,16 @@ void LoadConfig(const wchar_t* ini) {
     g_cfg.textDump = (int)GetPrivateProfileIntW(L"Language", L"TextDump", 0, ini);
     g_cfg.farClass3 = (int)GetPrivateProfileIntW(L"World", L"FarClass3", 5000, ini);
     g_cfg.farClass4 = (int)GetPrivateProfileIntW(L"World", L"FarClass4", 1000, ini);
-    g_cfg.farClass5 = (int)GetPrivateProfileIntW(L"World", L"FarClass5", 2000, ini);
+    g_cfg.farClass5 = (int)GetPrivateProfileIntW(L"World", L"FarClass5", 3000, ini);
+    // An ini made by an early version still says 500 (the game's own value: doors, booths and vending machines not drawn until
+    // one stands next to them), and one of 0.7.x says 2000. Both were defaults nobody chose: moved once to the present one.
+    if (GetPrivateProfileIntW(L"World", L"FarClass5Migrated", 0, ini) == 0) {
+        WritePrivateProfileStringW(L"World", L"FarClass5Migrated", L"1", ini);
+        if (g_cfg.farClass5 == 500 || g_cfg.farClass5 == 2000) {
+            g_cfg.farClass5 = 3000;
+            WritePrivateProfileStringW(L"World", L"FarClass5", L"3000", ini);
+        }
+    }
     // Never below what the game itself uses: a lower value only makes the world vanish sooner.
     if (g_cfg.farClass3 < 5000) g_cfg.farClass3 = 5000;
     if (g_cfg.farClass4 < 1000) g_cfg.farClass4 = 1000;
