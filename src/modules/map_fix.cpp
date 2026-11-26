@@ -350,9 +350,21 @@ __attribute__((naked)) void MapArrowStub() {
 
 namespace ufx {
 
+// The zoom gauge under "Greenvale Map Viewer". The game places its marker at (zoom - 1.0) / 2.5 of the track (0065DBC1..0065DBD7:
+// `fsub qword [0076FCA8h]` = 1.0, `fdiv qword [00773450h]` = 2.5, its own range 1.0..3.5). With the zoom going below 1.0 the
+// marker left the track to the left (issue #5). The two operands now point at these: the mod's minimum and its whole range.
+volatile double g_mapGaugeMin = 1.0, g_mapGaugeRange = 2.5;
+
 void ApplyMapFix() {
     g_mapOrient = g_cfg.mapOrientation;
     g_mapMinZoom = (float)g_cfg.mapMinZoom / 100.0f;
+    {
+        double lo = (double)g_cfg.mapMinZoom / 100.0;
+        if (lo < 0.05) lo = 0.05;
+        if (lo > 1.0) lo = 1.0;
+        g_mapGaugeMin = lo;
+        g_mapGaugeRange = 3.5 - lo;
+    }
     g_mapDefaultZoom = (float)g_cfg.mapDefaultZoom / 100.0f;
 }
 
@@ -430,6 +442,15 @@ bool InstallMapFix() {
         return false;
     }
     g_mapFixInstalled = 1;
+    {  // the zoom gauge follows the mod's zoom range (not part of the all-or-nothing set above: only the gauge depends on it)
+        static const u8 kGauge[14] = {0xDC, 0x25, 0xA8, 0xFC, 0x76, 0x00, 0xDE, 0xC9, 0xDC, 0x35, 0x50, 0x34, 0x77, 0x00};
+        bool gauge = false;
+        if (BytesMatch(0x65DBC9, kGauge, sizeof kGauge)) {
+            const u32 lo = (u32)(uintptr_t)&g_mapGaugeMin, range = (u32)(uintptr_t)&g_mapGaugeRange;
+            gauge = WriteCode(0x65DBCB, (const u8*)&lo, 4) && WriteCode(0x65DBD3, (const u8*)&range, 4);
+        }
+        Log("map: the zoom gauge %s", gauge ? "follows the mod's zoom range" : "is the game's (bytes differ from DP.exe 1.01b)");
+    }
     Log("map: all 64 tiles, zoom down to %d%%, orientation %d, pan inside Greenvale; how long the tiles take is logged at each open",
         g_cfg.mapMinZoom, g_cfg.mapOrientation);
     return true;
