@@ -35,18 +35,20 @@ No installer: press **F10** in game and everything is there. The mod also gives 
 
 #### Stability and speed
 
-- 🛡️ **Stability** — the crash after cutscenes, the zero-frame-time freeze and the Alt+Tab hang are fixed; a crash handler and a freeze watchdog write a dump if anything still goes wrong
+- 🛡️ **Stability** — the crash after cutscenes, the zero-frame-time freeze, the Alt+Tab hang and the hang after the video device is lost are fixed; a crash handler and a freeze watchdog write a dump if anything still goes wrong
 - 🚀 **Low FPS fixed** — on some PCs the game sat at ~45 FPS with an idle GPU; **45 → 180 FPS** in our test
 - ⏱️ **60 FPS limit at any refresh rate** — at 144 / 180 Hz the game used to run too fast
 - 🏎️ **High FPS physics** — 120–180 FPS with the car, doors, animations and timers at their normal speed; the FPS is unlocked by default
+- ⏳ **Shorter loading screens** — the mod builds the missing mipmaps of the game's textures itself in memory; loading screens are several times shorter and the pause map fills in at once
 - 💾 **Safe saves** — atomic writes, 60 backups named by episode, chapter and play time, automatic restore of a damaged `dp.sav`
 
 #### Picture
 
 - 🖥️ **Real output resolution** — the picture and the HUD at your monitor's resolution instead of 1280×720, borderless window, no DPI blur
-- ✨ **Graphics** — supersampling 1×–3×, horizon-based ambient occlusion (HBAO), SMAA and FXAA, adaptive sharpening (AMD RCAS), wet reflections, 16× anisotropic filtering, sharper shadows, longer draw distance
+- ✨ **Graphics** — supersampling 1×–3×, horizon-based ambient occlusion (HBAO), SMAA and FXAA, adaptive sharpening (AMD RCAS), wet reflections, 16× anisotropic filtering, sharper shadows, longer draw distance (doors of buildings no longer missing from across the street)
 - 📺 **Xbox 360 look** — the console's colour grading and TV gamma on top of the PC picture
 - 🌫️ **No more flickering far textures** — the game's camera wasted depth precision; far roads, roofs and decals no longer fight each other
+- 💨 **The prologue's smoke is smoke again** — a dark smoke with grey wisps as on the console instead of a solid black blob (with a texture found by Darkanioid1997)
 - 🌊 **The river has water again** — ripples, glints and reflection as on the Xbox 360 instead of a flat blue strip (in its scene by default, everywhere if you choose)
 
 #### Controls and camera
@@ -83,8 +85,9 @@ No installer: press **F10** in game and everything is there. The mod also gives 
 #### Mods, updates and tools
 
 - 🧩 **Mod manager** — `UltimateFix\mods\<mod>\`: translations (SWERY Localization Tool files), texture packs, or any game file by its name (`fontwide.xpc`, `mes_all.mes`); order and on/off in F10, each mod with its picture and description — see [Making a mod](#making-a-mod)
+- 🖼️ **The texture mod "Fix" by Darkanioid1997 comes with the mod** — the prologue's smoke texture and Greenvale signs from the Xbox 360 version, switched on by itself
 - 🔄 **Updates itself** — a new version is offered on the start card; F9 downloads it, replaces the files and restarts the game
-- 📊 **Tools** — frame statistics panel, built-in profiler, crash dumps and a readable log for support
+- 📊 **Tools** — an FPS panel in the corner you choose, frame statistics panel, built-in profiler, crash dumps and a readable log for support
 - 🇺🇦🇬🇧 **Two languages** — Ukrainian and English, switched in the menu
 
 ### Engine fixes (RE-based)
@@ -165,6 +168,29 @@ port with the Xbox 360 original:
   default since 0.7.11); switched in the F10 menu at once.
   Checked in the game at the river; other water (the lake, puddles,
   interiors) has not been compared yet.
+
+- 💨 **The black blob in the prologue** (0.7.17) — on the console the smoke by
+  the door is a sheet multiplied by a mask, so it is wispy with soft edges. The
+  PC port draws the sheet and the mask as two separate black sheets, and they
+  add up to a solid blob with the sheet's straight rim showing; a solid black
+  shape behind the door, hidden in the console's dense smoke, sticks out too.
+  The mod makes the smoke sheet again from the game's own (thinner, with a soft
+  rim), hides that shape while the prologue is loaded, and the bundled Fix mod
+  brings the grey smoke texture of the Xbox 360 version. Checked in the game.
+- ⏳ **Loading screens** (0.7.18) — the game stores most world textures
+  without mipmaps, which makes far surfaces shimmer, so the mod makes them at
+  load. Done through the system's D3DX library that went level by level through
+  the video card, and each step waited for the frame on screen: most of a
+  loading screen at 60 Hz. The mod now builds the levels itself in memory and
+  hands the texture over once.
+- 🔁 **The endless device reset** (0.7.19) — when the video device is lost the
+  game resets it and, if the reset is refused, tries again every 50 ms forever.
+  Anything left on the device makes it refuse; the mod left its timing queries
+  there. They are released before every reset now.
+- 🧭 **A second navigation lookup without bounds** (0.7.19) — besides the one
+  CrashFix found, another function of the navigation table reads a node by
+  its number unchecked, and the game's character code asks it for node FFFFh
+  ("none"). Guarded the same way; found from a player's crash dump.
 
 ### What's new in 0.7.19
 
@@ -334,18 +360,20 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 
 #### Стабільність і швидкість
 
-- 🛡️ **Стабільність** — виправлено виліт після катсцен, зависання на нульовому кадрі й зависання після Alt+Tab; обробник вильотів і сторож зависань пишуть дамп, якщо щось усе ж трапиться
+- 🛡️ **Стабільність** — виправлено виліт після катсцен, зависання на нульовому кадрі, зависання після Alt+Tab і після втрати відеопристрою; обробник вильотів і сторож зависань пишуть дамп, якщо щось усе ж трапиться
 - 🚀 **Виправлено низький FPS** — на деяких ПК гра трималась на ~45 FPS при вільній відеокарті; у нашому тесті **45 → 180 FPS**
 - ⏱️ **Ліміт 60 FPS на будь-якій частоті екрана** — на 144 / 180 Гц гра раніше бігла надто швидко
 - 🏎️ **Фізика на високому FPS** — 120–180 FPS, а машина, двері, анімації й таймери йдуть з нормальною швидкістю; FPS типово розблоковано
+- ⏳ **Коротші екрани завантаження** — мод сам будує в пам'яті міпмапи, яких бракує текстурам гри; екрани завантаження в кілька разів коротші, а мапа паузи з'являється одразу
 - 💾 **Надійні збереження** — атомарний запис, 60 резервних копій із підписом (епізод, розділ, час гри), автоматичне відновлення пошкодженого `dp.sav`
 
 #### Картинка
 
 - 🖥️ **Справжня вихідна роздільність** — картинка й HUD у роздільності монітора, а не 1280×720, вікно без рамки, без розмиття від масштабування Windows
-- ✨ **Графіка** — суперсемплінг 1×–3×, затінення по горизонту (HBAO), SMAA і FXAA, адаптивна різкість (AMD RCAS), мокрі відбиття, анізотропна фільтрація 16×, чіткіші тіні, більша дальність промальовки
+- ✨ **Графіка** — суперсемплінг 1×–3×, затінення по горизонту (HBAO), SMAA і FXAA, адаптивна різкість (AMD RCAS), мокрі відбиття, анізотропна фільтрація 16×, чіткіші тіні, більша дальність промальовування (двері будівель більше не зникають через дорогу), більша дальність промальовки
 - 📺 **Вигляд Xbox 360** — кольорокорекція й гамма телевізора консолі поверх картинки PC
 - 🌫️ **Далекі текстури більше не блимають** — камера гри марнувала точність глибини; далекі дороги, дахи й написи більше не «перебивають» одне одного
+- 💨 **Дим у пролозі знову дим** — темний дим із сірими пасмами, як на консолі, замість суцільної чорної плями (з текстурою, яку знайшов Darkanioid1997)
 - 🌊 **У річці знову є вода** — брижі, відблиски й відбиття, як на Xbox 360, замість пласкої синьої смуги (типово у своїй сцені, за бажанням усюди)
 
 #### Керування й камера
@@ -382,8 +410,9 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 #### Моди, оновлення й інструменти
 
 - 🧩 **Менеджер модів** — `UltimateFix\mods\<мод>\`: переклади (файли SWERY Localization Tool), текстурні паки або будь-який файл гри за іменем (`fontwide.xpc`, `mes_all.mes`); порядок і вмикання в F10, кожен мод зі своєю картинкою й описом — див. [Як зробити мод](#як-зробити-мод)
+- 🖼️ **Текстурний мод «Fix» від Darkanioid1997 іде разом із модом** — текстура диму прологу й вивіски Greenvale з версії для Xbox 360, вмикається сам
 - 🔄 **Оновлюється сам** — нову версію мод пропонує на стартовій плашці; F9 завантажує її, замінює файли й перезапускає гру
-- 📊 **Інструменти** — панель статистики кадрів, вбудований профайлер, дампи крашів і зрозумілий журнал для підтримки
+- 📊 **Інструменти** — панель FPS у вибраному куті, панель статистики кадрів, вбудований профайлер, дампи крашів і зрозумілий журнал для підтримки
 - 🇺🇦🇬🇧 **Дві мови** — українська та англійська, перемикаються в меню
 
 ### Виправлення рушія (на основі reverse engineering)
@@ -463,6 +492,28 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
   від 0.7.11); перемикається в меню F10 одразу.
   Перевірено у грі біля річки; іншу воду (озеро, калюжі, приміщення) ще не
   порівнювали.
+
+- 💨 **Чорна пляма в пролозі** (0.7.17) — на консолі дим біля дверей це аркуш,
+  помножений на маску, тому він пасмами і з м'якими краями. PC-порт малює
+  аркуш і маску як два окремі чорні аркуші, і разом вони дають суцільну пляму
+  з рівним краєм; до того ж стирчить суцільна чорна фігура за дверима, яку на
+  консолі ховає густий дим. Мод робить аркуш диму наново з рідного аркуша гри
+  (рідший, з м'яким краєм), ховає ту фігуру, поки завантажено пролог, а мод
+  Fix із комплекту дає сіру текстуру диму з версії для Xbox 360. Перевірено в грі.
+- ⏳ **Екрани завантаження** (0.7.18) — більшість текстур світу гра зберігає
+  без міпмапів, через що далекі поверхні мерехтять, тому мод робить їх під час
+  завантаження. Це робила системна бібліотека D3DX, рівень за рівнем через
+  відеокарту, і кожен крок чекав на кадр, що показується: більша частина екрана
+  завантаження на 60 Гц. Тепер мод будує рівні сам у пам'яті й віддає текстуру
+  за один раз.
+- 🔁 **Нескінченне скидання відеопристрою** (0.7.19) — коли відеопристрій
+  втрачено, гра скидає його і, якщо скидання відхилено, пробує знову кожні
+  50 мс без кінця. Відхиляє його будь-що, лишене на пристрої; мод лишав там
+  свої запити вимірювання часу. Тепер він звільняє їх перед кожним скиданням.
+- 🧭 **Ще один пошук у навігації без перевірки меж** (0.7.19) — крім того, що
+  знайшов CrashFix, ще одна функція таблиці навігації читає вузол за номером
+  без перевірки, а код персонажів гри питає в неї вузол FFFFh («немає»).
+  Захищено так само; знайдено з дампа вильоту гравця.
 
 ### Що нового в 0.7.19
 
