@@ -28,7 +28,7 @@ _Універсальний фікс для_ **Deadly Premonition: The Director'
 One DLL in the game folder instead of DPfix, a stability fix, a map fix and a crash fix.
 No installer: press **F10** in game and everything is there. The mod also gives the game 4 GB of memory by itself (from the second start).
 
-> **Version 0.7.18.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
+> **Version 0.7.19.** Most features are tested in game, the rest are marked _experimental_. Back up `savedata\dp.sav` first.
 > <br>Newest: a posed character next to York in the photo mode, play as other characters, a spawner for cars and items, a partner on the gamepad and a first mission editor — see [What's new](#whats-new-in-0713). Earlier versions: [CHANGELOG.md](CHANGELOG.md).
 
 ### Features
@@ -166,6 +166,18 @@ port with the Xbox 360 original:
   Checked in the game at the river; other water (the lake, puddles,
   interiors) has not been compared yet.
 
+### What's new in 0.7.19
+
+Fixes from players' reports ([#5](https://github.com/LittleBitUA/UltimateFIXDP/issues/5)–[#11](https://github.com/LittleBitUA/UltimateFIXDP/issues/11)); thank you for the dumps, logs and saves.
+
+- **A hang after the video device was lost** (locking Windows, a driver restart, sometimes Alt+Tab) with the FPS panel on. The game then resets the device and tries again forever when the reset is refused; the mod left its timing queries on the device. They are released now. Checked in the game. The log now also says when a reset is tried and whether something still holds the picture's buffer.
+- **A crash after a long session** (`DP.exe+1E1A3C`): the game asked its navigation table for a node that does not exist. Guarded, like the neighbouring lookup the mod guarded before. From a player's dump; it cannot be reproduced on purpose.
+- **Doors of buildings seen from afar.** The game draws doors, booths and vending machines only up to 500 units, so a building across the street showed an empty doorway. The default is 3000 now, and an old ini that still says 500 or 2000 is moved once. F10 → Game and world → "Doors, booths and vending machines".
+- **The smoke texture of the Fix mod only in the prologue.** The game uses that small texture in many places of the town, and it was replaced everywhere. It may have been what covered York with a wrong texture while choosing a fishing rod ([#10](https://github.com/LittleBitUA/UltimateFIXDP/issues/10)); that is not confirmed.
+- **Map:** the zoom gauge follows the mod's zoom range (its mark left the track at small zooms). Checked in the game.
+- **Your own waypoint is orange** in the world and on the map, as its chevrons on the minimap are; red stays for the story's objective. Checked in the game.
+- **The FPS panel can sit in any corner:** F10 → Screen and graphics → "Where the FPS panel sits" (the top left one lies over the health bars). Checked in the game.
+
 ### What's new in 0.7.18
 
 **Shorter loading screens and a faster pause map.** For textures the game stores without mipmaps the mod makes them at load (that removes the shimmer far away). Until now a system library made them level by level through the video card, and each step waited for the frame being shown: on a 60 Hz screen about three frames per texture, most of a loading screen (11 of 13 seconds in a player's log). The mod now builds the levels itself in memory and hands the texture over in one call. The pause map gains the most: its 64 tiles are exactly such textures.
@@ -173,23 +185,6 @@ port with the Xbox 360 original:
 - If far textures look wrong, F10 → Screen and graphics → "Mipmaps for textures without them" switches the feature off (`[Graphics] GenerateMips=0`).
 
 **A crash on leaving the window peek.** Leaving the peek reloads the level; the mod's waypoint code still read York's place from memory the game had already freed (the same report, from its crash dump). The mod now checks that the object is still there. Checked on the player's save: the peek was entered and left twice without a crash. The same check protects four more places that took the object the same way.
-
-### What's new in 0.7.17
-
-**The smoke of the prologue is smoke again.** On PC it was a solid black blob with a straight rim and a black wedge next to the door. Now it is a dark smoke with grey wisps, as on the console. Checked in the game.
-- The fix has two halves: a smoke texture from the Xbox 360 version, found and shared by **Darkanioid1997**, and the mod's own repair of the second smoke sheet and of the black shape behind the door. It works only in the prologue.
-- One switch: F10 → Fixes → "Prologue smoke fix" (on by default, needs a restart).
-
-**The texture mod "Fix" by Darkanioid1997 comes with the mod** (`UltimateFix\mods\Fix`, switched on by itself, F10 → Mods): the smoke texture above and three signs that say Greenvale instead of the town's old name. The signs are not checked in the game yet.
-
-**Multiplayer for two** (_experimental_; so far it was tried by one player with a test copy of himself, never between two computers). F10 → Multiplayer: your name, "Start a server", joining by address, a list of the servers of your network.
-- Each player stays in their own game with their own story; the other one is shown as a second York with his name over the head, his suit, his motions, the weapon in his hand, aiming and the flash and sound of his shots (they hurt nobody), and the car he drives.
-- **Chat on T**, with `/nick`, `/tp` (go to the other player), `/clear`, `/help`. A mark with the name on the pause map.
-- Not there: more than two players, riding as a passenger, shared cars, time, weather and enemies, a server list of the whole internet (over the internet: the host's address and UDP port 47900 open there, or a virtual network).
-
-**Quest editor** (_experimental_): the map is the game's own, a light, dark and game-coloured theme, markers are dragged on the map, a "Nodes" view where steps are linked by dragging, a check of the quest, a car can be put beside, behind or at an exact place, a step with a character waits while York drives.
-
-**Small things:** giving an item says honestly when the game refuses it (some weapons can only be owned in their other version).
 
 ### Screenshots
 
@@ -332,7 +327,7 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 Одна DLL у теці гри замість DPfix, фіксу стабільності, фіксу мапи й фіксу вильотів.
 Без інсталятора: натисніть **F10** у грі, і все там. Мод також сам дає грі 4 ГБ пам'яті (з другого запуску).
 
-> **Версія 0.7.18.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
+> **Версія 0.7.19.** Більшість функцій перевірено в грі, решту позначено як _експериментальні_. Спершу зробіть копію `savedata\dp.sav`.
 > <br>Найновіше: персонаж поруч із Йорком у фоторежимі, гра за інших персонажів, спавнер машин і предметів, напарник із ґеймпада і перший редактор місій — див. [Що нового](#що-нового-в-0713). Попередні версії: [CHANGELOG_UA.md](CHANGELOG_UA.md).
 
 ### Можливості
@@ -469,6 +464,18 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
   Перевірено у грі біля річки; іншу воду (озеро, калюжі, приміщення) ще не
   порівнювали.
 
+### Що нового в 0.7.19
+
+Виправлення за звітами гравців ([#5](https://github.com/LittleBitUA/UltimateFIXDP/issues/5)–[#11](https://github.com/LittleBitUA/UltimateFIXDP/issues/11)); дякуємо за дампи, логи та збереження.
+
+- **Зависання після втрати відеопристрою** (блокування Windows, перезапуск драйвера, інколи Alt+Tab) з увімкненою панеллю FPS. Гра тоді скидає пристрій і пробує знову без кінця, якщо скидання відхилено; мод лишав на пристрої свої запити вимірювання часу. Тепер він їх звільняє. Перевірено в грі. У лог тепер також пишеться, коли гра пробує скидання і чи хтось іще тримає буфер кадру.
+- **Виліт після довгої сесії** (`DP.exe+1E1A3C`): гра питала у своєї таблиці навігації вузол, якого немає. Поставлено захист, як на сусідній функції, яку мод захищав і раніше. З дампа гравця; навмисно відтворити не можна.
+- **Двері будівель здалеку.** Гра малює двері, будки й автомати лише до 500 одиниць, тож будівля через дорогу стояла з порожнім отвором. Тепер типово 3000, а старий ini, де ще стоїть 500 чи 2000, один раз переводиться сам. F10 → Гра і світ → «Двері, будки й автомати».
+- **Текстура диму з мода Fix лише в пролозі.** Гра вживає цю маленьку текстуру в багатьох місцях міста, і вона підмінялась усюди. Можливо, саме через це Йорк був укритий чужою текстурою під час вибору вудки ([#10](https://github.com/LittleBitUA/UltimateFIXDP/issues/10)); це не підтверджено.
+- **Мапа:** шкала масштабу рахується від найменшого масштабу мода (її позначка виїжджала за доріжку). Перевірено в грі.
+- **Власна мітка помаранчева** у світі й на мапі, як її шеврони на мінімапі; червоною лишається ціль сюжету. Перевірено в грі.
+- **Панель FPS у будь-якому куті:** F10 → Екран і графіка → «Де показувати FPS» (угорі ліворуч вона лягає на смуги здоров'я). Перевірено в грі.
+
 ### Що нового в 0.7.18
 
 **Коротші екрани завантаження і швидша мапа паузи.** Текстурам, які гра зберігає без міпмапів, мод робить їх під час завантаження (це прибирає мерехтіння вдалині). Досі їх робила системна бібліотека, рівень за рівнем через відеокарту, і кожен крок чекав на кадр, що показується: на екрані 60 Гц близько трьох кадрів на текстуру, більша частина екрана завантаження (11 секунд із 13 у лозі гравця). Тепер мод сам будує рівні в пам'яті й віддає текстуру одним викликом. Найбільше виграє мапа паузи: її 64 плитки — саме такі текстури.
@@ -476,23 +483,6 @@ Every patch checks the game's bytes first: if they differ, only that patch switc
 - Якщо далекі текстури виглядають не так, F10 → Екран і графіка → «Міпмапи для текстур без них» вимикає функцію (`[Graphics] GenerateMips=0`).
 
 **Виліт після підглядання у вікно.** Вихід із підглядання перезавантажує рівень; код мітки на мапі ще читав місце Йорка з пам'яті, яку гра вже звільнила (той самий звіт, з його дампа). Тепер мод перевіряє, що об'єкт іще існує. Перевірено на збереженні гравця: у підглядання ввійшли й вийшли двічі без вильоту. Та сама перевірка захищає ще чотири місця, які брали об'єкт так само.
-
-### Що нового в 0.7.17
-
-**Дим у пролозі знову дим.** На комп'ютері це була суцільна чорна пляма з рівним краєм і чорний клин біля дверей. Тепер це темний дим із сірими пасмами, як на консолі. Перевірено в грі.
-- Виправлення має дві половини: текстура диму з версії для Xbox 360, яку знайшов і дав **Darkanioid1997**, і власний ремонт мода для другого аркуша диму та чорної фігури за дверима. Діє лише в пролозі.
-- Один перемикач: F10 → Виправлення → «Виправлення диму в пролозі» (типово ввімкнено, потребує перезапуску).
-
-**Текстурний мод «Fix» від Darkanioid1997 іде разом із модом** (`UltimateFix\mods\Fix`, вмикається сам, F10 → Моди): текстура диму вище і три вивіски з написом Greenvale замість старої назви міста. Вивіски в грі ще не перевірено.
-
-**Мультиплеєр на двох** (_експериментально_; досі його пробував один гравець із тестовою копією самого себе, між двома комп'ютерами ще ніхто). F10 → Мультиплеєр: ваше ім'я, «Створити сервер», підключення за адресою, список серверів вашої мережі.
-- Кожен лишається у своїй грі зі своїм сюжетом; іншого гравця видно як другого Йорка з ім'ям над головою, у його костюмі, з його рухами, зброєю в руці, прицілюванням, спалахом і звуком пострілів (вони нікого не ранять) і з машиною, якою він їде.
-- **Чат на T**, з командами `/nick`, `/tp` (перейти до іншого гравця), `/clear`, `/help`. Мітка з ім'ям на мапі паузи.
-- Чого немає: більше двох гравців, пасажира в машині, спільних машин, часу, погоди й ворогів, списку серверів усього інтернету (через інтернет: адреса господаря й відкритий у нього UDP-порт 47900, або віртуальна мережа).
-
-**Редактор квестів** (_експериментально_): мапа береться з гри, світла, темна тема й тема в кольорах гри, мітки перетягуються по мапі, вигляд «Вузли», де кроки з'єднуються перетягуванням, перевірка квесту, машину можна поставити поруч, позаду чи в точному місці, крок із персонажем чекає, поки Йорк за кермом.
-
-**Дрібне:** видача предмета чесно каже, коли гра відмовляє (деяку зброю можна мати лише в іншій її версії).
 
 ### На чиїх плечах стоїмо
 

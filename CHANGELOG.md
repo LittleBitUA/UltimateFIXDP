@@ -2,6 +2,23 @@
 
 The two newest versions are in the [README](README.md).
 
+## What's new in 0.7.17
+
+**The smoke of the prologue is smoke again.** On PC it was a solid black blob with a straight rim and a black wedge next to the door. Now it is a dark smoke with grey wisps, as on the console. Checked in the game.
+- The fix has two halves: a smoke texture from the Xbox 360 version, found and shared by **Darkanioid1997**, and the mod's own repair of the second smoke sheet and of the black shape behind the door. It works only in the prologue.
+- One switch: F10 → Fixes → "Prologue smoke fix" (on by default, needs a restart).
+
+**The texture mod "Fix" by Darkanioid1997 comes with the mod** (`UltimateFix\mods\Fix`, switched on by itself, F10 → Mods): the smoke texture above and three signs that say Greenvale instead of the town's old name. The signs are not checked in the game yet.
+
+**Multiplayer for two** (_experimental_; so far it was tried by one player with a test copy of himself, never between two computers). F10 → Multiplayer: your name, "Start a server", joining by address, a list of the servers of your network.
+- Each player stays in their own game with their own story; the other one is shown as a second York with his name over the head, his suit, his motions, the weapon in his hand, aiming and the flash and sound of his shots (they hurt nobody), and the car he drives.
+- **Chat on T**, with `/nick`, `/tp` (go to the other player), `/clear`, `/help`. A mark with the name on the pause map.
+- Not there: more than two players, riding as a passenger, shared cars, time, weather and enemies, a server list of the whole internet (over the internet: the host's address and UDP port 47900 open there, or a virtual network).
+
+**Quest editor** (_experimental_): the map is the game's own, a light, dark and game-coloured theme, markers are dragged on the map, a "Nodes" view where steps are linked by dragging, a check of the quest, a car can be put beside, behind or at an exact place, a step with a character waits while York drives.
+
+**Small things:** giving an item says honestly when the game refuses it (some weapons can only be owned in their other version).
+
 ## What's new in 0.7.16
 
 **A quest editor in the browser** (_experimental, not yet checked in the game_; needs `[Debug] MissionLab=1` in `UltimateFix.ini`). F10 → Mission editor → "Open the quest editor (browser)" opens a page served by the mod itself on this computer only (`http://127.0.0.1:47800/`), next to the running game:
