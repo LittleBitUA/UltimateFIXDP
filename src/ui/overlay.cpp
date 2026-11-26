@@ -919,8 +919,17 @@ bool TimerCreate(void* dev, GpuTimer& t) {
     for (int i = 0; i < 3; ++i)
         if (FAILED(Method<CreateQueryFn>(dev, 118)(dev, 11 /*TIMESTAMPDISJOINT*/, &t.disjoint[i])) || !t.disjoint[i] ||
             FAILED(Method<CreateQueryFn>(dev, 118)(dev, 10 /*TIMESTAMP*/, &t.t0[i])) || !t.t0[i] ||
-            FAILED(Method<CreateQueryFn>(dev, 118)(dev, 10, &t.t1[i])) || !t.t1[i])
+            FAILED(Method<CreateQueryFn>(dev, 118)(dev, 10, &t.t1[i])) || !t.t1[i]) {
+            for (int k = 0; k <= i; ++k) {  // the ones already made do not stay on the device
+                void** all[3] = {&t.disjoint[k], &t.t0[k], &t.t1[k]};
+                for (void** q : all)
+                    if (*q) {
+                        Method<ReleaseFn>(*q, kRelease)(*q);
+                        *q = nullptr;
+                    }
+            }
             return false;
+        }
     return true;
 }
 
@@ -961,6 +970,30 @@ void EnsureFreq(void* dev) {
     unsigned long long f = 0;
     for (int i = 0; i < 1000; ++i)
         if (Method<GetDataFn>(freqQuery, 7)(freqQuery, &f, 8, 1) == 0) { g_gpuFreq = f; break; }
+    Method<ReleaseFn>(freqQuery, kRelease)(freqQuery);  // asked once: nothing of it is kept on the device
+    freqQuery = nullptr;
+}
+
+// Before a Reset the queries go too (they are made again at the next measurement). They were never released: a player's game
+// hung after the device was lost with the FPS panel on, Reset answering D3DERR_INVALIDCALL forever (issue #7; the queries are
+// the one thing of the mod's on the device that the hook before a Reset left alone).
+void ReleaseTimer(GpuTimer& t) {
+    for (int i = 0; i < 3; ++i) {
+        void** all[3] = {&t.disjoint[i], &t.t0[i], &t.t1[i]};
+        for (void** q : all)
+            if (*q) {
+                Method<ReleaseFn>(*q, kRelease)(*q);
+                *q = nullptr;
+            }
+        t.pending[i] = false;
+    }
+    t.slot = 0;
+    t.failed = false;  // a new device gets a new try
+}
+void ReleaseGpuTimers() {
+    ReleaseTimer(g_timerAo);
+    ReleaseTimer(g_timerPost);
+    ReleaseTimer(g_timerUnder);
 }
 
 }  // namespace
@@ -1029,10 +1062,15 @@ void PerfOverlayFrame(void* dev, double fps, double frameMs, double presentMs, d
     if (w3 > need) need = w3;
     need = (float)(((int)need + 24 + 7) / 8 * 8);
     if (need > boxW) boxW = need;
-    PerfPanelBox(8.f, 8.f, boxW, 68.f);
-    DrawText(line1, 20, 14, theme::kWhite, 16);
-    DrawText(line2, 20, 35, theme::kMuted, 13);
-    DrawText(line3, 20, 52, theme::kMuted, 13);
+    // The corner is the player's choice ([Debug] PerfOverlayCorner): the top left one lies over the game's health bars (issue #9).
+    // In the top right corner it goes under the frame statistics panel when that one is shown.
+    const int corner = g_cfg.perfCorner < 0 || g_cfg.perfCorner > 3 ? 0 : g_cfg.perfCorner;
+    const float bx = (corner & 1) ? 1280.f - boxW - 8.f : 8.f;
+    const float by = corner >= 2 ? 720.f - 68.f - 8.f : (corner == 1 && g_cfg.frameStats ? 8.f + 196.f + 8.f : 8.f);
+    PerfPanelBox(bx, by, boxW, 68.f);
+    DrawText(line1, bx + 12, by + 6, theme::kWhite, 16);
+    DrawText(line2, bx + 12, by + 27, theme::kMuted, 13);
+    DrawText(line3, bx + 12, by + 44, theme::kMuted, 13);
     OverlayEnd();
 }
 
@@ -1303,9 +1341,11 @@ void* ImageTexture(const wchar_t* path, u32* width, u32* height) {
 // though managed textures would survive: they are made again at their next use.
 namespace {
 void ReleaseAoTargets();  // the horizon-based occlusion's two targets (below)
+void ReleaseGpuTimers();  // the timing queries of the FPS panels (above)
 }  // namespace
 
 void ReleasePostResources() {
+    ReleaseGpuTimers();
     ReleaseCopy();
     ReleaseAoTargets();
     ReleaseSmaaTargets();

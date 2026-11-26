@@ -62,6 +62,7 @@ struct Item {
     int boot = kNoDefault;  // a restart row: the value this run started with, which is what runs (SnapshotBoot); kNoDefault = none
 };
 
+const Tr kPerfCornerTr[4] = {{L"Угорі ліворуч", L"Top left"}, {L"Угорі праворуч", L"Top right"}, {L"Унизу ліворуч", L"Bottom left"}, {L"Унизу праворуч", L"Bottom right"}};
 const Tr kCarTrigTr[4] = {{L"Вимкнено", L"Off"}, {L"Опір", L"Resistance"}, {L"Клік (стінка)", L"Click (a wall)"}, {L"Вібрація", L"Vibration"}};
 const Tr kGlyphTr[4] = {{L"Вимк.", L"Off"}, {L"Авто", L"Auto"}, {L"Xbox", L"Xbox"}, {L"PlayStation", L"PlayStation"}};
 const Tr kAntialiasModeTr[2] = {{L"FXAA", L"FXAA"}, {L"SMAA", L"SMAA"}};
@@ -252,6 +253,8 @@ Item g_pageDisplay[] = {
       L"A separate panel top right, like the Windows one: total, game (CPU), of which physics, Present (driver, waiting for the video card and screen), the worst frame of 30, the time of the mod's passes, FPS, screen refresh rate and a graph of the last 120 frames. Red bars: frames clearly longer than average. For finding lag."}, {L"Діагностика", L"Diagnostics"}},
     {{L"Показувати FPS і час кадру", L"Show FPS and frame time"}, &g_cfg.perfOverlay, kBool, 0, 1, 1, false, L"Debug", L"PerfOverlay", nullptr, nullptr,
      {L"У кутку: FPS, час кадру, скільки Present чекає (чим більше, тим сильніше впирається відеокарта) і скільки відеокарта витрачає на проходи мода (SSAO, фільтри). Для пошуку, що гальмує.", L"In the corner: FPS, frame time, how long Present waits (the more, the more the video card is the limit) and how much video time the mod's passes take (SSAO, filters). For finding what slows things down."}, {L"Діагностика", L"Diagnostics"}},
+    {{L"Де показувати FPS", L"Where the FPS panel sits"}, &g_cfg.perfCorner, kInt, 0, 3, 1, false, L"Debug", L"PerfOverlayCorner", nullptr, kPerfCornerTr,
+     {L"Кут екрана для панелі FPS. Угорі ліворуч вона лягає на смуги здоров'я гри; угорі праворуч стає під панель статистики кадру, якщо та ввімкнена.", L"The corner of the screen for the FPS panel. In the top left one it lies over the game's health bars; in the top right one it goes under the frame statistics panel when that is on."}, NOTR},
     RESET_ITEM
 };
 constexpr int kFilterCountForMenu = 18;  // kFilterCount of the photo page below (14 filters + 4 own presets)

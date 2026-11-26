@@ -133,6 +133,9 @@ const float kRed[4] = {1.f, 0.15f, 0.1f, 1.f};
 const float kGreen[4] = {0.35f, 1.f, 0.35f, 1.f};
 const float kWhite[4] = {1.f, 1.f, 1.f, 1.f};
 const float kBeaconRed[4] = {1.f, 0.f, 0.f, 1.f};  // what FUN_005B1050 gives the type 0 icon (005B10C8)
+// The player's own waypoint is orange everywhere: the minimap draws its point (an ordinary objective, type 10) with orange
+// chevrons, and the beacon and the label in the world were red like the story's objective (issue #6).
+const float kOwn[4] = {1.f, 0.6f, 0.12f, 1.f};
 
 // like the game (005F7C4Ch): the 3D distance times 0.1 * 1.0936, the fraction dropped
 int YardsTo(float x, float y, float z) {
@@ -308,7 +311,7 @@ void __cdecl TextDrawWorker(void* self, u32 arg) {
     float c[4];
     for (int j = 0; j < 4; ++j) c[j] = in[0] * m[j] + in[1] * m[4 + j] + in[2] * m[8 + j] + in[3] * m[12 + j];
     int yards = YardsTo(F(player, 0x58), F(player, 0x5C), F(player, 0x60));
-    const float* colour = yards < 15 ? kGreen : kRed;
+    const float* colour = yards < 15 ? kGreen : kOwn;
     const float margin = kEdgeMargin;
     if (c[3] > 0.01f) {
         float sx = (c[0] / c[3]) * W * 0.5f + W * 0.5f, sy = -(c[1] / c[3]) * H * 0.5f + H * 0.5f;
@@ -715,7 +718,7 @@ extern "C" void __cdecl WaypointBeaconDraw() {
     // the size FUN_005B19A0 gives an objective's icon: 128 while FUN_004508D0 says so (mask 2 of CGame+8C5ECh), else 102
     const float size = (U(g + kGameFlagsOff) & 2u) ? 128.f : 102.f;
     const u32 player = PlayerObjectNow();
-    const float* colour = player && YardsTo(F(player, 0x58), F(player, 0x5C), F(player, 0x60)) < 15 ? kGreen : kBeaconRed;
+    const float* colour = player && YardsTo(F(player, 0x58), F(player, 0x5C), F(player, 0x60)) < 15 ? kGreen : kOwn;
     for (int i = 0; i < 4; ++i) g_icon.rgba[i] = colour[i];
     const float pos[3] = {g_x, g_y, g_z};
     g_icon.texture = texture;  // looked up in this frame, and taken away again below: the icon never keeps the pointer
@@ -765,14 +768,14 @@ extern "C" void __cdecl WaypointMapOverlay() {
     int yards = g_haveLast ? YardsTo(g_lastPx, g_lastPy, g_lastPz) : 0;
     const float margin = 50.f;
     if (sx >= margin && sx <= W - margin && sy >= margin && sy <= H - margin) {
-        Print(sx, sy - 8.f, kRed, "X", 0);
-        if (g_haveLast) Print(sx, sy + 12.f, kRed, "%d Yards", yards);
+        Print(sx, sy - 8.f, kOwn, "X", 0);
+        if (g_haveLast) Print(sx, sy + 12.f, kOwn, "%d Yards", yards);
     } else {
         const char* format = "%d Yards";
         if (sx < margin) { sx = margin; format = "< %d Yards"; }
         else if (sx > W - margin) { sx = W - margin; format = "%d Yards >"; }
         if (sy < margin) { sy = margin; if (format[0] == '%' && format[8] == 0) format = "^ %d Yards"; }
         else if (sy > H - margin) { sy = H - margin; if (format[0] == '%' && format[8] == 0) format = "v %d Yards"; }
-        Print(sx, sy, kRed, format, yards);
+        Print(sx, sy, kOwn, format, yards);
     }
 }

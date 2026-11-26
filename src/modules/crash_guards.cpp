@@ -60,6 +60,16 @@ bool InstallCrashGuards() {
     bool ok1 = PatchJump(lookup.va, lookup.bytes, lookup.len, a);
     bool ok2 = PatchJump(nul.va, nul.bytes, nul.len, b);
     Log("crash guards: navigation lookup %s, NULL check %s", ok1 ? "guarded" : "FAILED", ok2 ? "guarded" : "FAILED");
+    {  // the lookup without a result: a node number outside the table gives zeros (issue #11)
+        const SiteDef& pos = kSiteNavPosLookup;
+        u8* c = AllocStub(128);
+        bool ok3 = false;
+        if (c && BytesMatch(pos.va, pos.bytes, pos.len)) {
+            BuildNavPosGuard(c, (u32)(uintptr_t)c, kNavPosContinue, kNavPosReturn);
+            ok3 = PatchJump(pos.va, pos.bytes, pos.len, c);
+        }
+        Log("crash guards: navigation position lookup %s", ok3 ? "guarded" : "FAILED");
+    }
     // a failed route lookup leaves the resident where it stood instead of moving it to (0, 0, 0)
     int kept = 0;
     const SiteDef* calls[2] = {&kSiteRouteCall1, &kSiteRouteCall2};

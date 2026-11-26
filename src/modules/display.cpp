@@ -173,6 +173,26 @@ void __cdecl PreResetHook() {
     }
     ui::ReleasePostResources();
     ((void(__cdecl*)())(uintptr_t)kPreResetTarget)();
+    // The game tries the Reset again every 50 ms for as long as it fails, and nothing said so: the tries are counted here, with
+    // how many references the back buffer still has after the game and the mod let go of theirs (above 0: somebody keeps one,
+    // and the Reset will be refused).
+    static u32 tries = 0;
+    static DWORD first = 0;
+    const DWORD now = GetTickCount();
+    if (!tries || now - first > 60000) { tries = 0; first = now; }
+    ++tries;
+    if (tries == 1 || tries == 20 || tries % 200 == 0) {
+        int refs = -1;
+        void* dev = *(void* volatile*)(uintptr_t)0x1480984;  // the game's device (FUN_006CCEF0)
+        if (dev) {
+            typedef HRESULT(WINAPI * GetBbFn)(void*, UINT, UINT, UINT, void**);
+            typedef ULONG(WINAPI * RelFn)(void*);
+            void* bb = nullptr;
+            if (((GetBbFn)(*(void***)dev)[18])(dev, 0, 0, 0, &bb) >= 0 && bb) refs = (int)((RelFn)(*(void***)bb)[2])(bb);
+        }
+        Log("display: the device is being reset, try %u in this minute (references left on the back buffer: %d)%s", tries, refs,
+            tries >= 20 ? "; the Reset keeps failing" : "");
+    }
 }
 
 // --- window -----------------------------------------------------------------------------------------

@@ -433,6 +433,17 @@ bool SmokeSheetLoad(void* dev, const void* data, UINT size, void** out) {
     return true;
 }
 
+// Right now: does the game hold one of the smoke sheets the mod made (the prologue's level is loaded or loading)?
+bool SmokeSheetHeldNow() {
+    typedef ULONG(WINAPI * RefFn)(void*);
+    for (int i = 0; i < g_smokeSheetCount; ++i) {
+        void* t = g_smokeSheets[i];
+        ((RefFn)(*(void***)t)[1])(t);
+        if (((RefFn)(*(void***)t)[2])(t) > 1) return true;
+    }
+    return false;
+}
+
 // The black shape behind the prologue's door (19 triangles, found with the draw scan of 0.7.17-test24): a mesh with a plain
 // black 8x8 DXT1 texture, drawn blended after the smoke. The dense smoke of the console hides it; with a thinner smoke it stands
 // out as a black wedge. Every plain black 8x8 DXT1 texture is made again here with an alpha the menu sets (100 = as the game's).
@@ -523,6 +534,17 @@ HRESULT FromMemoryInner(void* dev, const void* data, UINT size, UINT w, UINT h, 
     }
     if (g_count && data && hashed) {
         const Entry* e = Find(hash);
+        // The smoke texture of the Fix mod (c8c48237) replaces a small black texture the game uses in many levels, not only for
+        // the prologue's smoke: a player's log had it replaced 13 times all over the town (issues #8 and #10 came with it). It is
+        // taken only while the prologue's smoke sheet is loaded, which the game loads right before it.
+        if (e && hash == 0xC8C48237u && !SmokeSheetHeldNow()) {
+            static bool told = false;
+            if (!told) {
+                told = true;
+                Log("textures: override c8c48237 (the prologue's smoke) left out here: this is not the prologue");
+            }
+            e = nullptr;
+        }
         if (e) {
             wchar_t path[MAX_PATH + 16];
             // e->dir indexes g_dirs (the mods' textures folders first, then the own three), which hold full paths. It used to index

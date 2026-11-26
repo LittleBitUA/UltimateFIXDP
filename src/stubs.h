@@ -435,6 +435,32 @@ inline size_t BuildNavLookupGuard(uint8_t* out, uint32_t va, uint32_t continueVa
     return (size_t)(p - out);
 }
 
+// FUN_005E19E0 entry guard (thiscall, ecx = table, [esp+4] = out, [esp+8] = index, ret 8, no result). Replaces its first 6
+// bytes (`cmp byte [ecx+4],0 / je return`). An index beyond [ecx+8], other than the two sentinel values the function knows,
+// zeroes `out` and returns instead of reading outside the table.
+inline size_t BuildNavPosGuard(uint8_t* out, uint32_t va, uint32_t continueVa, uint32_t returnVa) {
+    uint8_t* p = out;
+    *p++ = 0x80; *p++ = 0x79; *p++ = 0x04; *p++ = 0x00;     // cmp byte [ecx+4], 0
+    StubJcc(p, out, va, kCcE, returnVa);                    // je the function's own `ret 8` (table not loaded)
+    *p++ = 0x8B; *p++ = 0x44; *p++ = 0x24; *p++ = 0x08;     // mov eax, [esp+8]
+    *p++ = 0x3B; *p++ = 0x41; *p++ = 0x08;                  // cmp eax, [ecx+8]
+    StubJcc(p, out, va, 0x2 /*jb*/, continueVa);            // jb original (in range)
+    *p++ = 0x3D; StubPut32(p, 0x7FFFFE);                    // cmp eax, 7FFFFEh
+    StubJcc(p, out, va, kCcE, continueVa);                  // je original
+    *p++ = 0x3D; StubPut32(p, 0x7FFFF7);                    // cmp eax, 7FFFF7h
+    StubJcc(p, out, va, kCcE, continueVa);                  // je original
+    *p++ = 0x8B; *p++ = 0x44; *p++ = 0x24; *p++ = 0x04;     // mov eax, [esp+4]    (out)
+    *p++ = 0x85; *p++ = 0xC0;                               // test eax, eax
+    uint8_t* jz = p; *p++ = 0x74; *p++ = 0;                 // jz noout
+    *p++ = 0xC7; *p++ = 0x00; StubPut32(p, 0);              // mov dword [eax], 0
+    *p++ = 0xC7; *p++ = 0x40; *p++ = 0x04; StubPut32(p, 0); // mov dword [eax+4], 0
+    *p++ = 0xC7; *p++ = 0x40; *p++ = 0x08; StubPut32(p, 0); // mov dword [eax+8], 0
+    *p++ = 0xC7; *p++ = 0x40; *p++ = 0x0C; StubPut32(p, 0); // mov dword [eax+0Ch], 0
+    jz[1] = (uint8_t)(p - (jz + 2));                        // noout:
+    *p++ = 0xC2; *p++ = 0x08; *p++ = 0x00;                  // ret 8
+    return (size_t)(p - out);
+}
+
 // 0047F1CB: `cmp word [edi+4],0` followed by `jne`. A NULL edi makes the compare fail with ZF = 0 -> clear ZF path:
 //     test edi,edi / jz zero / cmp word [edi+4],0 / jmp cont / zero: xor ecx,ecx (ZF = 1) / jmp cont
 inline size_t BuildNavNullGuard(uint8_t* out, uint32_t va, uint32_t continueVa) {

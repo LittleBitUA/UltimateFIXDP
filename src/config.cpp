@@ -677,6 +677,7 @@ void LoadConfig(const wchar_t* ini) {
     if (g_cfg.alt3dScale < 1) g_cfg.alt3dScale = 1;
     if (g_cfg.alt3dScale > 3) g_cfg.alt3dScale = 3;
     g_cfg.perfOverlay = (int)GetPrivateProfileIntW(L"Debug", L"PerfOverlay", 0, ini);
+    g_cfg.perfCorner = (int)GetPrivateProfileIntW(L"Debug", L"PerfOverlayCorner", 0, ini);
     g_cfg.frameStats = (int)GetPrivateProfileIntW(L"Debug", L"FrameStats", 0, ini);
     g_cfg.triggerFire = (int)GetPrivateProfileIntW(L"Input", L"TriggerFire", 1, ini);
     g_cfg.triggerDrive = (int)GetPrivateProfileIntW(L"Input", L"TriggerDrive", 1, ini);
