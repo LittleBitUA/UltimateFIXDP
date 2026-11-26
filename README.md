@@ -1,6 +1,6 @@
 <div align="center">
 
-<img src="docs/logo.png" width="120" alt="UltimateFIXDP"/>
+<img src="docs/logo-wide.png" width="560" alt="Deadly Premonition UltimateFix"/>
 
 # UltimateFIXDP
 
